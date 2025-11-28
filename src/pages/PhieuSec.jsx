@@ -9,6 +9,7 @@ import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import DeleteIcon from "@mui/icons-material/Delete";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import ClearIcon from "@mui/icons-material/Clear";
 import StatusChip from "../components/StatusChip";
@@ -86,6 +87,20 @@ export default function PhieuSec() {
     const [anchorMa, setAnchorMa] = useState(null);
     const [anchorNoiDung, setAnchorNoiDung] = useState(null);
     const [anchorDonVi, setAnchorDonVi] = useState(null);
+
+    // Tài liệu đính kèm
+    const [attachList, setAttachList] = useState([]);         // danh sách tài liệu của phiếu
+    const [attachLoading, setAttachLoading] = useState(false);
+    const [attachUploading, setAttachUploading] = useState(false);
+    const [attachFiles, setAttachFiles] = useState([]);       // mảng File đã chọn
+
+    // Preview dialog
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState("");
+    const [previewTitle, setPreviewTitle] = useState("");
+
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null); // lưu file cần xoá
 
     const canAddLenhChi =
         detail && detail.trangThai === "HoanThanh" && !detail.maLenhChi && (role === "KTT" || role === "GD");
@@ -230,12 +245,16 @@ export default function PhieuSec() {
     const openDetailDialog = async (row) => {
         setDetail(row);
         setOpenDetail(true);
+
+        // load tài liệu theo phiếu
+        loadAttachments(row.id);
+
         if (typeof api.getPhieuById === "function") {
             try {
                 setDetailLoading(true);
                 const fresh = await api.getPhieuById(row.id, {
                     userId: user?.id,
-                    roleCode: role,        // "NhanVien" | "TBP" | "KTT" | "GD"
+                    roleCode: role,
                     idDonVi: user?.idDonVi,
                 });
                 console.log(fresh);
@@ -318,6 +337,83 @@ export default function PhieuSec() {
         if (key === "ma") setQMa("");
         if (key === "nd") setQNoiDung("");
         if (key === "dv") setQDonVi("");
+    };
+
+    const loadAttachments = async (phieuSecId) => {
+        if (!phieuSecId) return;
+        try {
+            setAttachLoading(true);
+            const list = await api.listTaiLieuPhieuSec(phieuSecId); // API mới
+            setAttachList(list || []);
+        } catch (e) {
+            console.error(e);
+            setToast({
+                open: true,
+                msg: e?.response?.data?.message || "Lỗi tải tài liệu",
+                type: "error",
+            });
+        } finally {
+            setAttachLoading(false);
+        }
+    };
+
+    const handleAttachFileChange = (e) => {
+        const files = Array.from(e.target.files || []);
+        setAttachFiles(files);
+    };
+
+    const handleUploadAttachments = async () => {
+        if (!detail?.id) {
+            setToast({ open: true, msg: "Chưa có phiếu để gắn tài liệu", type: "warning" });
+            return;
+        }
+        if (!attachFiles.length) {
+            setToast({ open: true, msg: "Chọn ít nhất 1 file", type: "warning" });
+            return;
+        }
+
+        const formData = new FormData();
+        attachFiles.forEach((f) => formData.append("files", f));
+        formData.append("NguoiTao", user?.fullName || user?.username || user?.id || "system");
+        try {
+            setAttachUploading(true);
+            await api.uploadTaiLieuPhieuSec(detail.id, formData); // API mới
+            setAttachFiles([]);
+            await loadAttachments(detail.id);
+            setToast({ open: true, msg: "Đã upload tài liệu", type: "success" });
+        } catch (e) {
+            console.error(e);
+            setToast({
+                open: true,
+                msg: e?.response?.data?.message || "Upload tài liệu thất bại",
+                type: "error",
+            });
+        } finally {
+            setAttachUploading(false);
+        }
+    };
+
+    const handleViewAttachment = (tl) => {
+        const id = tl.taiLieuId ?? tl.TaiLieuId;
+        const name = tl.fileName ?? tl.FileName ?? "Tài liệu";
+        const url = api.getTaiLieuPhieuSecUrl(id);
+        console.log(tl)
+        setPreviewTitle(name);
+        setPreviewUrl(url);
+        setPreviewOpen(true);
+    };
+
+    const handleDeleteAttachment = (tl) => {
+        setDeleteTarget(tl);     // lưu lại file được chọn
+        setConfirmOpen(true);    // mở dialog
+    };
+
+
+    const handleCloseDetail = () => {
+        setOpenDetail(false);
+        setDetail(null);
+        setAttachList([]);
+        setAttachFiles([]);
     };
 
     return (
@@ -624,7 +720,7 @@ export default function PhieuSec() {
             )}
 
             {/* Dialog chi tiết phiếu */}
-            <Dialog open={openDetail} onClose={() => setOpenDetail(false)} maxWidth="md" fullWidth>
+            <Dialog open={openDetail} onClose={handleCloseDetail} maxWidth="md" fullWidth>
                 <DialogTitle
                     sx={{
                         pb: 1.5,
@@ -734,6 +830,111 @@ export default function PhieuSec() {
                                 </Grid>
                             </Paper>
 
+                            <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
+                                    Tài liệu đính kèm
+                                </Typography>
+
+                                <Stack spacing={1.5}>
+                                    {/* Hàng chọn file + nút upload */}
+                                    <Stack
+                                        direction={{ xs: "column", sm: "row" }}
+                                        spacing={1.5}
+                                        alignItems={{ xs: "stretch", sm: "center" }}
+                                    >
+                                        <Button
+                                            variant="outlined"
+                                            component="label"
+                                            sx={{ whiteSpace: "nowrap" }}
+                                        >
+                                            Chọn file
+                                            <input
+                                                hidden
+                                                type="file"
+                                                accept="application/pdf"
+                                                multiple
+                                                onChange={handleAttachFileChange}
+                                            />
+                                        </Button>
+
+                                        <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                            sx={{ flex: 1, minHeight: 24 }}
+                                        >
+                                            {attachFiles.length
+                                                ? `${attachFiles.length} file đã chọn`
+                                                : "Chưa chọn file nào."}
+                                        </Typography>
+
+                                        <Button
+                                            variant="contained"
+                                            onClick={handleUploadAttachments}
+                                            disabled={!attachFiles.length || attachUploading}
+                                        >
+                                            {attachUploading ? "Đang upload..." : "Upload"}
+                                        </Button>
+                                    </Stack>
+
+                                    {/* Danh sách tài liệu */}
+                                    {attachLoading ? (
+                                        <Typography variant="body2" color="text.secondary">
+                                            Đang tải danh sách tài liệu...
+                                        </Typography>
+                                    ) : attachList.length === 0 ? (
+                                        <Typography variant="body2" color="text.secondary">
+                                            Chưa có tài liệu đính kèm.
+                                        </Typography>
+                                    ) : (
+                                        <Table size="small">
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell>STT</TableCell>
+                                                    <TableCell>Tên file</TableCell>
+                                                    <TableCell>Người thêm tài liệu</TableCell>
+                                                    <TableCell>Ngày thêm</TableCell>
+                                                    <TableCell align="right">Xem</TableCell>
+                                                    <TableCell align="right">Xoá</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {attachList.map((tl, idx) => (
+                                                    <TableRow key={tl.taiLieuId ?? tl.TaiLieuId ?? idx}>
+                                                        <TableCell>{idx + 1}</TableCell>
+                                                        <TableCell>{tl.fileName ?? tl.FileName}</TableCell>
+                                                        <TableCell>{tl.nguoiTao ?? tl.NguoiTao}</TableCell>
+                                                        <TableCell>
+                                                            {isoToDisplay(tl.ngayTao ?? tl.NgayTao)}
+                                                        </TableCell>
+                                                        <TableCell align="right">
+                                                            <Button
+                                                                size="small"
+                                                                onClick={() =>
+                                                                    handleViewAttachment(
+                                                                        tl
+                                                                    )
+                                                                }
+                                                            >
+                                                                Xem
+                                                            </Button>
+                                                        </TableCell>
+                                                        <TableCell align="right">
+                                                            <IconButton
+                                                                size="small"
+                                                                color="error"
+                                                                onClick={() => handleDeleteAttachment(tl)}
+                                                            >
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+                                </Stack>
+                            </Paper>
+
                             {canAddLenhChi && (
                                 <Paper variant="outlined" sx={{ p: 2 }}>
                                     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
@@ -839,7 +1040,37 @@ export default function PhieuSec() {
                         </Stack>
                     )}
 
-                    <Button onClick={() => setOpenDetail(false)}>Đóng</Button>
+                    <Button onClick={handleCloseDetail}>Đóng</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={previewOpen}
+                onClose={() => setPreviewOpen(false)}
+                maxWidth="lg"
+                fullWidth
+            >
+                <DialogTitle>
+                    {previewTitle || "Xem tài liệu"}
+                </DialogTitle>
+                <DialogContent
+                    dividers
+                    sx={{ p: 0, height: "80vh" }}
+                >
+                    {previewUrl ? (
+                        <iframe
+                            src={previewUrl}
+                            title="Tài liệu"
+                            style={{ width: "100%", height: "100%", border: "none" }}
+                        />
+                    ) : (
+                        <Box p={2}>
+                            <Typography>Không có tài liệu để hiển thị.</Typography>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPreviewOpen(false)}>Đóng</Button>
                 </DialogActions>
             </Dialog>
 
@@ -955,7 +1186,37 @@ export default function PhieuSec() {
                     </Button>
                 </DialogActions>
             </Dialog>
+            <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+                <DialogTitle>Xoá tài liệu</DialogTitle>
 
+                <DialogContent>
+                    <Typography>
+                        Bạn có chắc muốn xoá tài liệu <b>{deleteTarget?.FileName || ""}</b> ?
+                    </Typography>
+                </DialogContent>
+
+                <DialogActions>
+                    <Button onClick={() => setConfirmOpen(false)}>Huỷ</Button>
+                    <Button
+                        color="error"
+                        variant="contained"
+                        onClick={async () => {
+                            try {
+                                await api.deleteTaiLieuPhieuSec(deleteTarget?.TaiLieuId);
+                                setToast({ open: true, msg: "Đã xoá tài liệu", type: "success" });
+                                await loadAttachments(detail.id);
+                            } catch (err) {
+                                console.error(err);
+                                setToast({ open: true, msg: "Xóa thất bại", type: "error" });
+                            } finally {
+                                setConfirmOpen(false);
+                            }
+                        }}
+                    >
+                        Xoá
+                    </Button>
+                </DialogActions>
+            </Dialog>
             <Snackbar
                 open={toast.open}
                 autoHideDuration={3000}

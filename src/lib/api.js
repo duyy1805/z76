@@ -116,6 +116,33 @@ export const api = {
         const { data } = await http.get(`/dashboard/grouped${q ? `?${q}` : ""}`);
         return data;
     },
+    // ====== TÀI LIỆU PHIẾU SÉC ======
+
+    // Lấy danh sách tài liệu của 1 phiếu
+    async listTaiLieuPhieuSec(phieuSecId) {
+        const { data } = await http.get(`/phieu/${phieuSecId}/tailieu`);
+        return data;
+        // [{ taiLieuId, fileName, nguoiTao, ngayTao, ... }] tuỳ backend trả
+    },
+
+    // Upload 1 hoặc nhiều file cho 1 phiếu
+    async uploadTaiLieuPhieuSec(phieuSecId, formData) {
+        const { data } = await http.post(
+            `/phieu/${phieuSecId}/tailieu`,
+            formData,
+            { headers: { "Content-Type": "multipart/form-data" } }
+        );
+        return data;
+    },
+
+    getTaiLieuPhieuSecUrl(taiLieuId) {
+        return `${http.defaults.baseURL}/phieu/tailieu/${taiLieuId}`;
+    },
+
+    async deleteTaiLieuPhieuSec(taiLieuId) {
+        const { data } = await http.delete(`/phieu/tailieu/${taiLieuId}`);
+        return data;
+    },
 };
 
 // Nếu muốn tự động gắn token vào http:
