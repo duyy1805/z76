@@ -4,8 +4,8 @@ import axios from "axios";
 /* =====================================================
    BASE CONFIG
 ===================================================== */
-// const BASE = import.meta.env.VITE_API_BASE || "https://nodeapi.z76.vn/sosec";
-const BASE = "http://localhost:5000/erp";
+const BASE = "https://nodeapi.z76.vn/erp";
+// const BASE = "http://localhost:5000/erp";
 
 /*
   TẤT CẢ API TGSX ĐI QUA PREFIX /tgsx

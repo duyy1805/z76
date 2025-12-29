@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
     Paper, Typography, Grid, TextField, Button,
     Table, TableHead, TableRow, TableCell, TableBody,
-    Stack, Box, CircularProgress
+    Stack, Box, CircularProgress, Tooltip as MuiTooltip,
 } from "@mui/material";
 
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
@@ -37,16 +37,18 @@ export default function ThoiGianSXPage() {
     /* ================== LOAD DATA ================== */
     const loadData = async () => {
         // ❌ chỉ chặn khi CẢ HAI đều rỗng
-        if (!maDonHang && !tenDonVi) {
-            // có thể show toast / alert nếu muốn
+        if (
+            (!maDonHang || maDonHang.trim() === "") &&
+            (!tenDonVi || tenDonVi.trim() === "")
+        ) {
             return;
         }
 
         setLoading(true);
         try {
             const res = await apiTGSX.getTableData({
-                maDonHang: maDonHang || undefined,
-                tenDonVi: tenDonVi || undefined,
+                maDonHang: maDonHang || "",
+                tenDonVi: tenDonVi || "",
             });
             console.log("TGSX table data:", res);
             setRows(res.data || []);
@@ -74,6 +76,11 @@ export default function ThoiGianSXPage() {
             color: "#F44336",
         },
     ];
+
+    const calcTGThucTe = (sanLuong, tgTheoHS) => {
+        if (sanLuong == null || tgTheoHS == null) return null;
+        return sanLuong * tgTheoHS;
+    };
 
     return (
         <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -163,20 +170,49 @@ export default function ThoiGianSXPage() {
                             <TableRow>
                                 <TableCell sx={tableHeaderSx}>Phân xưởng</TableCell>
                                 <TableCell sx={tableHeaderSx}>Tổ</TableCell>
+                                <TableCell sx={tableHeaderSx}>ID KHSX</TableCell>
+                                <TableCell sx={tableHeaderSx} align="right">NS dự kiến</TableCell>
                                 <TableCell sx={tableHeaderSx}>Đơn hàng</TableCell>
                                 <TableCell sx={tableHeaderSx}>ItemCode</TableCell>
                                 <TableCell sx={tableHeaderSx}>Nhóm</TableCell>
                                 <TableCell sx={tableHeaderSx} align="center">Tuần HS</TableCell>
                                 <TableCell sx={tableHeaderSx} align="right">TG chuẩn (giờ)</TableCell>
                                 <TableCell sx={tableHeaderSx} align="right">TG theo HS (giờ)</TableCell>
+                                <TableCell sx={tableHeaderSx} align="right">TG SX thực tế (giờ)</TableCell>
                                 <TableCell sx={tableHeaderSx} align="right">Thừa (giờ)</TableCell>
                             </TableRow>
+                            <TableRow
+                                sx={{
+                                    "& td": {
+                                        fontStyle: "italic",
+                                        color: "#666",
+                                        fontSize: 13,
+                                        backgroundColor: "#fafafa",
+                                    },
+                                }}
+                            >
+                                <TableCell align="center">(1)</TableCell>
+                                <TableCell align="center">(2)</TableCell>
+                                <TableCell align="center">(3)</TableCell>
+                                <TableCell align="center">(4)</TableCell>
+                                <TableCell align="center">(5)</TableCell>
+                                <TableCell align="center">(6)</TableCell>
+                                <TableCell align="center">(7)</TableCell>
+                                <TableCell align="center">(8)</TableCell>
+
+                                {/* Cột nghiệp vụ */}
+                                <TableCell align="center">(9)</TableCell>
+                                <TableCell align="center">(10 = 9 / HS)</TableCell>
+                                <TableCell align="center">(11 = 4 × 10)</TableCell>
+                                <TableCell align="center">(12)</TableCell>
+                            </TableRow>
                         </TableHead>
+
 
                         <TableBody>
                             {loading && (
                                 <TableRow>
-                                    <TableCell colSpan={9} align="center">
+                                    <TableCell colSpan={12} align="center">
                                         <CircularProgress size={24} />
                                     </TableCell>
                                 </TableRow>
@@ -185,17 +221,41 @@ export default function ThoiGianSXPage() {
                             {!loading && rows.map((r, idx) => (
                                 <TableRow key={idx}>
                                     <TableCell>{r.PhanXuong}</TableCell>
-                                    <TableCell>{r.ToSanXuat}</TableCell>
+                                    <TableCell sx={{ maxWidth: 220 }}>
+                                        <MuiTooltip title={r.Ten_BoPhan || ""} arrow placement="top">
+                                            <Typography
+                                                noWrap
+                                                sx={{
+                                                    maxWidth: 180,
+                                                    cursor: "default",
+                                                }}
+                                            >
+                                                {r.Ten_BoPhan}
+                                            </Typography>
+                                        </MuiTooltip>
+                                    </TableCell>
+
+                                    <TableCell>{r.ID_KeHoachSanXuat}</TableCell>
+                                    <TableCell align="right">{r.NangSuat_DuKien ?? "—"}</TableCell>
+
                                     <TableCell>{r.Ma_DonHang}</TableCell>
                                     <TableCell>{r.ItemCode}</TableCell>
                                     <TableCell>{r.TenNhom}</TableCell>
                                     <TableCell align="center">{r.SoTuan_HieuSuat}</TableCell>
+
                                     <TableCell align="right">
                                         {secToHour(r.TongTG_Chuan_Giay)}
                                     </TableCell>
+
                                     <TableCell align="right">
                                         {secToHour(r.TongTG_TheoHS_Giay)}
                                     </TableCell>
+                                    <TableCell align="right">
+                                        {secToHour(
+                                            calcTGThucTe(r.NangSuat_DuKien, r.TongTG_TheoHS_Giay)
+                                        )}
+                                    </TableCell>
+
                                     <TableCell
                                         align="right"
                                         sx={{
@@ -206,6 +266,7 @@ export default function ThoiGianSXPage() {
                                         {secToHour(r.Thua_Giay)}
                                     </TableCell>
                                 </TableRow>
+
                             ))}
                         </TableBody>
                     </Table>
