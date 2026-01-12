@@ -13,8 +13,13 @@ import ThoiGianSXPage from "./pages/TGSX/ThoiGianSXPage";
 import Login from "./pages/Login";
 import LoginTGSX from "./pages/TGSX/LoginTGSX";
 
+import WarehouseLayout from "./components/PLP/WarehouseMap";
 import { useAuth } from "./store/useAuth";
 
+// B5
+import ParticipantDashboard from "./components/B5/ParticipantDashboard";
+import LandingRegister from "./components/B5/LandingRegister";
+import LandingRegisterHeadquarters from "./components/B5/LandingRegisterHeadquarters";
 // ============ AUTH CHO SỔ SÉC =============
 function RequireAuth() {
   const { token } = useAuth();
@@ -55,7 +60,12 @@ export default function App() {
         <Route path="/tgsx/dinhmuc" element={<DinhMucPage />} />
         <Route path="/tgsx/thoigian" element={<ThoiGianSXPage />} />
       </Route>
-
+      {/* BẢN ĐỒ KHO HÀNG */}
+      <Route path="/warehouse-map" element={<WarehouseLayout />} />
+      {/* B5: LANDING PAGE ĐĂNG KÝ THAM GIA SỰ KIỆN */}
+      <Route path="/landing-register" element={<LandingRegister />} />
+      <Route path="/participant-dashboard" element={<ParticipantDashboard />} />
+      <Route path="/landing-register-headquarters" element={<LandingRegisterHeadquarters />} />
       {/* ROUTE MẶC ĐỊNH */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
