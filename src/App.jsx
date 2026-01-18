@@ -7,6 +7,8 @@ import PhieuSec from "./pages/PhieuSec";
 import Checkbooks from "./pages/Checkbooks";
 import AdminSuppliers from "./pages/AdminSuppliers";
 
+import HoaDon from "./pages/invoice/HoaDon";
+
 import DinhMucPage from "./pages/TGSX/DinhMucPage";
 import ThoiGianSXPage from "./pages/TGSX/ThoiGianSXPage";
 
@@ -53,7 +55,9 @@ export default function App() {
         <Route path="/phieu" element={<PhieuSec />} />
         <Route path="/sos" element={<Checkbooks />} />
         <Route path="/admin" element={<AdminSuppliers />} />
+        <Route path="/invoice" element={<HoaDon />} />
       </Route>
+
 
       {/* =========== HỆ TÍNH THỜI GIAN SX (layout Shell_TGSX) =========== */}
       <Route element={<RequireAuth_TGSX />}>

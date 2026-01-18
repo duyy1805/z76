@@ -42,20 +42,25 @@ const getTextColor = (percentage) => {
 
 // --- 3. LOGIC CẤU HÌNH HÀNG KỆ ---
 const getRowConfig = (rowLabel) => {
+    if (rowLabel === 'I') {
+        return {
+            type: 'split',
+            // Khu vực N: 26 ô (từ 48 đến 23)
+            left: Array.from({ length: 26 }, (_, i) => 48 - i),
+            // Khu vực M & phần còn lại: 22 ô (từ 22 đến 1)
+            // Trong đó M chiếm từ 22 đến 19 (4 ô), còn lại từ 18 trở đi là kệ thường
+            right: Array.from({ length: 22 }, (_, i) => 22 - i),
+            spacer: 2,
+            spacerLabel: ''
+        };
+    }
+    // ... các rowLabel khác giữ nguyên logic cũ
     if (rowLabel === 'A') {
         return {
             type: 'split',
             left: Array.from({ length: 38 }, (_, i) => 51 - i),
             right: Array.from({ length: 13 }, (_, i) => 13 - i),
             spacer: 1, spacerLabel: ''
-        };
-    }
-    if (rowLabel === 'I') {
-        return {
-            type: 'split',
-            left: Array.from({ length: 26 }, (_, i) => 48 - i),
-            right: Array.from({ length: 22 }, (_, i) => 22 - i),
-            spacer: 2, spacerLabel: 'KỆ CHUI'
         };
     }
     return {
@@ -65,7 +70,6 @@ const getRowConfig = (rowLabel) => {
         spacer: 2, spacerLabel: 'KỆ CHUI'
     };
 };
-
 // --- 4. COMPONENT: RACK LEVEL ---
 const RackLevel = ({ row, col, level, slotData, onClick }) => {
     const label = `${row}${level}${col}`;
@@ -116,54 +120,65 @@ const RackColumn = ({ row, col, onSlotClick, getSlotData }) => (
 );
 
 // --- 6. COMPONENT: SINGLE ROW (CẬP NHẬT: THÊM HEADER NỀN VÀNG) ---
+// --- 6. COMPONENT: SINGLE ROW (CHỈNH TIÊU ĐỀ: TRỐNG 19-22, M TỪ 1-18) ---
 const SingleRowRender = ({ rowLabel, handleSlotClick, getSlotData }) => {
     const config = getRowConfig(rowLabel);
 
     return (
-        // Container bao quanh: Căn đáy (flex-end) để Nhãn dòng (A, B) khớp với Kệ
         <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start', mb: 2 }}>
-
-            {/* Cụm: Tiêu đề Nền + Các ô kệ */}
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
 
-                {/* HEADER MỚI: NỀN A, NỀN B... */}
-                <Box sx={{
-                    bgcolor: '#fff59d', // Màu vàng nền (giống ảnh image_a3aa07)
-                    // border: '1px solid #000', borderBottom: 'none', // Viền
-                    textAlign: 'center', fontWeight: 'bold', fontSize: '10px',
-                    py: 0.5, width: '100%'
-                }}>
-                    Nền {rowLabel}
-                </Box>
+                {rowLabel === 'I' ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: '2px' }}>
+                        {/* 1. KHU VỰC N: Giữ nguyên 26 ô (48-23) */}
+                        <Box sx={{
+                            bgcolor: '#fff59d', textAlign: 'center', fontWeight: 'bold',
+                            fontSize: '11px', py: 0.5, border: '1px solid #ccc',
+                            width: `${26 * (SLOT_WIDTH + 1)}px`
+                        }}>
+                            KHU VỰC CHỜ NHẬP (N)
+                        </Box>
 
-                {/* PHẦN KỆ CHÍNH (Giữ nguyên logic cũ) */}
+                        {/* 2. Khoảng trống Cửa nhập hàng */}
+                        <Box sx={{ width: `${config.spacer * SLOT_WIDTH + 4}px` }} />
+
+                        {/* 3. ĐOẠN TRỐNG (Ô 22 đến 19): 4 ô không có nhãn vàng */}
+                        <Box sx={{ width: `${4 * (SLOT_WIDTH + 1)}px` }} />
+
+                        {/* 4. KHU VỰC M: Phủ từ ô 18 đến ô 1 (18 ô) */}
+                        <Box sx={{
+                            bgcolor: '#fff59d', textAlign: 'center', fontWeight: 'bold',
+                            fontSize: '11px', py: 0.5, border: '1px solid #ccc',
+                            flexGrow: 1, // Tự động kéo dài hết phần còn lại của dãy kệ
+                            minWidth: `${18 * (SLOT_WIDTH + 1)}px`
+                        }}>
+                            KHU VỰC CHỜ NHẬP (M)
+                        </Box>
+                    </Box>
+                ) : (
+                    <Box sx={{
+                        bgcolor: '#fff59d', textAlign: 'center', fontWeight: 'bold', fontSize: '10px',
+                        py: 0.5, width: '100%'
+                    }}>
+                        Nền {rowLabel}
+                    </Box>
+                )}
+
+                {/* Phần hiển thị các ô kệ (giữ nguyên logic config cũ) */}
                 <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                    {/* KHỐI TRÁI */}
                     <Box sx={{ display: 'flex' }}>
                         {config.left.map(col => (
                             <RackColumn key={col} row={rowLabel} col={col} onSlotClick={handleSlotClick} getSlotData={getSlotData} />
                         ))}
                     </Box>
 
-                    {/* KỆ CHUI / LỐI ĐI */}
+                    {/* Spacer giữa N và đoạn trống */}
                     <Box sx={{
                         width: `${config.spacer * SLOT_WIDTH}px`,
                         height: `${SLOT_HEIGHT * 3}px`,
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        borderLeft: '1px dashed #bdbdbd',
-                        borderRight: '1px dashed #bdbdbd',
-                        mx: '2px', bgcolor: '#fafafa'
-                    }}>
-                        <Typography variant="caption" sx={{
-                            color: '#9e9e9e', fontSize: '8px', fontWeight: 'bold',
-                            writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-                            textTransform: 'uppercase', letterSpacing: 1
-                        }}>
-                            {config.spacerLabel}
-                        </Typography>
-                    </Box>
+                        mx: '2px', bgcolor: 'transparent'
+                    }} />
 
-                    {/* KHỐI PHẢI */}
                     <Box sx={{ display: 'flex' }}>
                         {config.right.map(col => (
                             <RackColumn key={col} row={rowLabel} col={col} onSlotClick={handleSlotClick} getSlotData={getSlotData} />
@@ -172,7 +187,6 @@ const SingleRowRender = ({ rowLabel, handleSlotClick, getSlotData }) => {
                 </Box>
             </Box>
 
-            {/* NHÃN DÒNG (BÊN PHẢI) */}
             <Box sx={{
                 ml: 2, width: '40px', height: `${SLOT_HEIGHT * 3 + 15}px`,
                 bgcolor: THEME.zoneYellow, color: '#000', fontWeight: 'bold',
@@ -335,20 +349,21 @@ const WarehouseDashboard = () => {
                     <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column' }}>
                         <Box sx={{ flex: 2, display: 'flex' }}>
                             <Box sx={{ flex: 1, p: 2, borderRight: '2px solid #000', display: 'flex', alignItems: 'center' }}>
-                                <RightZoneBox label="KHU VỰC CHỜ NHẬP" icon={<Inventory />} height="100%" />
+                                <RightZoneBox label="KHU VỰC DÁN SHU / QUÉT RFID" icon={<QrCodeScanner />} />
                             </Box>
+
                         </Box>
                         <Box sx={{ flex: 1, display: 'flex' }}><RightSideGate label="CỬA XUẤT CONT" /></Box>
                         <Box sx={{ flex: 2, display: 'flex' }}>
                             <Box sx={{ flex: 1, p: 2, borderRight: '2px solid #000', display: 'flex', alignItems: 'center' }}>
-                                <RightZoneBox label="KHU VỰC CHỜ XUẤT" icon={<Logout />} />
+                                <RightZoneBox label="KHU VỰC CHỜ XUẤT (J)" icon={<Logout />} />
                             </Box>
                         </Box>
                         <WallSpacer />
                         <Box sx={{ height: '50px', display: 'flex' }}><RightSideGate label="CỬA RA VÀO (CỬA ĐÓNG)" /></Box>
                         <Box sx={{ flex: 2, display: 'flex' }}>
                             <Box sx={{ flex: 1, p: 2, borderRight: '2px solid #000', display: 'flex', alignItems: 'center' }}>
-                                <RightZoneBox label="KHU VỰC DÁN SHU / QUÉT RFID" icon={<QrCodeScanner />} />
+                                <RightZoneBox label="KHU VỰC CHỜ XUẤT (K)" icon={<Logout />} height="100%" />
                             </Box>
                         </Box>
                         <Box sx={{ flex: 1, display: 'flex', borderTop: '2px solid #000' }}>
