@@ -23,9 +23,25 @@ export const apiInvoice = {
         return http.post(`/${id}/save`).then(r => r.data);
     },
 
-    approveHoaDon(id, body) {
-        return http.post(`/${id}/approve`, body).then(r => r.data);
+    approveHoaDon(hoaDonId, agree, role, user) {
+        const body = {
+            // ===== thông tin duyệt =====
+            nguoiDuyetId: user?.id,
+            tenNguoiDuyet: user?.username || role,
+            chapThuan: !!agree,
+            ghiChu: null,
+
+            // ===== bắt buộc để backend lấy lại dữ liệu =====
+            requesterUserId: user?.id,
+            requesterRoleCode: role,
+            requesterIdDonVi: user?.idDonVi
+        };
+
+        return http
+            .post(`/${hoaDonId}/approve`, body)
+            .then(r => r.data);
     },
+
 
     getChiTiet(id) {
         return http.get(`/${id}/items`).then(r => r.data);
@@ -41,7 +57,17 @@ export const apiInvoice = {
 
     deleteChiTiet(itemId) {
         return http.delete(`/items/${itemId}`).then(r => r.data);
-    }
+    },
+
+    listCongTy(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        return http.get(`/company${q ? `?${q}` : ""}`).then(r => r.data);
+    },
+
+    createCongTy(payload) {
+        // payload: { name, maSoThue?, diaChi? }
+        return http.post("/company", payload).then(r => r.data);
+    },
 };
 
 export function attachInvoiceAuthToken(token) {

@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody,
     Typography, Stack, Button, Dialog, DialogTitle, DialogContent,
-    DialogActions, TextField, IconButton, Snackbar, Alert
+    DialogActions, TextField, IconButton, Snackbar, Alert, MenuItem
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import Autocomplete from "@mui/material/Autocomplete";
 
 import StatusChip from "../../components/StatusChip";
 import HoaDonChiTiet from "./HoaDonChiTiet";
@@ -35,6 +36,30 @@ export default function HoaDon() {
         congTyId: "",
         ghiChu: "",
     });
+    // autocomplete
+    const [congTyInput, setCongTyInput] = useState("");
+
+    // dialog thêm công ty
+    const [openAddCT, setOpenAddCT] = useState(false);
+    const [ctName, setCtName] = useState("");
+    const [ctDiaChi, setCtDiaChi] = useState("");
+    const [ctMaSoThue, setCtMaSoThue] = useState("");
+    const [savingCT, setSavingCT] = useState(false);
+    const [companies, setCompanies] = useState([]);
+
+    const stripVN = (s = "") =>
+        s.normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/đ/g, "d")
+            .replace(/Đ/g, "D");
+    useEffect(() => {
+        apiInvoice
+            .listCongTy({ tonTai: 1 })
+            .then(setCompanies)
+            .catch(() =>
+                setToast({ open: true, msg: "Lỗi tải công ty", type: "error" })
+            );
+    }, []);
 
     /* ================= LOAD LIST ================= */
     const load = async () => {
@@ -68,13 +93,12 @@ export default function HoaDon() {
     const handleApprove = async (row, agree, e) => {
         e.stopPropagation();
         try {
-            const updated = await apiInvoice.approveHoaDon(row.hoaDonId, {
-                nguoiDuyetId: user.id,
-                chapThuan: agree,
-                requesterUserId: user.id,
-                requesterRoleCode: role,
-                requesterIdDonVi: user.idDonVi,
-            });
+            const updated = await apiInvoice.approveHoaDon(
+                row.hoaDonId,
+                agree,
+                role,
+                user
+            );
 
             setRows((r) =>
                 r.map((x) => (x.hoaDonId === updated.hoaDonId ? updated : x))
@@ -88,8 +112,14 @@ export default function HoaDon() {
                 msg: agree ? "Đã duyệt hóa đơn" : "Đã từ chối hóa đơn",
                 type: "success",
             });
-        } catch {
-            setToast({ open: true, msg: "Duyệt thất bại", type: "error" });
+        } catch (err) {
+            setToast({
+                open: true,
+                msg:
+                    err?.response?.data?.message ||
+                    "Duyệt thất bại",
+                type: "error",
+            });
         }
     };
 
@@ -120,6 +150,45 @@ export default function HoaDon() {
         }
     };
 
+    const saveCongTy = async () => {
+        if (!ctName.trim()) {
+            setToast({
+                open: true,
+                msg: "Tên công ty không được để trống",
+                type: "error",
+            });
+            return;
+        }
+
+        try {
+            setSavingCT(true);
+
+            const created = await apiInvoice.createCongTy({
+                name: ctName.trim(),
+                maSoThue: ctMaSoThue || null,
+                diaChi: ctDiaChi || null,
+            });
+
+            setCtName("");
+            setCtMaSoThue("");
+            setCtDiaChi("");
+            // thêm vào list + chọn luôn
+            setCompanies(list => [...list, created]);
+            setForm(f => ({ ...f, congTyId: created.id }));
+
+            setOpenAddCT(false);
+            setToast({ open: true, msg: "Đã thêm công ty", type: "success" });
+        } catch (e) {
+            setToast({
+                open: true,
+                msg: e?.response?.data?.message || "Thêm công ty thất bại",
+                type: "error",
+            });
+        } finally {
+            setSavingCT(false);
+        }
+    };
+
     /* ================= DETAIL ================= */
     const openDetailDialog = async (row) => {
         setDetail(row);
@@ -127,6 +196,7 @@ export default function HoaDon() {
         const list = await apiInvoice.getChiTiet(row.hoaDonId);
         setItems(list || []);
     };
+
 
     return (
         <Box>
@@ -206,20 +276,114 @@ export default function HoaDon() {
             </Paper>
 
             {/* CREATE DIALOG */}
-            <Dialog open={openCreate} onClose={() => setOpenCreate(false)}>
-                <DialogTitle>Tạo hóa đơn</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} mt={1}>
-                        <TextField
-                            label="Công ty (ID)"
-                            value={form.congTyId}
-                            onChange={(e) => setForm({ ...form, congTyId: e.target.value })}
-                        />
-                        <TextField
-                            label="Ghi chú"
-                            value={form.ghiChu}
-                            onChange={(e) => setForm({ ...form, ghiChu: e.target.value })}
-                        />
+            <Dialog
+                open={openCreate}
+                onClose={() => setOpenCreate(false)}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        p: 1,
+                    },
+                }}
+            >
+                <DialogTitle sx={{ pb: 1 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Box>
+                            <Typography variant="h6" fontWeight={700}>
+                                Tạo hóa đơn
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Nhập thông tin công ty và ghi chú cho hóa đơn
+                            </Typography>
+                        </Box>
+                    </Stack>
+                </DialogTitle>
+
+                <DialogContent dividers>
+                    <Stack spacing={3} mt={1}>
+                        {/* ===== CÔNG TY ===== */}
+                        <Box>
+                            <Typography
+                                variant="subtitle2"
+                                color="text.secondary"
+                                sx={{ mb: 1 }}
+                            >
+                                Thông tin công ty
+                            </Typography>
+
+                            {/* Autocomplete + nút + */}
+                            <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                                <Autocomplete
+                                    sx={{ flex: 1 }}
+                                    options={companies}
+                                    value={companies.find(c => c.id === form.congTyId) || null}
+                                    onChange={(_, val) =>
+                                        setForm({ ...form, congTyId: val?.id ?? "" })
+                                    }
+                                    inputValue={congTyInput}
+                                    onInputChange={(_, val) => setCongTyInput(val)}
+                                    getOptionLabel={(o) => o?.name ?? ""}
+                                    isOptionEqualToValue={(o, v) => o?.id === v?.id}
+                                    filterOptions={(options, { inputValue }) => {
+                                        const q = stripVN(inputValue.toLowerCase().trim());
+                                        if (!q) return options;
+                                        return options.filter(o =>
+                                            stripVN(o.name.toLowerCase()).includes(q)
+                                        );
+                                    }}
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Công ty"
+                                            placeholder="Gõ tên công ty (không dấu)…"
+                                            helperText="Nhập vài ký tự để tìm gần đúng"
+                                        />
+                                    )}
+                                    ListboxProps={{ style: { maxHeight: 300 } }}
+                                />
+                                <IconButton
+                                    onClick={() => setOpenAddCT(true)}
+                                    sx={{
+                                        mt: 0.5,
+                                        width: 56,
+                                        height: 56,
+                                        borderRadius: "50%",
+                                        border: "1px dashed",
+                                        borderColor: "primary.main",
+                                        color: "primary.main",
+                                        "&:hover": {
+                                            bgcolor: "primary.main",
+                                            color: "white",
+                                        },
+                                    }}
+                                >
+                                    <AddIcon />
+                                </IconButton>
+                            </Stack>
+                        </Box>
+
+                        {/* ===== GHI CHÚ ===== */}
+                        <Box>
+                            <Typography
+                                variant="subtitle2"
+                                color="text.secondary"
+                                sx={{ mb: 1 }}
+                            >
+                                Ghi chú
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                multiline
+                                minRows={3}
+                                placeholder="Nhập ghi chú (nếu có)…"
+                                value={form.ghiChu}
+                                onChange={(e) =>
+                                    setForm({ ...form, ghiChu: e.target.value })
+                                }
+                            />
+                        </Box>
                     </Stack>
                 </DialogContent>
                 <DialogActions>
@@ -253,6 +417,56 @@ export default function HoaDon() {
                         </DialogActions>
                     </>
                 )}
+            </Dialog>
+            <Dialog
+                open={openAddCT}
+                onClose={() => setOpenAddCT(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Thêm công ty</DialogTitle>
+
+                <DialogContent>
+                    <Stack spacing={2} mt={1}>
+                        <TextField
+                            autoFocus
+                            label="Tên công ty"
+                            value={ctName}
+                            onChange={(e) => setCtName(e.target.value)}
+                            fullWidth
+                        />
+
+                        <TextField
+                            label="Mã số thuế"
+                            value={ctMaSoThue}
+                            onChange={(e) => setCtMaSoThue(e.target.value)}
+                            fullWidth
+                        />
+
+                        <TextField
+                            label="Địa chỉ"
+                            value={ctDiaChi}
+                            onChange={(e) => setCtDiaChi(e.target.value)}
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            placeholder="VD: Số 76, đường ABC, Quận XYZ, Hà Nội"
+                        />
+                    </Stack>
+                </DialogContent>
+
+                <DialogActions>
+                    <Button onClick={() => setOpenAddCT(false)}>
+                        Đóng
+                    </Button>
+                    <Button
+                        variant="contained"
+                        disabled={savingCT}
+                        onClick={saveCongTy}
+                    >
+                        {savingCT ? "Đang lưu..." : "Lưu"}
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             <Snackbar
