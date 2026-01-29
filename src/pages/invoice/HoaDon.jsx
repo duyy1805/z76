@@ -20,6 +20,12 @@ import { useAuth } from "../../store/useAuth";
 
 const fmtMoney = (n) =>
     (n ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+const fmtDate = (dateStr) => {
+    if (!dateStr) return "—";
+    const d = new Date(dateStr);
+    if (isNaN(d)) return "—";
+    return d.toLocaleDateString("vi-VN");
+};
 
 export default function HoaDon() {
     const { role, user } = useAuth();
@@ -306,7 +312,7 @@ export default function HoaDon() {
                     <Button startIcon={<RefreshIcon />} onClick={load}>
                         Tải lại
                     </Button>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenCreate(true)}>
+                    <Button variant="contained" onClick={() => setOpenCreate(true)}>
                         Tạo hóa đơn
                     </Button>
                 </Stack>
@@ -377,7 +383,10 @@ export default function HoaDon() {
                                     </Box>
                                 </Popover>
                             </TableCell>
+                            <TableCell>Người tạo</TableCell>
+                            <TableCell>Đơn vị</TableCell>
                             <TableCell align="right">Tổng tiền</TableCell>
+                            <TableCell sx={{ minWidth: 250 }}>Ghi chú</TableCell>
                             <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
                                 <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
                                     <span>Trạng thái</span>
@@ -451,9 +460,38 @@ export default function HoaDon() {
                             >
                                 <TableCell align="center">{i + 1}</TableCell>
                                 <TableCell>{r.maHoaDon}</TableCell>
-                                <TableCell align="center">{r.ngayDangKy}</TableCell>
+                                <TableCell align="center">{fmtDate(r.ngayDangKy)}</TableCell>
                                 <TableCell>{r.tenCongTy}</TableCell>
+                                {/* ✅ TÊN NGƯỜI TẠO */}
+                                <TableCell>
+                                    {r.tenNguoiTao || "—"}
+                                </TableCell>
+
+                                {/* ✅ TÊN ĐƠN VỊ */}
+                                <TableCell>
+                                    {r.tenDonViNguoiTao || "—"}
+                                </TableCell>
                                 <TableCell align="right">{fmtMoney(r.tongThanhTien)}</TableCell>
+                                <TableCell>
+                                    {r.ghiChu ? (
+                                        <Typography
+                                            variant="body2"
+                                            sx={{
+                                                whiteSpace: "nowrap",
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                maxWidth: 300
+                                            }}
+                                        >
+                                            {r.ghiChu}
+                                        </Typography>
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">
+                                            —
+                                        </Typography>
+                                    )}
+                                </TableCell>
+
                                 <TableCell align="center">
                                     <StatusChip status={r.maTrangThai} />
                                 </TableCell>
@@ -494,12 +532,13 @@ export default function HoaDon() {
             <Dialog
                 open={openCreate}
                 onClose={() => setOpenCreate(false)}
-                maxWidth="sm"
+                maxWidth="xl"
                 fullWidth
                 PaperProps={{
                     sx: {
                         borderRadius: 3,
                         p: 1,
+                        minWidth: 1500,
                     },
                 }}
             >
@@ -552,8 +591,8 @@ export default function HoaDon() {
                                         <TextField
                                             {...params}
                                             label="Công ty"
-                                            placeholder="Gõ tên công ty (không dấu)…"
-                                            helperText="Nhập vài ký tự để tìm gần đúng"
+                                            placeholder="Gõ tên công ty …"
+                                            helperText="Nhập vài ký tự "
                                         />
                                     )}
                                     ListboxProps={{ style: { maxHeight: 300 } }}
@@ -619,8 +658,8 @@ export default function HoaDon() {
                                 hoaDonId={detail.hoaDonId}
                                 rows={items}
                                 locked={!(
-                                    (role === "NhanVien" && detail.maTrangThai === "KhoiTao") ||
-                                    detail.maTrangThai === "ChoDuyet_TBP"
+                                    (role === "NhanVien" && detail.maTrangThai === "KhoiTao")
+                                    // || detail.maTrangThai === "ChoDuyet_TBP"
                                 )}
                                 onReload={async () => {
                                     const list = await apiInvoice.getChiTiet(detail.hoaDonId);
