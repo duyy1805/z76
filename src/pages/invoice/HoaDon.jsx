@@ -2,14 +2,17 @@ import React, { useEffect, useState } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody,
     Typography, Stack, Button, Dialog, DialogTitle, DialogContent,
-    DialogActions, TextField, IconButton, Snackbar, Alert, MenuItem
+    DialogActions, TextField, IconButton, Snackbar, Alert, MenuItem, Popover
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import Autocomplete from "@mui/material/Autocomplete";
-
+import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import ClearIcon from "@mui/icons-material/Clear";
+import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import StatusChip from "../../components/StatusChip";
 import HoaDonChiTiet from "./HoaDonChiTiet";
 import { apiInvoice } from "../../lib/api_invoice";
@@ -20,18 +23,13 @@ const fmtMoney = (n) =>
 
 export default function HoaDon() {
     const { role, user } = useAuth();
-
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
-
     const [openCreate, setOpenCreate] = useState(false);
     const [openDetail, setOpenDetail] = useState(false);
-
     const [detail, setDetail] = useState(null);
     const [items, setItems] = useState([]);
-
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
-
     const [form, setForm] = useState({
         congTyId: "",
         ghiChu: "",
@@ -47,11 +45,68 @@ export default function HoaDon() {
     const [savingCT, setSavingCT] = useState(false);
     const [companies, setCompanies] = useState([]);
 
+    // ===== FILTER =====
+    const [qMa, setQMa] = useState("");
+    const [qCongTy, setQCongTy] = useState("");
+    const [qFrom, setQFrom] = useState(null);
+    const [qTo, setQTo] = useState(null);
+    const [qTrangThai, setQTrangThai] = useState("");
+
+    // popover anchor
+    const [anchorMa, setAnchorMa] = useState(null);
+    const [anchorCT, setAnchorCT] = useState(null);
+    const [anchorTT, setAnchorTT] = useState(null);
     const stripVN = (s = "") =>
         s.normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
             .replace(/đ/g, "d")
             .replace(/Đ/g, "D");
+    const filteredRows = React.useMemo(() => {
+        if (!rows) return [];
+
+        const hasMa = qMa.trim() !== "";
+        const hasCT = qCongTy.trim() !== "";
+        const hasFrom = !!qFrom;
+        const hasTo = !!qTo;
+
+        const qMaNorm = stripVN(qMa.toLowerCase().trim());
+        const qCTNorm = stripVN(qCongTy.toLowerCase().trim());
+
+        return rows.filter(r => {
+            // ===== Mã =====
+            let okMa = true;
+            if (hasMa) {
+                okMa = stripVN(String(r.maHoaDon || "").toLowerCase()).includes(qMaNorm);
+            }
+
+            // ===== Công ty =====
+            let okCT = true;
+            if (hasCT) {
+                okCT = stripVN(String(r.tenCongTy || "").toLowerCase()).includes(qCTNorm);
+            }
+
+            // ===== Ngày =====
+            let okDate = true;
+            if (hasFrom || hasTo) {
+                const d = new Date(r.ngayDangKy);
+                if (isNaN(d.getTime())) return false;
+
+                const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+                if (hasFrom && day < qFrom.startOf("day").valueOf()) okDate = false;
+                if (hasTo && day > qTo.startOf("day").valueOf()) okDate = false;
+            }
+
+            // ===== Trạng thái =====
+            let okTT = true;
+            if (qTrangThai) {
+                okTT = r.maTrangThai === qTrangThai;
+            }
+
+            return okMa && okCT && okDate && okTT;
+        });
+    }, [rows, qMa, qCongTy, qFrom, qTo, qTrangThai]);
+
+
     useEffect(() => {
         apiInvoice
             .listCongTy({ tonTai: 1 })
@@ -89,6 +144,21 @@ export default function HoaDon() {
         (role === "TBP" && r.maTrangThai === "ChoDuyet_TBP") ||
         (role === "KTT" && r.maTrangThai === "ChoDuyet_KTT") ||
         (role === "GD" && r.maTrangThai === "ChoDuyet_GD");
+
+    const canSubmit = (r) =>
+        role === "NhanVien" && r.maTrangThai === "KhoiTao";
+    const canAct = (r) => {
+        // ⛔ trạng thái kết thúc
+        if (r.maTrangThai === "HoanThanh") return false;
+
+        // Nhân viên trình
+        if (canSubmit(r)) return true;
+
+        // TBP / KTT / GD duyệt
+        if (canApprove(r)) return true;
+
+        return false;
+    };
 
     const handleApprove = async (row, agree, e) => {
         e.stopPropagation();
@@ -203,6 +273,35 @@ export default function HoaDon() {
             {/* HEADER */}
             <Stack direction="row" justifyContent="space-between" mb={2}>
                 <Typography variant="h5">Hóa đơn</Typography>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <DatePicker
+                            label="Từ ngày"
+                            value={qFrom}
+                            onChange={setQFrom}
+                            slotProps={{ textField: { size: "small" } }}
+                        />
+                        <DatePicker
+                            label="Đến ngày"
+                            value={qTo}
+                            onChange={setQTo}
+                            slotProps={{ textField: { size: "small" } }}
+                            minDate={qFrom || undefined}
+                        />
+                    </LocalizationProvider>
+
+                    <Button
+                        variant="text"
+                        startIcon={<ClearIcon />}
+                        onClick={() => {
+                            setQFrom(null);
+                            setQTo(null);
+                        }}
+                    >
+                        Xoá ngày
+                    </Button>
+                </Stack>
+
                 <Stack direction="row" spacing={1}>
                     <Button startIcon={<RefreshIcon />} onClick={load}>
                         Tải lại
@@ -219,16 +318,131 @@ export default function HoaDon() {
                     <TableHead>
                         <TableRow>
                             <TableCell align="center">STT</TableCell>
-                            <TableCell align="center">Mã</TableCell>
+                            <TableCell>
+                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                    <span>Mã</span>
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => setAnchorMa(e.currentTarget)}
+                                        color={qMa ? "primary" : "default"}
+                                    >
+                                        <FilterListRoundedIcon fontSize="inherit" />
+                                    </IconButton>
+                                </Stack>
+
+                                <Popover
+                                    open={Boolean(anchorMa)}
+                                    anchorEl={anchorMa}
+                                    onClose={() => setAnchorMa(null)}
+                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                >
+                                    <Box p={1.5} width={260}>
+                                        <TextField
+                                            label="Mã hóa đơn"
+                                            size="small"
+                                            autoFocus
+                                            value={qMa}
+                                            onChange={(e) => setQMa(e.target.value)}
+                                        />
+                                    </Box>
+                                </Popover>
+                            </TableCell>
                             <TableCell align="center">Ngày</TableCell>
-                            <TableCell>Công ty</TableCell>
+                            <TableCell>
+                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                    <span>Công ty</span>
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => setAnchorCT(e.currentTarget)}
+                                        color={qCongTy ? "primary" : "default"}
+                                    >
+                                        <FilterListRoundedIcon fontSize="inherit" />
+                                    </IconButton>
+                                </Stack>
+
+                                <Popover
+                                    open={Boolean(anchorCT)}
+                                    anchorEl={anchorCT}
+                                    onClose={() => setAnchorCT(null)}
+                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                >
+                                    <Box p={1.5} width={300}>
+                                        <TextField
+                                            label="Tên công ty"
+                                            size="small"
+                                            autoFocus
+                                            value={qCongTy}
+                                            onChange={(e) => setQCongTy(e.target.value)}
+                                        />
+                                    </Box>
+                                </Popover>
+                            </TableCell>
                             <TableCell align="right">Tổng tiền</TableCell>
-                            <TableCell align="center">Trạng thái</TableCell>
+                            <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
+                                <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+                                    <span>Trạng thái</span>
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => setAnchorTT(e.currentTarget)}
+                                        aria-label="Lọc theo Trạng thái"
+                                        color={qTrangThai ? "primary" : "default"}
+                                    >
+                                        <FilterListRoundedIcon fontSize="inherit" />
+                                    </IconButton>
+                                </Stack>
+
+                                <Popover
+                                    open={Boolean(anchorTT)}
+                                    anchorEl={anchorTT}
+                                    onClose={() => setAnchorTT(null)}
+                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                    PaperProps={{ sx: { p: 1.5, width: 240 } }}
+                                >
+                                    <Stack spacing={1}>
+                                        <TextField
+                                            select
+                                            label="Chọn trạng thái"
+                                            value={qTrangThai}
+                                            onChange={(e) => setQTrangThai(e.target.value)}
+                                            size="small"
+                                            fullWidth
+                                        >
+                                            <MenuItem value="">Tất cả</MenuItem>
+                                            <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
+                                            <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
+                                            <MenuItem value="ChoDuyet_GD">Chờ duyệt GD</MenuItem>
+                                            <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
+                                            <MenuItem value="TuChoi">Từ chối</MenuItem>
+                                        </TextField>
+
+                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                            {!!qTrangThai && (
+                                                <Button
+                                                    startIcon={<ClearIcon />}
+                                                    size="small"
+                                                    onClick={() => setQTrangThai("")}
+                                                >
+                                                    Xoá
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant="contained"
+                                                size="small"
+                                                onClick={() => setAnchorTT(null)}
+                                            >
+                                                OK
+                                            </Button>
+                                        </Stack>
+                                    </Stack>
+                                </Popover>
+                            </TableCell>
+
                             <TableCell align="center">Duyệt</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {rows.map((r, i) => (
+                        {filteredRows.map((r, i) => (
                             <TableRow
                                 key={r.hoaDonId}
                                 hover
@@ -246,14 +460,15 @@ export default function HoaDon() {
                                 <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                                     <IconButton
                                         color="success"
-                                        disabled={!canApprove(r)}
+                                        disabled={!canAct(r)}
                                         onClick={(e) => handleApprove(r, true, e)}
                                     >
                                         <CheckCircleIcon />
                                     </IconButton>
+
                                     <IconButton
                                         color="error"
-                                        disabled={!canApprove(r)}
+                                        disabled={!canApprove(r)}   // Reject chỉ cho role duyệt
                                         onClick={(e) => handleApprove(r, false, e)}
                                     >
                                         <CancelIcon />
@@ -403,7 +618,10 @@ export default function HoaDon() {
                             <HoaDonChiTiet
                                 hoaDonId={detail.hoaDonId}
                                 rows={items}
-                                locked={detail.maTrangThai !== "ChoDuyet_TBP"}
+                                locked={!(
+                                    (role === "NhanVien" && detail.maTrangThai === "KhoiTao") ||
+                                    detail.maTrangThai === "ChoDuyet_TBP"
+                                )}
                                 onReload={async () => {
                                     const list = await apiInvoice.getChiTiet(detail.hoaDonId);
                                     setItems(list);

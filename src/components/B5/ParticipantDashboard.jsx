@@ -19,7 +19,7 @@ import {
     Skeleton,
     Stack,
     Button,
-    useMediaQuery,
+    // useMediaQuery,
     Tabs,
     Tab
 } from '@mui/material';
@@ -222,7 +222,7 @@ const ParticipantDashboard = () => {
                             <Stack direction="row" alignItems="center" spacing={0.5} mb={0.2}>
                                 <WorkIcon sx={{ fontSize: 14, color: 'primary.main', opacity: 0.8 }} />
                                 <Typography variant="caption" color="primary.main" fontWeight="600" noWrap>
-                                    {data.jobTitle}
+                                    {data.jobTitle} {eventId === 1 ? ' năm' : ''}
                                 </Typography>
                             </Stack>
                         )}

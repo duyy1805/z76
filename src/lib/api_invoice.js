@@ -1,8 +1,8 @@
 // src/lib/api_invoice.js
 import axios from "axios";
 
-// const BASE = import.meta.env.VITE_API_INVOICE_BASE || "https://nodeapi.z76.vn/invoice";
-const BASE = "http://localhost:5000/invoice/invoice";
+const BASE = import.meta.env.VITE_API_INVOICE_BASE || "https://nodeapi.z76.vn/invoice/invoice";
+// const BASE = "http://localhost:5000/invoice/invoice";
 
 const http = axios.create({
     baseURL: BASE,

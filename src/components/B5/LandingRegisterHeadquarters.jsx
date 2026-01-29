@@ -116,7 +116,7 @@ const LandingRegisterHeadquarters = () => {
 
     // Ảnh sơ đồ và Logo khác
     const DIAGRAM_IMAGE = "/assets/image/2.jpg";
-    const LOGO_URL = "https://scontent.fhan9-1.fna.fbcdn.net/v/t39.30808-6/524645569_1380446854087980_8062810593220342677_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=f727a1&_nc_eui2=AeFm6ryek00QnGY9v7Nmnrti5GH1PGszugTkYfU8azO6BGB1qAGRGKwRrcMtGw85uw-WTcoJoLnwahDjmPcWDN9L&_nc_ohc=MAUQ4Cfow8IQ7kNvwGE8NZu&_nc_oc=AdkjWkIPmI0hwrqR2367CTDcIC0DxIRHK6u3u_JfPmY3-YHlJDx4mWrYPo4CgeDOGUw&_nc_zt=23&_nc_ht=scontent.fhan9-1.fna&_nc_gid=RF6U3t-YuXbcE3Xxmecv1A&oh=00_Afq_RsoljDMCYLlkVGupvC3vuufTDE77hin4SJI1FdpoTg&oe=6965010D";
+    const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ3qhnU-efnqA4PWukn8Ikh-YTxabU7xyZZAg&s";
     // --- HANDLERS ---
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -388,7 +388,7 @@ const LandingRegisterHeadquarters = () => {
                         <Box textAlign="center" pt={2}>
                             <Divider sx={{ mb: 2, width: '40%', mx: 'auto', opacity: 0.5 }} />
                             <Typography variant="caption" color="text.disabled">
-                                © 2026 Z176. Phát triển bởi Diễm Linh Cơ.
+                                © 2026 Z176. Phát triển bởi Ban CNTT.
                             </Typography>
                         </Box>
 

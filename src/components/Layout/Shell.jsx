@@ -31,6 +31,7 @@ export default function Shell({ children }) {
         const base = [
             { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
             { text: "Phiếu séc", icon: <LibraryBooksIcon />, path: "/phieu" },
+            { text: "Hóa đơn", icon: <LibraryBooksIcon />, path: "/invoice" },
         ];
         if (canSeeAdmin) {
             base.push({ text: "Admin · Lookup", icon: <AdminPanelSettingsIcon />, path: "/admin" });

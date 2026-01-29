@@ -2,6 +2,7 @@ import { Chip } from "@mui/material";
 
 export default function StatusChip({ status }) {
     const map = {
+        KhoiTao: { label: "Khởi tạo", color: "default" },
         ChoDuyet_TBP: { label: "Chờ TBP", color: "warning" },
         ChoDuyet_KTT: { label: "Chờ KTT", color: "info" },
         ChoDuyet_GD: { label: "Chờ GĐ", color: "info" },
