@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody,
     Typography, Stack, Button, Dialog, DialogTitle, DialogContent,
-    DialogActions, TextField, IconButton, Snackbar, Alert, MenuItem, Popover
+    DialogActions, TextField, IconButton, Snackbar, Alert, MenuItem, Popover,
+    Card, CardContent, CardHeader, Divider, Tooltip, Chip, Avatar, InputAdornment,
+    TableContainer
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import SearchIcon from "@mui/icons-material/Search";
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import Autocomplete from "@mui/material/Autocomplete";
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -67,7 +71,7 @@ export default function HoaDon() {
             .replace(/[\u0300-\u036f]/g, "")
             .replace(/đ/g, "d")
             .replace(/Đ/g, "D");
-    const filteredRows = React.useMemo(() => {
+    const filteredRows = useMemo(() => {
         if (!rows) return [];
 
         const hasMa = qMa.trim() !== "";
@@ -132,6 +136,7 @@ export default function HoaDon() {
                 idDonVi: user?.idDonVi,
             });
             setRows(data || []);
+            console.log(user, role);
             console.log("Loaded invoices:", data);
         } catch {
             setToast({ open: true, msg: "Lỗi tải danh sách hóa đơn", type: "error" });
@@ -275,307 +280,376 @@ export default function HoaDon() {
 
 
     return (
-        <Box>
-            {/* HEADER */}
-            <Stack direction="row" justifyContent="space-between" mb={2}>
-                <Typography variant="h5">Hóa đơn</Typography>
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                        <DatePicker
-                            label="Từ ngày"
-                            value={qFrom}
-                            onChange={setQFrom}
-                            slotProps={{ textField: { size: "small" } }}
-                        />
-                        <DatePicker
-                            label="Đến ngày"
-                            value={qTo}
-                            onChange={setQTo}
-                            slotProps={{ textField: { size: "small" } }}
-                            minDate={qFrom || undefined}
-                        />
-                    </LocalizationProvider>
-
-                    <Button
-                        variant="text"
-                        startIcon={<ClearIcon />}
-                        onClick={() => {
-                            setQFrom(null);
-                            setQTo(null);
-                        }}
-                    >
-                        Xoá ngày
-                    </Button>
-                </Stack>
-
-                <Stack direction="row" spacing={1}>
-                    <Button startIcon={<RefreshIcon />} onClick={load}>
-                        Tải lại
-                    </Button>
-                    <Button variant="contained" onClick={() => setOpenCreate(true)}>
-                        Tạo hóa đơn
-                    </Button>
-                </Stack>
-            </Stack>
-
-            {/* TABLE */}
-            <Paper>
-                <Table size="small">
-                    <TableHead>
-                        <TableRow>
-                            <TableCell align="center">STT</TableCell>
-                            <TableCell>
-                                <Stack direction="row" spacing={0.5} alignItems="center">
-                                    <span>Mã</span>
-                                    <IconButton
-                                        size="small"
-                                        onClick={(e) => setAnchorMa(e.currentTarget)}
-                                        color={qMa ? "primary" : "default"}
-                                    >
-                                        <FilterListRoundedIcon fontSize="inherit" />
-                                    </IconButton>
-                                </Stack>
-
-                                <Popover
-                                    open={Boolean(anchorMa)}
-                                    anchorEl={anchorMa}
-                                    onClose={() => setAnchorMa(null)}
-                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        <Box sx={{ p: 2 }}>
+            <Card elevation={3} sx={{ borderRadius: 3, overflow: "hidden" }}>
+                {/* HEADERS */}
+                <CardHeader
+                    title={
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                            <Box
+                                sx={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: "50%",
+                                    bgcolor: "primary.main",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    color: "white",
+                                    mr: 1
+                                }}
+                            >
+                                <Typography variant="h6" fontWeight="bold">HĐ</Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="h6" fontWeight={700} color="text.primary">
+                                    Quản lý Hóa đơn
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Danh sách và quản lý hóa đơn, phiếu yêu cầu
+                                </Typography>
+                            </Box>
+                        </Stack>
+                    }
+                    action={
+                        <Stack direction="row" spacing={1} sx={{ mt: 1, mr: 1 }}>
+                            <Tooltip title="Tải lại dữ liệu">
+                                <Button
+                                    variant="outlined"
+                                    color="inherit"
+                                    startIcon={<RefreshIcon />}
+                                    onClick={load}
+                                    size="small"
+                                    sx={{ textTransform: "none", borderRadius: 2 }}
                                 >
-                                    <Box p={1.5} width={260}>
+                                    Tải lại
+                                </Button>
+                            </Tooltip>
+                            <Tooltip title="Tạo hóa đơn mới">
+                                <Button
+                                    variant="contained"
+                                    startIcon={<AddIcon />}
+                                    onClick={() => setOpenCreate(true)}
+                                    size="small"
+                                    sx={{
+                                        textTransform: "none",
+                                        borderRadius: 2,
+                                        boxShadow: 2,
+                                        background: "linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)"
+                                    }}
+                                >
+                                    Tạo mới
+                                </Button>
+                            </Tooltip>
+                        </Stack>
+                    }
+                    sx={{
+                        borderBottom: "1px solid #eee",
+                        bgcolor: "#fff",
+                        px: 3,
+                        py: 2
+                    }}
+                />
+
+                <Box sx={{ px: 3, py: 2, bgcolor: "#fafafa" }}>
+                    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                            <FilterAltIcon color="action" fontSize="small" />
+                            <Typography variant="subtitle2" fontWeight={600} color="text.secondary">Bộ lọc:</Typography>
+                        </Stack>
+                        <LocalizationProvider dateAdapter={AdapterDayjs}>
+                            <DatePicker
+                                label="Từ ngày"
+                                value={qFrom}
+                                onChange={setQFrom}
+                                slotProps={{
+                                    textField: {
+                                        size: "small",
+                                        sx: { bgcolor: "white", minWidth: 150 }
+                                    }
+                                }}
+                            />
+                            <DatePicker
+                                label="Đến ngày"
+                                value={qTo}
+                                onChange={setQTo}
+                                slotProps={{
+                                    textField: {
+                                        size: "small",
+                                        sx: { bgcolor: "white", minWidth: 150 }
+                                    }
+                                }}
+                                minDate={qFrom || undefined}
+                            />
+                        </LocalizationProvider>
+
+                        {(qFrom || qTo) && (
+                            <Tooltip title="Xóa bộ lọc ngày">
+                                <Button
+                                    variant="text"
+                                    color="error"
+                                    startIcon={<ClearIcon />}
+                                    onClick={() => {
+                                        setQFrom(null);
+                                        setQTo(null);
+                                    }}
+                                    size="small"
+                                    sx={{ textTransform: "none" }}
+                                >
+                                    Xoá ngày
+                                </Button>
+                            </Tooltip>
+                        )}
+                    </Stack>
+                </Box>
+
+                <Divider />
+
+                {/* TABLE */}
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+                    <Table size="medium" stickyHeader>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell align="center" sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>STT</TableCell>
+                                <TableCell sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>
+                                    <Stack direction="row" spacing={0.5} alignItems="center">
+                                        <span>Mã HĐ</span>
+                                        <Tooltip title="Tìm kiếm theo mã">
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => setAnchorMa(e.currentTarget)}
+                                                color={qMa ? "primary" : "default"}
+                                            >
+                                                <SearchIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Stack>
+                                    <Popover
+                                        open={Boolean(anchorMa)}
+                                        anchorEl={anchorMa}
+                                        onClose={() => setAnchorMa(null)}
+                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                        PaperProps={{ sx: { p: 1.5, width: 260, borderRadius: 2, boxShadow: 3 } }}
+                                    >
                                         <TextField
-                                            label="Mã hóa đơn"
+                                            label="Tìm mã hóa đơn..."
                                             size="small"
                                             autoFocus
+                                            fullWidth
                                             value={qMa}
                                             onChange={(e) => setQMa(e.target.value)}
+                                            InputProps={{
+                                                endAdornment: qMa && (
+                                                    <InputAdornment position="end">
+                                                        <IconButton size="small" onClick={() => setQMa("")}><ClearIcon fontSize="small" /></IconButton>
+                                                    </InputAdornment>
+                                                )
+                                            }}
                                         />
-                                    </Box>
-                                </Popover>
-                            </TableCell>
-                            <TableCell align="center">Ngày</TableCell>
-                            <TableCell>
-                                <Stack direction="row" spacing={0.5} alignItems="center">
-                                    <span>Công ty</span>
-                                    <IconButton
-                                        size="small"
-                                        onClick={(e) => setAnchorCT(e.currentTarget)}
-                                        color={qCongTy ? "primary" : "default"}
+                                    </Popover>
+                                </TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>Ngày tạo</TableCell>
+                                <TableCell sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>
+                                    <Stack direction="row" spacing={0.5} alignItems="center">
+                                        <span>Công ty</span>
+                                        <Tooltip title="Tìm kiếm theo tên công ty">
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => setAnchorCT(e.currentTarget)}
+                                                color={qCongTy ? "primary" : "default"}
+                                            >
+                                                <SearchIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Stack>
+                                    <Popover
+                                        open={Boolean(anchorCT)}
+                                        anchorEl={anchorCT}
+                                        onClose={() => setAnchorCT(null)}
+                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                        PaperProps={{ sx: { p: 1.5, width: 300, borderRadius: 2, boxShadow: 3 } }}
                                     >
-                                        <FilterListRoundedIcon fontSize="inherit" />
-                                    </IconButton>
-                                </Stack>
-
-                                <Popover
-                                    open={Boolean(anchorCT)}
-                                    anchorEl={anchorCT}
-                                    onClose={() => setAnchorCT(null)}
-                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                >
-                                    <Box p={1.5} width={300}>
                                         <TextField
-                                            label="Tên công ty"
+                                            label="Tìm tên công ty..."
                                             size="small"
                                             autoFocus
+                                            fullWidth
                                             value={qCongTy}
                                             onChange={(e) => setQCongTy(e.target.value)}
-                                        />
-                                    </Box>
-                                </Popover>
-                            </TableCell>
-                            <TableCell>Người tạo</TableCell>
-                            <TableCell>Đơn vị</TableCell>
-                            <TableCell align="right">Tổng tiền</TableCell>
-                            <TableCell sx={{ minWidth: 250 }}>Ghi chú</TableCell>
-                            <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
-                                <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-                                    <span>Trạng thái</span>
-                                    <IconButton
-                                        size="small"
-                                        onClick={(e) => setAnchorTT(e.currentTarget)}
-                                        aria-label="Lọc theo Trạng thái"
-                                        color={qTrangThai ? "primary" : "default"}
-                                    >
-                                        <FilterListRoundedIcon fontSize="inherit" />
-                                    </IconButton>
-                                </Stack>
-
-                                <Popover
-                                    open={Boolean(anchorTT)}
-                                    anchorEl={anchorTT}
-                                    onClose={() => setAnchorTT(null)}
-                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                    PaperProps={{ sx: { p: 1.5, width: 240 } }}
-                                >
-                                    <Stack spacing={1}>
-                                        <TextField
-                                            select
-                                            label="Chọn trạng thái"
-                                            value={qTrangThai}
-                                            onChange={(e) => setQTrangThai(e.target.value)}
-                                            size="small"
-                                            fullWidth
-                                        >
-                                            <MenuItem value="">Tất cả</MenuItem>
-                                            <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
-                                            <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
-                                            <MenuItem value="ChoDuyet_GD">Chờ duyệt GD</MenuItem>
-                                            <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
-                                            <MenuItem value="TuChoi">Từ chối</MenuItem>
-                                        </TextField>
-
-                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                            {!!qTrangThai && (
-                                                <Button
-                                                    startIcon={<ClearIcon />}
-                                                    size="small"
-                                                    onClick={() => setQTrangThai("")}
-                                                >
-                                                    Xoá
-                                                </Button>
-                                            )}
-                                            <Button
-                                                variant="contained"
-                                                size="small"
-                                                onClick={() => setAnchorTT(null)}
-                                            >
-                                                OK
-                                            </Button>
-                                        </Stack>
-                                    </Stack>
-                                </Popover>
-                            </TableCell>
-
-                            <TableCell align="center">Duyệt</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {filteredRows.map((r, i) => (
-                            <TableRow
-                                key={r.hoaDonId}
-                                hover
-                                sx={{ cursor: "pointer" }}
-                                onClick={() => openDetailDialog(r)}
-                            >
-                                <TableCell align="center">{i + 1}</TableCell>
-                                <TableCell>{r.maHoaDon}</TableCell>
-                                <TableCell align="center">{fmtDate(r.ngayDangKy)}</TableCell>
-                                <TableCell>{r.tenCongTy}</TableCell>
-                                {/* ✅ TÊN NGƯỜI TẠO */}
-                                <TableCell>
-                                    {r.tenNguoiTao || "—"}
-                                </TableCell>
-
-                                {/* ✅ TÊN ĐƠN VỊ */}
-                                <TableCell>
-                                    {r.tenDonViNguoiTao || "—"}
-                                </TableCell>
-                                <TableCell align="right">{fmtMoney(r.tongThanhTien)}</TableCell>
-                                <TableCell>
-                                    {r.ghiChu ? (
-                                        <Typography
-                                            variant="body2"
-                                            sx={{
-                                                whiteSpace: "nowrap",
-                                                overflow: "hidden",
-                                                textOverflow: "ellipsis",
-                                                maxWidth: 300
+                                            InputProps={{
+                                                endAdornment: qCongTy && (
+                                                    <InputAdornment position="end">
+                                                        <IconButton size="small" onClick={() => setQCongTy("")}><ClearIcon fontSize="small" /></IconButton>
+                                                    </InputAdornment>
+                                                )
                                             }}
-                                        >
-                                            {r.ghiChu}
-                                        </Typography>
-                                    ) : (
-                                        <Typography variant="body2" color="text.secondary">
-                                            —
-                                        </Typography>
-                                    )}
+                                        />
+                                    </Popover>
                                 </TableCell>
-
-                                <TableCell align="center">
-                                    <StatusChip status={r.maTrangThai} />
-                                </TableCell>
-                                <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                                    <IconButton
-                                        color="success"
-                                        disabled={!canAct(r)}
-                                        onClick={(e) => handleApprove(r, true, e)}
+                                <TableCell sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>Người tạo</TableCell>
+                                <TableCell sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>Đơn vị</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>Tổng tiền</TableCell>
+                                <TableCell sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555", minWidth: 200 }}>Ghi chú</TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555", whiteSpace: "nowrap" }}>
+                                    <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+                                        <span>Trạng thái</span>
+                                        <Tooltip title="Lọc theo trạng thái">
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => setAnchorTT(e.currentTarget)}
+                                                color={qTrangThai ? "primary" : "default"}
+                                            >
+                                                <FilterListRoundedIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Stack>
+                                    <Popover
+                                        open={Boolean(anchorTT)}
+                                        anchorEl={anchorTT}
+                                        onClose={() => setAnchorTT(null)}
+                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                        PaperProps={{ sx: { p: 1.5, width: 240, borderRadius: 2, boxShadow: 3 } }}
                                     >
-                                        <CheckCircleIcon />
-                                    </IconButton>
-
-                                    <IconButton
-                                        color="error"
-                                        disabled={!canApprove(r)}   // Reject chỉ cho role duyệt
-                                        onClick={(e) => handleApprove(r, false, e)}
-                                    >
-                                        <CancelIcon />
-                                    </IconButton>
+                                        <Stack spacing={2}>
+                                            <TextField
+                                                select
+                                                label="Lọc trạng thái"
+                                                value={qTrangThai}
+                                                onChange={(e) => setQTrangThai(e.target.value)}
+                                                size="small"
+                                                fullWidth
+                                            >
+                                                <MenuItem value="">Tất cả</MenuItem>
+                                                <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
+                                                <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
+                                                <MenuItem value="ChoDuyet_GD">Chờ duyệt GD</MenuItem>
+                                                <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
+                                                <MenuItem value="TuChoi">Từ chối</MenuItem>
+                                            </TextField>
+                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                <Button size="small" onClick={() => setQTrangThai("")}>Xóa</Button>
+                                                <Button variant="contained" size="small" onClick={() => setAnchorTT(null)}>OK</Button>
+                                            </Stack>
+                                        </Stack>
+                                    </Popover>
                                 </TableCell>
-                            </TableRow>
-                        ))}
 
-                        {rows.length === 0 && !loading && (
-                            <TableRow>
-                                <TableCell colSpan={7}>
-                                    <Typography align="center" color="text.secondary">
-                                        Không có hóa đơn
-                                    </Typography>
-                                </TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 700, bgcolor: "#f5f5f5", color: "#555" }}>Thao tác</TableCell>
                             </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </Paper>
+                        </TableHead>
+                        <TableBody>
+                            {filteredRows.map((r, i) => (
+                                <TableRow
+                                    key={r.hoaDonId}
+                                    hover
+                                    sx={{
+                                        cursor: "pointer",
+                                        "&:hover": { bgcolor: "#f0f7ff !important" },
+                                        transition: "background-color 0.2s"
+                                    }}
+                                    onClick={() => openDetailDialog(r)}
+                                >
+                                    <TableCell align="center" sx={{ color: "text.secondary" }}>{i + 1}</TableCell>
+                                    <TableCell sx={{ fontWeight: 500, color: "primary.main" }}>{r.maHoaDon}</TableCell>
+                                    <TableCell align="center">{fmtDate(r.ngayDangKy)}</TableCell>
+                                    <TableCell sx={{ fontWeight: 600 }}>{r.tenCongTy}</TableCell>
+                                    <TableCell>{r.tenNguoiTao || "—"}</TableCell>
+                                    <TableCell>{r.tenDonViNguoiTao || "—"}</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 600, color: "#2e7d32" }}>
+                                        {fmtMoney(r.tongThanhTien)}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Tooltip title={r.ghiChu || ""}>
+                                            <Typography variant="body2" sx={{
+                                                maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "text.secondary"
+                                            }}>
+                                                {r.ghiChu || "—"}
+                                            </Typography>
+                                        </Tooltip>
+                                    </TableCell>
+
+                                    <TableCell align="center">
+                                        <StatusChip status={r.maTrangThai} />
+                                    </TableCell>
+                                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                                        <Stack direction="row" spacing={0} justifyContent="center">
+                                            <Tooltip title="Duyệt / Trình">
+                                                <span>
+                                                    <IconButton
+                                                        color="success"
+                                                        disabled={!canAct(r)}
+                                                        onClick={(e) => handleApprove(r, true, e)}
+                                                        size="small"
+                                                    >
+                                                        <CheckCircleIcon fontSize="small" />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+
+                                            <Tooltip title="Từ chối">
+                                                <span>
+                                                    <IconButton
+                                                        color="error"
+                                                        disabled={!canApprove(r)}
+                                                        onClick={(e) => handleApprove(r, false, e)}
+                                                        size="small"
+                                                    >
+                                                        <CancelIcon fontSize="small" />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
+                                        </Stack>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+
+                            {rows.length === 0 && !loading && (
+                                <TableRow>
+                                    <TableCell colSpan={10}>
+                                        <Box sx={{ py: 8, textAlign: "center" }}>
+                                            <Typography variant="body1" color="text.secondary">
+                                                Chưa có dữ liệu hóa đơn nào.
+                                            </Typography>
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Card>
 
             {/* CREATE DIALOG */}
             <Dialog
                 open={openCreate}
                 onClose={() => setOpenCreate(false)}
-                maxWidth="xl"
+                maxWidth="md"
                 fullWidth
                 PaperProps={{
-                    sx: {
-                        borderRadius: 3,
-                        p: 1,
-                        minWidth: 1500,
-                    },
+                    sx: { borderRadius: 3, boxShadow: 6 }
                 }}
             >
-                <DialogTitle sx={{ pb: 1 }}>
-                    <Stack direction="row" spacing={1.5} alignItems="center">
-                        <Box>
-                            <Typography variant="h6" fontWeight={700}>
-                                Tạo hóa đơn
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Nhập thông tin công ty và ghi chú cho hóa đơn
-                            </Typography>
-                        </Box>
-                    </Stack>
+                <DialogTitle sx={{ bgcolor: "#fafafa", borderBottom: "1px solid #eee", pb: 2 }}>
+                    <Typography variant="h6" fontWeight={700} component="div">
+                        Tạo hóa đơn mới
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" component="div">
+                        Nhập thông tin công ty và ghi chú
+                    </Typography>
                 </DialogTitle>
 
-                <DialogContent dividers>
-                    <Stack spacing={3} mt={1}>
-                        {/* ===== CÔNG TY ===== */}
+                <DialogContent sx={{ mt: 2 }}>
+                    <Stack spacing={3}>
                         <Box>
-                            <Typography
-                                variant="subtitle2"
-                                color="text.secondary"
-                                sx={{ mb: 1 }}
-                            >
-                                Thông tin công ty
+                            <Typography variant="subtitle2" gutterBottom sx={{ color: "text.primary", fontWeight: 600 }}>
+                                Công ty đối tác <span style={{ color: "red" }}>*</span>
                             </Typography>
-
-                            {/* Autocomplete + nút + */}
-                            <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                            <Stack direction="row" spacing={1} alignItems="flex-start">
                                 <Autocomplete
                                     sx={{ flex: 1 }}
                                     options={companies}
                                     value={companies.find(c => c.id === form.congTyId) || null}
-                                    onChange={(_, val) =>
-                                        setForm({ ...form, congTyId: val?.id ?? "" })
-                                    }
+                                    onChange={(_, val) => setForm({ ...form, congTyId: val?.id ?? "" })}
                                     inputValue={congTyInput}
                                     onInputChange={(_, val) => setCongTyInput(val)}
                                     getOptionLabel={(o) => o?.name ?? ""}
@@ -583,106 +657,103 @@ export default function HoaDon() {
                                     filterOptions={(options, { inputValue }) => {
                                         const q = stripVN(inputValue.toLowerCase().trim());
                                         if (!q) return options;
-                                        return options.filter(o =>
-                                            stripVN(o.name.toLowerCase()).includes(q)
-                                        );
+                                        return options.filter(o => stripVN(o.name.toLowerCase()).includes(q));
                                     }}
                                     renderInput={(params) => (
-                                        <TextField
-                                            {...params}
-                                            label="Công ty"
-                                            placeholder="Gõ tên công ty …"
-                                            helperText="Nhập vài ký tự "
-                                        />
+                                        <TextField {...params} placeholder="Tìm công ty..." size="medium" />
                                     )}
-                                    ListboxProps={{ style: { maxHeight: 300 } }}
+                                    ListboxProps={{ style: { maxHeight: 250 } }}
                                 />
-                                <IconButton
-                                    onClick={() => setOpenAddCT(true)}
-                                    sx={{
-                                        mt: 0.5,
-                                        width: 56,
-                                        height: 56,
-                                        borderRadius: "50%",
-                                        border: "1px dashed",
-                                        borderColor: "primary.main",
-                                        color: "primary.main",
-                                        "&:hover": {
-                                            bgcolor: "primary.main",
-                                            color: "white",
-                                        },
-                                    }}
-                                >
-                                    <AddIcon />
-                                </IconButton>
+                                <Tooltip title="Thêm công ty mới">
+                                    <Button
+                                        variant="outlined"
+                                        sx={{ height: 56, minWidth: 56, borderRadius: 2 }}
+                                        onClick={() => setOpenAddCT(true)}
+                                    >
+                                        <AddIcon />
+                                    </Button>
+                                </Tooltip>
                             </Stack>
                         </Box>
 
-                        {/* ===== GHI CHÚ ===== */}
                         <Box>
-                            <Typography
-                                variant="subtitle2"
-                                color="text.secondary"
-                                sx={{ mb: 1 }}
-                            >
+                            <Typography variant="subtitle2" gutterBottom sx={{ color: "text.primary", fontWeight: 600 }}>
                                 Ghi chú
                             </Typography>
                             <TextField
                                 fullWidth
                                 multiline
                                 minRows={3}
-                                placeholder="Nhập ghi chú (nếu có)…"
+                                placeholder="Nhập ghi chú chi tiết..."
                                 value={form.ghiChu}
-                                onChange={(e) =>
-                                    setForm({ ...form, ghiChu: e.target.value })
-                                }
+                                onChange={(e) => setForm({ ...form, ghiChu: e.target.value })}
                             />
                         </Box>
                     </Stack>
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenCreate(false)}>Đóng</Button>
-                    <Button variant="contained" onClick={submitCreate}>
-                        Lưu
+                <DialogActions sx={{ px: 3, pb: 2, pt: 1, borderTop: "1px solid #eee" }}>
+                    <Button onClick={() => setOpenCreate(false)} color="inherit" sx={{ borderRadius: 2 }}>Hủy bỏ</Button>
+                    <Button variant="contained" onClick={submitCreate} sx={{ borderRadius: 2, px: 3 }}>
+                        Lưu Hóa Đơn
                     </Button>
                 </DialogActions>
             </Dialog>
 
             {/* DETAIL DIALOG */}
-            <Dialog open={openDetail} onClose={() => setOpenDetail(false)} maxWidth="lg" fullWidth>
+            <Dialog
+                open={openDetail}
+                onClose={() => setOpenDetail(false)}
+                maxWidth="xl"
+                fullWidth
+                PaperProps={{
+                    sx: { borderRadius: 3, minHeight: "60vh" }
+                }}
+            >
                 {detail && (
                     <>
-                        <DialogTitle>Chi tiết hóa đơn {detail.maHoaDon}</DialogTitle>
-                        <DialogContent>
-                            <HoaDonChiTiet
-                                hoaDonId={detail.hoaDonId}
-                                rows={items}
-                                locked={!(
-                                    (role === "NhanVien" && detail.maTrangThai === "KhoiTao")
-                                    // || detail.maTrangThai === "ChoDuyet_TBP"
-                                )}
-                                onReload={async () => {
-                                    const list = await apiInvoice.getChiTiet(detail.hoaDonId);
-                                    setItems(list);
-                                    await apiInvoice.saveHoaDon(detail.hoaDonId);
-                                    await load();
-                                }}
-                            />
+                        <DialogTitle sx={{ bgcolor: "#fafafa", borderBottom: "1px solid #eee", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box>
+                                <Typography variant="h6" fontWeight={700} component="div">
+                                    Chi tiết hóa đơn: <span style={{ color: "#1976d2" }}>{detail.maHoaDon}</span>
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" component="div">
+                                    {detail.tenCongTy}
+                                </Typography>
+                            </Box>
+                            <Tooltip title="Đóng">
+                                <IconButton onClick={() => setOpenDetail(false)}>
+                                    <ClearIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </DialogTitle>
+                        <DialogContent sx={{ p: 0, bgcolor: "#f5f7fa" }}>
+                            <Box sx={{ p: 2 }}>
+                                <HoaDonChiTiet
+                                    hoaDonId={detail.hoaDonId}
+                                    rows={items}
+                                    locked={!((role === "NhanVien" && detail.maTrangThai === "KhoiTao"))}
+                                    onReload={async () => {
+                                        const list = await apiInvoice.getChiTiet(detail.hoaDonId);
+                                        setItems(list);
+                                        await apiInvoice.saveHoaDon(detail.hoaDonId);
+                                        await load();
+                                    }}
+                                />
+                            </Box>
                         </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setOpenDetail(false)}>Đóng</Button>
-                        </DialogActions>
                     </>
                 )}
             </Dialog>
+
+            {/* ADD COMPANY DIALOG */}
             <Dialog
                 open={openAddCT}
                 onClose={() => setOpenAddCT(false)}
                 maxWidth="sm"
                 fullWidth
+                PaperProps={{ sx: { borderRadius: 2 } }}
             >
-                <DialogTitle>Thêm công ty</DialogTitle>
-
+                <DialogTitle>Thêm công ty đối tác</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} mt={1}>
                         <TextField
@@ -691,15 +762,15 @@ export default function HoaDon() {
                             value={ctName}
                             onChange={(e) => setCtName(e.target.value)}
                             fullWidth
+                            variant="outlined"
                         />
-
                         <TextField
                             label="Mã số thuế"
                             value={ctMaSoThue}
                             onChange={(e) => setCtMaSoThue(e.target.value)}
                             fullWidth
+                            variant="outlined"
                         />
-
                         <TextField
                             label="Địa chỉ"
                             value={ctDiaChi}
@@ -707,21 +778,14 @@ export default function HoaDon() {
                             fullWidth
                             multiline
                             minRows={2}
-                            placeholder="VD: Số 76, đường ABC, Quận XYZ, Hà Nội"
+                            variant="outlined"
                         />
                     </Stack>
                 </DialogContent>
-
                 <DialogActions>
-                    <Button onClick={() => setOpenAddCT(false)}>
-                        Đóng
-                    </Button>
-                    <Button
-                        variant="contained"
-                        disabled={savingCT}
-                        onClick={saveCongTy}
-                    >
-                        {savingCT ? "Đang lưu..." : "Lưu"}
+                    <Button onClick={() => setOpenAddCT(false)}>Hủy</Button>
+                    <Button variant="contained" disabled={savingCT} onClick={saveCongTy}>
+                        {savingCT ? "Đang lưu..." : "Lưu Công Ty"}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -730,8 +794,9 @@ export default function HoaDon() {
                 open={toast.open}
                 autoHideDuration={3000}
                 onClose={() => setToast({ ...toast, open: false })}
+                anchorOrigin={{ vertical: "top", horizontal: "right" }}
             >
-                <Alert severity={toast.type} variant="filled">
+                <Alert severity={toast.type} variant="filled" sx={{ width: "100%", borderRadius: 2, boxShadow: 3 }}>
                     {toast.msg}
                 </Alert>
             </Snackbar>

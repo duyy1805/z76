@@ -68,6 +68,20 @@ export const apiInvoice = {
         // payload: { name, maSoThue?, diaChi? }
         return http.post("/company", payload).then(r => r.data);
     },
+
+    // GET /invoice/product
+    listHangHoa(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        return http
+            .get(`/product${q ? `?${q}` : ""}`)
+            .then(r => r.data);
+    },
+
+    // POST /invoice/product
+    // payload: { maHangHoa?, tenHangHoa, donViTinh }
+    createHangHoa(payload) {
+        return http.post("/product", payload).then(r => r.data);
+    },
 };
 
 export function attachInvoiceAuthToken(token) {
