@@ -41,6 +41,8 @@ const isoToDisplay = (s) => {
 const stripVN = (s = "") =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
 
+const logSoSec = (...args) => console.log("[SoSec][PhieuSec]", ...args);
+
 export default function PhieuSec() {
     const { role, user } = useAuth();
 
@@ -106,12 +108,32 @@ export default function PhieuSec() {
         detail && detail.trangThai === "HoanThanh" && !detail.maLenhChi && (role === "KTT" || role === "GD");
 
     const load = async () => {
-        const p = await api.listPhieu({
+        const params = {
             userId: user?.id,
             roleCode: role,      // "NhanVien" | "TBP" | "KTT" | "GD"
             idDonVi: user?.idDonVi,
+        };
+
+        logSoSec("load:listPhieu params", params, {
+            user,
+            localStorageAuth: localStorage.getItem("z76_auth_sos"),
+            sessionStorageAuth: sessionStorage.getItem("z76_auth_sos_ss"),
         });
+
+        const p = await api.listPhieu(params);
+        logSoSec("load:listPhieu result", {
+            count: p?.length ?? 0,
+            ids: (p || []).map((x) => x.id),
+            idDonVis: [...new Set((p || []).map((x) => x.idDonVi).filter(Boolean))],
+            statusCounts: (p || []).reduce((acc, x) => {
+                acc[x.trangThai || "unknown"] = (acc[x.trangThai || "unknown"] || 0) + 1;
+                return acc;
+            }, {}),
+            sample: (p || []).slice(0, 5),
+        });
+
         const dv = await api.listDonVi();
+        logSoSec("load:listDonVi result", { count: dv?.length ?? 0 });
         setRows(p);
         setDonvis(dv);
         setForm((f) => ({ ...f, donViId: dv?.[0]?.id ?? 1 }));
@@ -130,12 +152,24 @@ export default function PhieuSec() {
     const handleApprove = async (p, agree, e) => {
         e?.stopPropagation();
         try {
+            logSoSec("approve:before", {
+                phieuId: p?.id,
+                phieuIdDonVi: p?.idDonVi,
+                trangThai: p?.trangThai,
+                agree,
+                role,
+                userId: user?.id,
+                userIdDonVi: user?.idDonVi,
+                canApprove: canApprove(p),
+            });
             if (!canApprove(p)) throw new Error("Bạn không có quyền duyệt ở bước này");
             const updated = await api.approve(p.id, role, agree, user);
+            logSoSec("approve:after", updated);
             setRows((r) => (r ? r.map((x) => (x.id === updated.id ? updated : x)) : r));
             setDetail((d) => (d && d.id === updated.id ? updated : d));
             setToast({ open: true, msg: agree ? "Đã duyệt" : "Đã từ chối", type: "success" });
         } catch (e) {
+            logSoSec("approve:error", e?.response?.data || e);
             setToast({ open: true, msg: e.message ?? "Lỗi duyệt phiếu", type: "error" });
         }
     };
@@ -145,7 +179,7 @@ export default function PhieuSec() {
             if (!form.noiDung.trim()) throw new Error("Nhập nội dung");
             if (!form.soTien || Number(form.soTien) <= 0) throw new Error("Số tiền > 0");
 
-            await api.createPhieu({
+            const payload = {
                 ngay: new Date().toISOString().slice(0, 10),
                 noiDung: form.noiDung,
                 donViId: form.donViId,
@@ -153,7 +187,11 @@ export default function PhieuSec() {
                 nguoiDangKyId: user?.id,
                 idDonVi: user?.idDonVi,
                 ghiChu: form.ghiChu,
-            });
+            };
+
+            logSoSec("create:payload", payload, { role, user });
+            const created = await api.createPhieu(payload);
+            logSoSec("create:result", created);
 
             setOpenCreate(false);
             setForm({
@@ -243,6 +281,14 @@ export default function PhieuSec() {
     };
 
     const openDetailDialog = async (row) => {
+        logSoSec("detail:open row", {
+            phieuId: row?.id,
+            maSoSec: row?.maSoSec,
+            phieuIdDonVi: row?.idDonVi,
+            role,
+            userId: user?.id,
+            userIdDonVi: user?.idDonVi,
+        });
         setDetail(row);
         setOpenDetail(true);
 
@@ -257,7 +303,7 @@ export default function PhieuSec() {
                     roleCode: role,
                     idDonVi: user?.idDonVi,
                 });
-                console.log(fresh);
+                logSoSec("detail:fresh", fresh);
                 setDetail(fresh);
             } catch {
                 // ignore

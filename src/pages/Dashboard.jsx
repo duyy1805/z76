@@ -12,6 +12,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 const fmtMoney = (n) =>
     (n ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 });
 
+const logSoSecDashboard = (...args) => console.log("[SoSec][Dashboard]", ...args);
+
 export default function Dashboard() {
     const { user, role } = useAuth();
 
@@ -48,18 +50,21 @@ export default function Dashboard() {
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
+            const params = buildCommonParams();
+            logSoSecDashboard("loadAll params", { params, user, role });
+
             // 1) Cards cũ (nếu bạn đang lấy từ /dashboard)
-            const cards = await api.getDashboard(buildCommonParams());
+            const cards = await api.getDashboard(params);
             setStatCards(cards);
 
             // 2) Summary
-            const sum = await api.getDashboardSummary(buildCommonParams());
+            const sum = await api.getDashboardSummary(params);
             setSummary(sum);
 
             // 3) Grouped
-            const grp = await api.getDashboardGrouped({ ...buildCommonParams(), groupBy });
+            const grp = await api.getDashboardGrouped({ ...params, groupBy });
             setGrouped(grp);
-            console.log("Grouped data:", grp);
+            logSoSecDashboard("loadAll result", { cards, summary: sum, grouped: grp });
         } finally {
             setLoading(false);
         }
