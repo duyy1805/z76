@@ -54,12 +54,12 @@ export const api = {
         const { data } = await http.get("/donvi");
         return data; // [{ id, name, stk, TonTai }]
     },
-    async createDonVi({ name, stk, maNganHang }) {
-        const { data } = await http.post("/donvi", { name, stk, maNganHang });
+    async createDonVi({ name, stk, maNganHang, chiNhanhNganHang }) {
+        const { data } = await http.post("/donvi", { name, stk, maNganHang, chiNhanhNganHang });
         return data;
     },
-    async updateDonVi(id, { name, stk, maNganHang }) {
-        const { data } = await http.put(`/donvi/${id}`, { name, stk, maNganHang });
+    async updateDonVi(id, { name, stk, maNganHang, chiNhanhNganHang }) {
+        const { data } = await http.put(`/donvi/${id}`, { name, stk, maNganHang, chiNhanhNganHang });
         return data;
     },
 
@@ -74,8 +74,25 @@ export const api = {
         const { data } = await http.get(`/phieu${q ? `?${q}` : ""}`);
         return data;
     },
-    async listPendingLenhChi(userId) {
-        const q = new URLSearchParams({ userId }).toString();
+    async listLoaiTien(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        const { data } = await http.get(`/loaitien${q ? `?${q}` : ""}`);
+        return data;
+    },
+    async createLoaiTien({ maLoaiTien, tenLoaiTien }) {
+        const { data } = await http.post("/loaitien", { maLoaiTien, tenLoaiTien });
+        return data;
+    },
+    async updateLoaiTien(maLoaiTien, { tenLoaiTien, tonTai }) {
+        const { data } = await http.put(`/loaitien/${maLoaiTien}`, { tenLoaiTien, tonTai });
+        return data;
+    },
+    async deleteLoaiTien(maLoaiTien) {
+        const { data } = await http.delete(`/loaitien/${maLoaiTien}`);
+        return data;
+    },
+    async listPendingLenhChi(userId, params = {}) {
+        const q = new URLSearchParams({ userId, ...params }).toString();
         const { data } = await http.get(`/lenhchi/pending?${q}`);
         return data;
     },
@@ -83,12 +100,30 @@ export const api = {
         const { data } = await http.post("/phieu", payload);
         return data; // {id}
     },
+    async updatePhieu(phieuId, payload) {
+        const { data } = await http.put(`/phieu/${phieuId}`, payload);
+        return data;
+    },
     // lib/api.js
     async approve(phieuId, role, agree, user, ghiChu = null) {
         const body = {
             nguoiDuyetId: user?.id,      // lấy từ thông tin auth
             tenNguoiDuyet: user?.username || role,
             chapThuan: !!agree,
+            ghiChu,
+            requesterUserId: user?.id,
+            requesterRoleCode: role,
+            requesterIdDonVi: user?.idDonVi,
+        };
+        const { data } = await http.post(`/phieu/${phieuId}/approve`, body);
+        return data;
+    },
+    async returnPhieu(phieuId, role, user, ghiChu) {
+        const body = {
+            nguoiDuyetId: user?.id,
+            tenNguoiDuyet: user?.username || role,
+            chapThuan: false,
+            traLai: true,
             ghiChu,
             requesterUserId: user?.id,
             requesterRoleCode: role,

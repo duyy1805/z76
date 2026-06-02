@@ -43,7 +43,11 @@ export default function App() {
       {/* =========== HỆ SỔ SÉC (layout Shell) =========== */}
       <Route element={<RequireAuth />}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/phieu" element={<PhieuSec />} />
+        <Route path="/phieu" element={<Navigate to="/phieu-vnd" replace />} />
+        <Route path="/dashboard-vnd" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard-ngoai-te" element={<Navigate to="/dashboard?loaiSec=NgoaiTe" replace />} />
+        <Route path="/phieu-vnd" element={<PhieuSec mode="VND" />} />
+        <Route path="/phieu-ngoai-te" element={<PhieuSec mode="NgoaiTe" />} />
         <Route path="/admin" element={<AdminSuppliers />} />
         <Route path="/invoice" element={<HoaDon />} />
       </Route>

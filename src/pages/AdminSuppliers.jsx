@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody, Typography,
     Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip,
-    Snackbar, Alert, IconButton, Stack, CircularProgress
+    Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../lib/api";
 
-export default function AdminSuppliers() {
+function SupplierLookup() {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -19,6 +19,7 @@ export default function AdminSuppliers() {
     const [name, setName] = useState("");
     const [stk, setStk] = useState("");
     const [maNH, setMaNH] = useState("");
+    const [chiNhanhNH, setChiNhanhNH] = useState("");
 
     // Dialog xác nhận xoá
     const [confirming, setConfirming] = useState(null);
@@ -28,7 +29,7 @@ export default function AdminSuppliers() {
 
     const showToast = (msg, type = "success") => setToast({ open: true, msg, type });
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true);
         try {
             const data = await api.listDonVi(); // [{ id, name, stk, maNganHang, TonTai }]
@@ -39,15 +40,16 @@ export default function AdminSuppliers() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { load(); }, [load]);
 
     const openAdd = () => {
         setEditingId(null);
         setName("");
         setStk("");
         setMaNH("");
+        setChiNhanhNH("");
         setOpenEditDlg(true);
     };
 
@@ -56,6 +58,7 @@ export default function AdminSuppliers() {
         setName(r.name || "");
         setStk(r.stk || "");
         setMaNH(r.maNganHang || "");
+        setChiNhanhNH(r.chiNhanhNganHang || "");
         setOpenEditDlg(true);
     };
 
@@ -63,16 +66,17 @@ export default function AdminSuppliers() {
         const n = name.trim();
         const s = stk?.trim() || null;
         const m = maNH?.trim() || null;
-        if (!n) {
-            showToast("Tên đơn vị không được để trống", "error");
+        const branch = chiNhanhNH?.trim() || null;
+        if (!n || !s || !m) {
+            showToast("Nhập đủ tên đơn vị, số tài khoản và mã ngân hàng", "error");
             return;
         }
         try {
             if (editingId) {
-                await api.updateDonVi(editingId, { name: n, stk: s, maNganHang: m });
+                await api.updateDonVi(editingId, { name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch });
                 showToast("Đã cập nhật đơn vị");
             } else {
-                await api.createDonVi({ name: n, stk: s, maNganHang: m });
+                await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch });
                 showToast("Đã thêm đơn vị");
             }
             setOpenEditDlg(false);
@@ -115,6 +119,7 @@ export default function AdminSuppliers() {
                             <TableCell>Tên đơn vị</TableCell>
                             <TableCell>STK</TableCell>
                             <TableCell>Mã ngân hàng</TableCell>
+                            <TableCell>Chi nhánh ngân hàng</TableCell>
                             <TableCell>Trạng thái</TableCell>
                             <TableCell align="right">Thao tác</TableCell>
                         </TableRow>
@@ -122,7 +127,7 @@ export default function AdminSuppliers() {
                     <TableBody>
                         {loading && (
                             <TableRow>
-                                <TableCell colSpan={6} align="center">
+                                <TableCell colSpan={7} align="center">
                                     <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
                                         <CircularProgress size={20} />
                                         <Typography variant="body2">Đang tải…</Typography>
@@ -133,7 +138,7 @@ export default function AdminSuppliers() {
 
                         {!loading && rows.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={6} align="center">
+                                <TableCell colSpan={7} align="center">
                                     Không có dữ liệu
                                 </TableCell>
                             </TableRow>
@@ -145,6 +150,7 @@ export default function AdminSuppliers() {
                                 <TableCell>{r.name}</TableCell>
                                 <TableCell>{r.stk || "—"}</TableCell>
                                 <TableCell>{r.maNganHang || "—"}</TableCell>
+                                <TableCell>{r.chiNhanhNganHang || "—"}</TableCell>
                                 <TableCell>
                                     <Chip
                                         size="small"
@@ -179,6 +185,7 @@ export default function AdminSuppliers() {
                         value={stk}
                         onChange={(e) => setStk(e.target.value)}
                         fullWidth
+                        required
                         sx={{ mt: 2 }}
                         placeholder="VD: 123456789"
                     />
@@ -187,13 +194,22 @@ export default function AdminSuppliers() {
                         value={maNH}
                         onChange={(e) => setMaNH(e.target.value)}
                         fullWidth
+                        required
                         sx={{ mt: 2 }}
                         placeholder="VD: VCB, BIDV, AGR..."
+                    />
+                    <TextField
+                        label="Chi nhánh ngân hàng (không bắt buộc)"
+                        value={chiNhanhNH}
+                        onChange={(e) => setChiNhanhNH(e.target.value)}
+                        fullWidth
+                        sx={{ mt: 2 }}
+                        placeholder="VD: Chi nhánh Hà Nội"
                     />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenEditDlg(false)}>Đóng</Button>
-                    <Button variant="contained" onClick={save}>Lưu</Button>
+                    <Button variant="contained" onClick={save} disabled={!name.trim() || !stk.trim() || !maNH.trim()}>Lưu</Button>
                 </DialogActions>
             </Dialog>
 
@@ -222,6 +238,98 @@ export default function AdminSuppliers() {
                     {toast.msg}
                 </Alert>
             </Snackbar>
+        </Box>
+    );
+}
+
+function CurrencyLookup() {
+    const [rows, setRows] = useState([]);
+    const [open, setOpen] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [code, setCode] = useState("");
+    const [name, setName] = useState("");
+    const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+    const showToast = (msg, type = "success") => setToast({ open: true, msg, type });
+    const load = useCallback(async () => setRows(await api.listLoaiTien()), []);
+    useEffect(() => { load(); }, [load]);
+
+    const openAdd = () => { setEditing(null); setCode(""); setName(""); setOpen(true); };
+    const openEdit = (row) => { setEditing(row); setCode(row.MaLoaiTien); setName(row.TenLoaiTien); setOpen(true); };
+    const save = async () => {
+        try {
+            if (!code.trim() || !name.trim()) return showToast("Nhập đủ mã và tên loại tiền", "error");
+            if (editing) await api.updateLoaiTien(editing.MaLoaiTien, { tenLoaiTien: name.trim(), tonTai: editing.TonTai });
+            else await api.createLoaiTien({ maLoaiTien: code.trim(), tenLoaiTien: name.trim() });
+            setOpen(false);
+            await load();
+            showToast("Đã lưu loại tiền");
+        } catch (err) {
+            showToast(err?.response?.data?.message || "Lưu loại tiền thất bại", "error");
+        }
+    };
+    const stop = async (row) => {
+        try {
+            await api.deleteLoaiTien(row.MaLoaiTien);
+            await load();
+            showToast("Đã ngừng sử dụng loại tiền");
+        } catch (err) {
+            showToast(err?.response?.data?.message || "Không thể ngừng sử dụng loại tiền", "error");
+        }
+    };
+    const activate = async (row) => {
+        await api.updateLoaiTien(row.MaLoaiTien, { tenLoaiTien: row.TenLoaiTien, tonTai: true });
+        await load();
+    };
+
+    return (
+        <Box>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="h5">Admin · Loại tiền</Typography>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Thêm loại tiền</Button>
+            </Stack>
+            <Paper sx={{ mt: 1, overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 900 }}>
+                    <TableHead><TableRow><TableCell>Mã</TableCell><TableCell>Tên loại tiền</TableCell><TableCell>Trạng thái</TableCell><TableCell align="right">Thao tác</TableCell></TableRow></TableHead>
+                    <TableBody>
+                        {rows.map((row) => (
+                            <TableRow key={row.MaLoaiTien}>
+                                <TableCell>{row.MaLoaiTien}</TableCell><TableCell>{row.TenLoaiTien}</TableCell>
+                                <TableCell><Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngừng"} color={row.TonTai ? "success" : "default"} /></TableCell>
+                                <TableCell align="right">
+                                    <IconButton onClick={() => openEdit(row)}><EditIcon /></IconButton>
+                                    {row.MaLoaiTien !== "VND" && (row.TonTai
+                                        ? <IconButton color="error" onClick={() => stop(row)}><DeleteIcon /></IconButton>
+                                        : <Button size="small" onClick={() => activate(row)}>Bật lại</Button>)}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </Paper>
+            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+                <DialogTitle>{editing ? "Sửa loại tiền" : "Thêm loại tiền"}</DialogTitle>
+                <DialogContent>
+                    <TextField label="Mã loại tiền" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} disabled={!!editing} fullWidth sx={{ mt: 1 }} />
+                    <TextField label="Tên loại tiền" value={name} onChange={(e) => setName(e.target.value)} fullWidth sx={{ mt: 2 }} />
+                </DialogContent>
+                <DialogActions><Button onClick={() => setOpen(false)}>Đóng</Button><Button variant="contained" onClick={save}>Lưu</Button></DialogActions>
+            </Dialog>
+            <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast((t) => ({ ...t, open: false }))}>
+                <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
+            </Snackbar>
+        </Box>
+    );
+}
+
+export default function AdminSuppliers() {
+    const [tab, setTab] = useState(0);
+    return (
+        <Box>
+            <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
+                <Tab label="Đơn vị hưởng thụ" />
+                <Tab label="Loại tiền" />
+            </Tabs>
+            {tab === 0 ? <SupplierLookup /> : <CurrencyLookup />}
         </Box>
     );
 }

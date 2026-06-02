@@ -30,7 +30,8 @@ export default function Shell({ children }) {
     const menuItems = useMemo(() => {
         const base = [
             { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
-            { text: "Phiếu séc", icon: <LibraryBooksIcon />, path: "/phieu" },
+            { text: "Phiếu séc VND", icon: <LibraryBooksIcon />, path: "/phieu-vnd" },
+            { text: "Phiếu séc ngoại tệ", icon: <LibraryBooksIcon />, path: "/phieu-ngoai-te" },
             // { text: "Hóa đơn", icon: <LibraryBooksIcon />, path: "/invoice" },
         ];
         if (canSeeAdmin) {
@@ -40,15 +41,6 @@ export default function Shell({ children }) {
     }, [canSeeAdmin]);
 
     const fullName = user?.fullName || user?.name || "User";
-    const position = user?.tenChucVu || "";      // “NV kế hoạch…”
-    const department = user?.tenBoPhan || "";    // “Văn phòng…”
-    const initials = (fullName || "U")
-        .split(" ")
-        .map((w) => w[0])
-        .join("")
-        .slice(-2)
-        .toUpperCase();
-
     const drawer = (
         <Box sx={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
             <Toolbar sx={{ px: 2, justifyContent: "center" }}>
@@ -117,7 +109,7 @@ export default function Shell({ children }) {
     );
 
     return (
-        <Box sx={{ display: "flex" }}>
+        <Box sx={{ display: "flex", width: "100%", overflowX: "hidden" }}>
             <AppBar
                 position="fixed"
                 sx={{
@@ -182,6 +174,10 @@ export default function Shell({ children }) {
                 component="main"
                 sx={{
                     flexGrow: 1,
+                    minWidth: 0,
+                    width: `calc(100% - ${drawerWidth}px)`,
+                    maxWidth: `calc(100% - ${drawerWidth}px)`,
+                    boxSizing: "border-box",
                     p: 3,
                     ml: `${drawerWidth}px`,
                     transition: (t) =>

@@ -5,6 +5,7 @@ import {
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
@@ -16,6 +17,9 @@ const logSoSecDashboard = (...args) => console.log("[SoSec][Dashboard]", ...args
 
 export default function Dashboard() {
     const { user, role } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [mode, setMode] = useState(() => searchParams.get("loaiSec") === "NgoaiTe" ? "NgoaiTe" : "VND");
+    const isNgoaiTe = mode === "NgoaiTe";
 
     // ─── Filters ──────────────────────────────────────────────────────────────
     const [donvis, setDonvis] = useState([]);
@@ -24,6 +28,8 @@ export default function Dashboard() {
     const [creatorDV, setCreatorDV] = useState(null);
     const [benefitDV, setBenefitDV] = useState(null);
     const [groupBy, setGroupBy] = useState("Month"); // Month|CreatorDonVi|DonViHuongThu
+    const [currencies, setCurrencies] = useState([]);
+    const [maLoaiTien, setMaLoaiTien] = useState("");
 
     // ─── Status cards (giữ như bạn có) ───────────────────────────────────────
     const [statCards, setStatCards] = useState({
@@ -45,6 +51,8 @@ export default function Dashboard() {
         dateTo: toDate ? dayjs(toDate).format("YYYY-MM-DD") : "",
         creatorDonViId: creatorDV?.id ?? "",
         donViHuongThuId: benefitDV?.id ?? "",
+        loaiSec: mode,
+        maLoaiTien,
     });
 
     const loadAll = useCallback(async () => {
@@ -69,12 +77,13 @@ export default function Dashboard() {
             setLoading(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user?.id, role, user?.idDonVi, fromDate, toDate, creatorDV?.id, benefitDV?.id, groupBy]);
+    }, [user?.id, role, user?.idDonVi, fromDate, toDate, creatorDV?.id, benefitDV?.id, groupBy, mode, maLoaiTien]);
 
     useEffect(() => {
         (async () => {
-            const list = await api.listDonVi();
+            const [list, currencyRows] = await Promise.all([api.listDonVi(), api.listLoaiTien({ tontai: 1 })]);
             setDonvis(list || []);
+            setCurrencies(currencyRows || []);
             await loadAll();
         })();
     }, [loadAll]);
@@ -84,6 +93,7 @@ export default function Dashboard() {
         setToDate(null);
         setCreatorDV(null);
         setBenefitDV(null);
+        setMaLoaiTien("");
         await loadAll();
     };
 
@@ -104,7 +114,7 @@ export default function Dashboard() {
         { name: "Từ chối", value: summary.byStatus?.rejected?.count || 0, key: "rejected" },
     ].filter(x => x.value > 0);
     const barData = (grouped || []).map(d => ({
-        label: d.label,
+        label: `${d.label}${isNgoaiTe && !maLoaiTien ? ` (${d.maLoaiTien})` : ""}`,
         count: Number(d.count ?? 0),
         amount: Number(d.amount ?? 0),
     }));
@@ -112,7 +122,7 @@ export default function Dashboard() {
     return (
         <Box>
             <Typography variant="h5" gutterBottom fontWeight={700}>
-                Tổng quan phiếu séc
+                Tổng quan phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
             </Typography>
 
             {/* ── Filter bar ───────────────────────────────────────── */}
@@ -133,6 +143,33 @@ export default function Dashboard() {
                         getOptionLabel={(o) => o?.name ?? ""} isOptionEqualToValue={(o, v) => o?.id === v?.id}
                         renderInput={(p) => <TextField {...p} label="Đơn vị thụ hưởng" size="small" />} sx={{ minWidth: 240 }}
                     />
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                        <InputLabel>Loại séc</InputLabel>
+                        <Select
+                            label="Loại séc"
+                            value={mode}
+                            onChange={(e) => {
+                                const nextMode = e.target.value;
+                                setMode(nextMode);
+                                setSearchParams(nextMode === "NgoaiTe" ? { loaiSec: "NgoaiTe" } : {});
+                                setMaLoaiTien("");
+                            }}
+                        >
+                            <MenuItem value="VND">VND</MenuItem>
+                            <MenuItem value="NgoaiTe">Ngoại tệ</MenuItem>
+                        </Select>
+                    </FormControl>
+                    {isNgoaiTe && (
+                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                            <InputLabel>Loại tiền</InputLabel>
+                            <Select label="Loại tiền" value={maLoaiTien} onChange={(e) => setMaLoaiTien(e.target.value)}>
+                                <MenuItem value="">Tất cả</MenuItem>
+                                {currencies.filter((item) => item.MaLoaiTien !== "VND").map((item) => (
+                                    <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>{item.MaLoaiTien}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    )}
 
                     <FormControl size="small" sx={{ minWidth: 150, ml: { xs: 0, md: "auto" } }}>
                         <InputLabel>Nhóm theo</InputLabel>
@@ -187,10 +224,18 @@ export default function Dashboard() {
                         <Typography variant="body2" color="text.secondary">Tổng số séc</Typography>
                         <Typography variant="h5" fontWeight={800}>{summary.totalCount?.toLocaleString("vi-VN")}</Typography>
                     </Box>
-                    <Box sx={{ p: 2, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: 220 }}>
-                        <Typography variant="body2" color="text.secondary">Tổng số tiền</Typography>
-                        <Typography variant="h5" fontWeight={800}>{fmtMoney(summary.totalAmount)} đ</Typography>
-                    </Box>
+                    {(!isNgoaiTe || maLoaiTien) && (
+                        <Box sx={{ p: 2, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: 220 }}>
+                            <Typography variant="body2" color="text.secondary">Tổng số tiền</Typography>
+                            <Typography variant="h5" fontWeight={800}>{fmtMoney(summary.totalAmount)} {isNgoaiTe ? maLoaiTien : "VND"}</Typography>
+                        </Box>
+                    )}
+                    {isNgoaiTe && !maLoaiTien && (summary.byCurrency || []).map((item) => (
+                        <Box key={item.maLoaiTien} sx={{ p: 2, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: 220 }}>
+                            <Typography variant="body2" color="text.secondary">Tổng {item.maLoaiTien}</Typography>
+                            <Typography variant="h5" fontWeight={800}>{fmtMoney(item.amount)} {item.maLoaiTien}</Typography>
+                        </Box>
+                    ))}
                 </Stack>
 
                 <Divider sx={{ mb: 2 }} />
@@ -223,7 +268,7 @@ export default function Dashboard() {
                                     />
                                     <Tooltip
                                         formatter={(v, n) =>
-                                            n === "Tổng tiền" ? `${Number(v).toLocaleString("vi-VN")} đ` : v
+                                             n === "Tổng tiền" ? `${Number(v).toLocaleString("vi-VN")} ${isNgoaiTe ? maLoaiTien || "nguyên tệ" : "VND"}` : v
                                         }
                                     />
                                     <Legend />
