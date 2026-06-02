@@ -32,7 +32,6 @@ export default function Shell({ children }) {
             { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
             { text: "Phiếu séc VND", icon: <LibraryBooksIcon />, path: "/phieu-vnd" },
             { text: "Phiếu séc ngoại tệ", icon: <LibraryBooksIcon />, path: "/phieu-ngoai-te" },
-            // { text: "Hóa đơn", icon: <LibraryBooksIcon />, path: "/invoice" },
         ];
         if (canSeeAdmin) {
             base.push({ text: "Admin · Lookup", icon: <AdminPanelSettingsIcon />, path: "/admin" });

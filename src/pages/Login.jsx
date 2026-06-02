@@ -7,10 +7,7 @@ import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { loginERP, attachAuthToken, getRoleByUserId } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { useNavigate } from "react-router-dom";
-
 export default function Login() {
-    const navigate = useNavigate();
     const { login } = useAuth();
 
     const [username, setUsername] = useState("");
@@ -50,7 +47,7 @@ export default function Login() {
             login({ token, user, role: access.role, permissions: access.permissions }, remember);
             attachAuthToken(token);
 
-            navigate("/dashboard");
+            window.location.replace("/dashboard");
         } catch (ex) {
             const msg = ex?.response?.data?.message || ex?.message || "Đăng nhập thất bại";
             setErr(msg);

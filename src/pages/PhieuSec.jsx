@@ -727,7 +727,14 @@ export default function PhieuSec({ mode = "VND" }) {
             )}
 
             {!filteredRows ? null : (
-                <TableContainer component={Paper} sx={{ maxWidth: "100%", overflowX: "auto" }}>
+                <TableContainer
+                    component={Paper}
+                    sx={{
+                        maxWidth: "100%",
+                        maxHeight: "calc(100vh - 240px)",
+                        overflow: "auto",
+                    }}
+                >
                     <Table size="small" stickyHeader sx={{ minWidth: 2100 }}>
                         <TableHead>
                             <TableRow>
