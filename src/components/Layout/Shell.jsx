@@ -24,7 +24,7 @@ export default function Shell({ children }) {
 
     // roleCode ưu tiên từ context, fallback từ user
     const roleCode = (ctxRole || user?.roleCode || user?.role || "").toString();
-    const canSeeAdmin = useMemo(() => ["GD"].includes(roleCode), [roleCode]);
+    const canSeeAdmin = useMemo(() => ["GD", "Admin"].includes(roleCode), [roleCode]);
 
     // dựng menu theo quyền
     const menuItems = useMemo(() => {
@@ -139,14 +139,10 @@ export default function Shell({ children }) {
                                 <Typography variant="body2" sx={{ lineHeight: 1.2, textAlign: "right" }}>
                                     <strong>{fullName}</strong>
                                     <br />
-                                    <span style={{ opacity: 0.85 }}>
-                                        {position}{position && department ? " · " : ""}{department}
-                                    </span>
                                 </Typography>
-                                <Chip size="small" label={position || "Nhân viên"} color="default" />
                             </>
                         )}
-                        <Avatar sx={{ width: 32, height: 32 }}>{initials}</Avatar>
+                        {/* <Avatar sx={{ width: 32, height: 32 }}>{initials}</Avatar> */}
 
                         <Tooltip title="Đăng xuất">
                             <IconButton color="inherit" onClick={logout}>

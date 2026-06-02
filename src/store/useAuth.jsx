@@ -56,6 +56,7 @@ export function AuthProvider({ children }) {
     const [token, setToken] = useState(savedSOS?.token || null);
     const [user, setUser] = useState(savedSOS?.user || null);
     const [role, setRole] = useState(savedSOS?.role || "NhanVien");
+    const [permissions, setPermissions] = useState(savedSOS?.permissions || []);
 
     /* -------------------------------------------------------
         2) STATE CHO HỆ TGSX
@@ -82,13 +83,14 @@ export function AuthProvider({ children }) {
     /* -------------------------------------------------------
         LOGIN – LOGOUT CHO HỆ SỔ SÉC
     -------------------------------------------------------- */
-    const login = ({ token, user, role }, remember) => {
-        const payload = { token, user, role: role || "NhanVien" };
+    const login = ({ token, user, role, permissions }, remember) => {
+        const payload = { token, user, role: role || "NhanVien", permissions: permissions || [] };
         writeAuth(LS_KEY_SOS, SS_KEY_SOS, payload, remember);
 
         setToken(payload.token);
         setUser(payload.user);
         setRole(payload.role);
+        setPermissions(payload.permissions);
     };
 
     const logout = () => {
@@ -96,6 +98,7 @@ export function AuthProvider({ children }) {
         setToken(null);
         setUser(null);
         setRole("NhanVien");
+        setPermissions([]);
     };
 
 
@@ -126,6 +129,7 @@ export function AuthProvider({ children }) {
                 token,
                 user,
                 role,
+                permissions,
                 login,
                 logout,
                 setRole,

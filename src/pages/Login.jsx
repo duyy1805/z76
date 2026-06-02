@@ -42,10 +42,12 @@ export default function Login() {
             if (!userId) console.warn("⚠️ Không tìm thấy userId trong userInfo:", user);
 
             // Gọi API nội bộ lấy role từ SS_fn_UserRoleCode
-            const role = userId ? await getRoleByUserId(userId) : "NhanVien";
+            const access = userId
+                ? await getRoleByUserId(userId)
+                : { role: "NhanVien", permissions: [] };
 
             // Lưu phiên + gắn token cho axios nội bộ
-            login({ token, user, role }, remember);
+            login({ token, user, role: access.role, permissions: access.permissions }, remember);
             attachAuthToken(token);
 
             navigate("/dashboard");

@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody, Typography,
     Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-    TextField, Tooltip, IconButton, Snackbar, Alert, Grid, Popover, MenuItem, FormControl, InputLabel, Select
+    TextField, Tooltip, IconButton, Snackbar, Alert, Grid, Popover, MenuItem, FormControl, InputLabel, Select, Tabs, Tab
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import DownloadIcon from "@mui/icons-material/Download";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -18,6 +19,7 @@ import Autocomplete from "@mui/material/Autocomplete";
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
+import * as XLSX from "xlsx";
 
 
 import { NumericFormat } from "react-number-format";
@@ -44,10 +46,12 @@ const stripVN = (s = "") =>
 const logSoSec = (...args) => console.log("[SoSec][PhieuSec]", ...args);
 
 export default function PhieuSec() {
-    const { role, user } = useAuth();
+    const { role, user, permissions = [] } = useAuth();
 
     // dữ liệu chính
     const [rows, setRows] = useState(null);
+    const [pendingLenhChiRows, setPendingLenhChiRows] = useState(null);
+    const [activeTab, setActiveTab] = useState("group");
     const [donvis, setDonvis] = useState([]);
 
     // dialog tạo / detail
@@ -103,9 +107,14 @@ export default function PhieuSec() {
 
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null); // lưu file cần xoá
+    const [rejectOpen, setRejectOpen] = useState(false);
+    const [rejectTarget, setRejectTarget] = useState(null);
+    const [rejectReason, setRejectReason] = useState("");
+    const [rejectSubmitting, setRejectSubmitting] = useState(false);
 
+    const canManageLenhChi = ["KTT", "GD", "Admin"].includes(role) || permissions.includes("TaoLenhChi");
     const canAddLenhChi =
-        detail && detail.trangThai === "HoanThanh" && !detail.maLenhChi && (role === "KTT" || role === "GD");
+        detail && detail.trangThai === "HoanThanh" && !detail.maLenhChi && canManageLenhChi;
 
     const load = async () => {
         const params = {
@@ -139,18 +148,40 @@ export default function PhieuSec() {
         setForm((f) => ({ ...f, donViId: dv?.[0]?.id ?? 1 }));
     };
 
+    const loadPendingLenhChi = async () => {
+        if (!canManageLenhChi || !user?.id) return;
+        const pending = await api.listPendingLenhChi(user.id);
+        logSoSec("load:pendingLenhChi result", { count: pending?.length ?? 0, ids: (pending || []).map((x) => x.id) });
+        setPendingLenhChiRows(pending);
+    };
+
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        if (activeTab === "pending") loadPendingLenhChi();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
+
     const canApprove = (p) =>
+        (role === "Admin" && ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD"].includes(p.trangThai)) ||
         (role === "TBP" && p.trangThai === "ChoDuyet_TBP") ||
         (role === "KTT" && p.trangThai === "ChoDuyet_KTT") ||
         (role === "GD" && p.trangThai === "ChoDuyet_GD");
 
+    const canReject = (p) =>
+        canApprove(p) || (role === "KTT" && p?.trangThai === "ChoDuyet_GD");
+
     const handleApprove = async (p, agree, e) => {
         e?.stopPropagation();
+        if (!agree) {
+            setRejectTarget(p);
+            setRejectReason("");
+            setRejectOpen(true);
+            return;
+        }
         try {
             logSoSec("approve:before", {
                 phieuId: p?.id,
@@ -171,6 +202,29 @@ export default function PhieuSec() {
         } catch (e) {
             logSoSec("approve:error", e?.response?.data || e);
             setToast({ open: true, msg: e.message ?? "Lỗi duyệt phiếu", type: "error" });
+        }
+    };
+
+    const submitReject = async () => {
+        const reason = rejectReason.trim();
+        if (!reason) {
+            setToast({ open: true, msg: "Nhập lý do từ chối", type: "warning" });
+            return;
+        }
+        try {
+            setRejectSubmitting(true);
+            if (!canReject(rejectTarget)) throw new Error("Bạn không có quyền từ chối ở bước này");
+            const updated = await api.approve(rejectTarget.id, role, false, user, reason);
+            setRows((r) => (r ? r.map((x) => (x.id === updated.id ? updated : x)) : r));
+            setDetail((d) => (d && d.id === updated.id ? updated : d));
+            setRejectOpen(false);
+            setRejectTarget(null);
+            setRejectReason("");
+            setToast({ open: true, msg: "Đã từ chối phiếu", type: "success" });
+        } catch (e) {
+            setToast({ open: true, msg: e?.response?.data?.message || e.message || "Lỗi từ chối phiếu", type: "error" });
+        } finally {
+            setRejectSubmitting(false);
         }
     };
 
@@ -217,10 +271,10 @@ export default function PhieuSec() {
 
     const saveDonVi = async () => {
         const n = dvName.trim();
-        const s = dvStk?.trim() || null;
-        const m = dvMaNH?.trim() || null;
-        if (!n) {
-            setToast({ open: true, msg: "Tên đơn vị không được để trống", type: "error" });
+        const s = dvStk?.trim();
+        const m = dvMaNH?.trim();
+        if (!n || !s || !m) {
+            setToast({ open: true, msg: "Nhập đủ tên đơn vị, số tài khoản và mã ngân hàng", type: "error" });
             return;
         }
         try {
@@ -253,21 +307,13 @@ export default function PhieuSec() {
                 nguoiNhapId: user?.id,
             });
 
-            // refresh record
-            let fresh = null;
-            if (typeof api.getPhieuById === "function") {
-                fresh = await api.getPhieuById(detail.id, {
-                    userId: user?.id,
-                    roleCode: role,        // "NhanVien" | "TBP" | "KTT" | "GD"
-                    idDonVi: user?.idDonVi,
-                });
-            } else {
-                fresh = { ...detail, maLenhChi: newLenhChi.trim() };
-            }
+            const fresh = { ...detail, maLenhChi: newLenhChi.trim() };
 
             setDetail(fresh);
             setRows((r) => r?.map((x) => (x.id === detail.id ? { ...x, maLenhChi: fresh.maLenhChi } : x)));
+            setPendingLenhChiRows((r) => r?.filter((x) => x.id !== detail.id));
             setNewLenhChi("");
+            handleCloseDetail();
             setToast({ open: true, msg: "Đã tạo lệnh chi", type: "success" });
         } catch (e) {
             setToast({
@@ -323,7 +369,8 @@ export default function PhieuSec() {
 
     // Lọc client theo 3 trường: Mã, Nội dung, Đơn vị (tên)
     const filteredRows = useMemo(() => {
-        if (!rows) return null;
+        const sourceRows = activeTab === "pending" ? pendingLenhChiRows : rows;
+        if (!sourceRows) return null;
 
         const hasMa = qMa.trim() !== "";
         const hasNd = qNoiDung.trim() !== "";
@@ -335,7 +382,7 @@ export default function PhieuSec() {
         const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
         const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
 
-        return rows.filter((r) => {
+        return sourceRows.filter((r) => {
             // Ngày (so sánh theo ngày, bỏ giờ)
             let okDate = true;
             if (hasFrom || hasTo) {
@@ -375,7 +422,7 @@ export default function PhieuSec() {
 
             return okDate && okStatus && okMa && okNd && okDv;
         });
-    }, [rows, qMa, qNoiDung, qDonVi, qFrom, qTo, qTrangThai, donvis]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qFrom, qTo, qTrangThai, donvis]);
 
 
     // clear từng filter
@@ -462,6 +509,43 @@ export default function PhieuSec() {
         setAttachFiles([]);
     };
 
+    const exportExcel = () => {
+        if (!filteredRows?.length) {
+            setToast({ open: true, msg: "Không có dữ liệu để xuất", type: "warning" });
+            return;
+        }
+
+        const data = filteredRows.map((row, index) => {
+            const donVi = donvis.find((item) => item.id === row.donViId);
+            return {
+                STT: index + 1,
+                "Mã sổ séc": row.maSoSec || `SS-${row.id}`,
+                Ngày: isoToDisplay(row.ngay).split(" ")[0],
+                "Nội dung": row.noiDung,
+                "Đơn vị hưởng thụ": row.tenDonVi || donVi?.name,
+                "Số tài khoản": donVi?.stk,
+                "Mã ngân hàng": donVi?.maNganHang,
+                "Số tiền": row.soTien,
+                "Mã lệnh chi": row.maLenhChi,
+                "Trạng thái": row.trangThai,
+                "Người đăng ký": row.tenNguoiTao,
+                "Đơn vị người tạo": row.tenDonViNguoiTao,
+                "Ghi chú": row.ghiChu,
+            };
+        });
+        const sheet = XLSX.utils.json_to_sheet(data);
+        sheet["!cols"] = [
+            { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 42 }, { wch: 30 },
+            { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+            { wch: 24 }, { wch: 28 }, { wch: 36 },
+        ];
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, "Phieu sec");
+        const from = qFrom?.format("YYYY-MM-DD") || "tat-ca";
+        const to = qTo?.format("YYYY-MM-DD") || "tat-ca";
+        XLSX.writeFile(workbook, `phieu-sec_${from}_${to}.xlsx`);
+    };
+
     return (
         <Box>
             {/* Header actions */}
@@ -492,14 +576,24 @@ export default function PhieuSec() {
                         Xoá ngày
                     </Button>
 
-                    <Button variant="outlined" startIcon={<RefreshIcon />} onClick={load}>
+                    <Button variant="outlined" startIcon={<RefreshIcon />} onClick={activeTab === "pending" ? loadPendingLenhChi : load}>
                         Tải lại
+                    </Button>
+                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportExcel}>
+                        Xuất Excel
                     </Button>
                     <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenCreate(true)}>
                         Tạo phiếu
                     </Button>
                 </Stack>
             </Stack>
+
+            {canManageLenhChi && (
+                <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)} sx={{ mb: 2 }}>
+                    <Tab value="group" label="Phiếu bộ phận" />
+                    <Tab value="pending" label="Cần nhập lệnh chi" />
+                </Tabs>
+            )}
 
             {!filteredRows ? null : (
                 <Paper sx={{ overflow: "auto" }}>
@@ -740,7 +834,7 @@ export default function PhieuSec() {
                                             <span>
                                                 <IconButton
                                                     color="error"
-                                                    disabled={!canApprove(r)}
+                                                    disabled={!canReject(r)}
                                                     onClick={(e) => handleApprove(r, false, e)}
                                                 >
                                                     <CancelIcon />
@@ -852,6 +946,20 @@ export default function PhieuSec() {
                                         <Typography variant="caption" color="text.secondary">Đơn vị hưởng thụ</Typography>
                                         <Typography sx={{ mt: 0.25 }}>
                                             {detail.tenDonVi || (donvis.find((d) => d.id === detail.donViId)?.name) || `ID: ${detail.donViId}`}
+                                        </Typography>
+                                    </Grid>
+
+                                    <Grid item xs={12} md={4}>
+                                        <Typography variant="caption" color="text.secondary">Số tài khoản hưởng thụ</Typography>
+                                        <Typography sx={{ mt: 0.25 }}>
+                                            {donvis.find((d) => d.id === detail.donViId)?.stk || "—"}
+                                        </Typography>
+                                    </Grid>
+
+                                    <Grid item xs={12} md={4}>
+                                        <Typography variant="caption" color="text.secondary">Mã ngân hàng</Typography>
+                                        <Typography sx={{ mt: 0.25 }}>
+                                            {donvis.find((d) => d.id === detail.donViId)?.maNganHang || "—"}
                                         </Typography>
                                     </Grid>
 
@@ -1078,7 +1186,7 @@ export default function PhieuSec() {
                                 color="error"
                                 variant="outlined"
                                 startIcon={<CancelIcon />}
-                                disabled={!canApprove(detail)}
+                                disabled={!canReject(detail)}
                                 onClick={() => handleApprove(detail, false)}
                             >
                                 Từ chối
@@ -1208,12 +1316,14 @@ export default function PhieuSec() {
                             value={dvName}
                             onChange={(e) => setDvName(e.target.value)}
                             fullWidth
+                            required
                         />
                         <TextField
                             label="Số tài khoản (STK)"
                             value={dvStk}
                             onChange={(e) => setDvStk(e.target.value)}
                             fullWidth
+                            required
                             placeholder="VD: 123456789"
                         />
                         <TextField
@@ -1221,13 +1331,18 @@ export default function PhieuSec() {
                             value={dvMaNH}
                             onChange={(e) => setDvMaNH(e.target.value)}
                             fullWidth
+                            required
                             placeholder="VD: VCB, BIDV, AGR..."
                         />
                     </Stack>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenAddDv(false)}>Đóng</Button>
-                    <Button variant="contained" onClick={saveDonVi} disabled={savingDv}>
+                    <Button
+                        variant="contained"
+                        onClick={saveDonVi}
+                        disabled={savingDv || !dvName.trim() || !dvStk.trim() || !dvMaNH.trim()}
+                    >
                         {savingDv ? "Đang lưu..." : "Lưu"}
                     </Button>
                 </DialogActions>
@@ -1260,6 +1375,39 @@ export default function PhieuSec() {
                         }}
                     >
                         Xoá
+                    </Button>
+                </DialogActions>
+            </Dialog>
+            <Dialog
+                open={rejectOpen}
+                onClose={() => !rejectSubmitting && setRejectOpen(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Từ chối phiếu</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        margin="dense"
+                        label="Lý do từ chối"
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setRejectOpen(false)} disabled={rejectSubmitting}>
+                        Hủy
+                    </Button>
+                    <Button
+                        color="error"
+                        variant="contained"
+                        onClick={submitReject}
+                        disabled={rejectSubmitting || !rejectReason.trim()}
+                    >
+                        {rejectSubmitting ? "Đang xử lý..." : "Xác nhận từ chối"}
                     </Button>
                 </DialogActions>
             </Dialog>

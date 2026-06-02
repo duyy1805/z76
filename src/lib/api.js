@@ -31,7 +31,10 @@ export async function loginERP({ username, password }) {
 
 export async function getRoleByUserId(userId) {
     const { data } = await http.get(`/role/${userId}`);
-    return data?.role || "NhanVien";
+    return {
+        role: data?.role || "NhanVien",
+        permissions: Array.isArray(data?.permissions) ? data.permissions : [],
+    };
 }
 
 async function createLenhChi(phieuId, payload) {
@@ -51,8 +54,8 @@ export const api = {
         const { data } = await http.get("/donvi");
         return data; // [{ id, name, stk, TonTai }]
     },
-    async createDonVi({ name, stk }) {
-        const { data } = await http.post("/donvi", { name, stk });
+    async createDonVi({ name, stk, maNganHang }) {
+        const { data } = await http.post("/donvi", { name, stk, maNganHang });
         return data;
     },
     async updateDonVi(id, { name, stk, maNganHang }) {
@@ -71,17 +74,22 @@ export const api = {
         const { data } = await http.get(`/phieu${q ? `?${q}` : ""}`);
         return data;
     },
+    async listPendingLenhChi(userId) {
+        const q = new URLSearchParams({ userId }).toString();
+        const { data } = await http.get(`/lenhchi/pending?${q}`);
+        return data;
+    },
     async createPhieu(payload) {
         const { data } = await http.post("/phieu", payload);
         return data; // {id}
     },
     // lib/api.js
-    async approve(phieuId, role, agree, user) {
+    async approve(phieuId, role, agree, user, ghiChu = null) {
         const body = {
             nguoiDuyetId: user?.id,      // lấy từ thông tin auth
             tenNguoiDuyet: user?.username || role,
             chapThuan: !!agree,
-            ghiChu: null,
+            ghiChu,
             requesterUserId: user?.id,
             requesterRoleCode: role,
             requesterIdDonVi: user?.idDonVi,
