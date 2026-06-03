@@ -4,6 +4,7 @@ import {
     Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip,
     Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab
 } from "@mui/material";
+import Autocomplete from "@mui/material/Autocomplete";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -11,6 +12,7 @@ import { api } from "../lib/api";
 
 function SupplierLookup() {
     const [rows, setRows] = useState([]);
+    const [banks, setBanks] = useState([]);
     const [loading, setLoading] = useState(false);
 
     // Dialog thêm/sửa
@@ -32,8 +34,12 @@ function SupplierLookup() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await api.listDonVi(); // [{ id, name, stk, maNganHang, TonTai }]
+            const [data, bankRows] = await Promise.all([
+                api.listDonVi(),
+                api.listNganHang({ tontai: 1 }),
+            ]);
             setRows(data);
+            setBanks(bankRows || []);
         } catch (e) {
             console.error(e);
             showToast("Tải danh sách đơn vị thất bại", "error");
@@ -67,8 +73,9 @@ function SupplierLookup() {
         const s = stk?.trim() || null;
         const m = maNH?.trim() || null;
         const branch = chiNhanhNH?.trim() || null;
-        if (!n || !s || !m) {
-            showToast("Nhập đủ tên đơn vị, số tài khoản và mã ngân hàng", "error");
+        const bankExists = banks.some((bank) => bank.MaNganHang === m);
+        if (!n || !s || !m || !bankExists) {
+            showToast("Nhập đủ tên đơn vị, số tài khoản và chọn ngân hàng từ danh mục", "error");
             return;
         }
         try {
@@ -149,7 +156,7 @@ function SupplierLookup() {
                                 <TableCell>{idx + 1}</TableCell>
                                 <TableCell>{r.name}</TableCell>
                                 <TableCell>{r.stk || "—"}</TableCell>
-                                <TableCell>{r.maNganHang || "—"}</TableCell>
+                                <TableCell>{r.maNganHang ? `${r.maNganHang}${r.tenNganHang ? ` - ${r.tenNganHang}` : ""}` : "—"}</TableCell>
                                 <TableCell>{r.chiNhanhNganHang || "—"}</TableCell>
                                 <TableCell>
                                     <Chip
@@ -189,14 +196,22 @@ function SupplierLookup() {
                         sx={{ mt: 2 }}
                         placeholder="VD: 123456789"
                     />
-                    <TextField
-                        label="Mã ngân hàng"
-                        value={maNH}
-                        onChange={(e) => setMaNH(e.target.value)}
+                    <Autocomplete
+                        options={banks}
+                        value={banks.find((bank) => bank.MaNganHang === maNH) || null}
+                        onChange={(_, value) => setMaNH(value?.MaNganHang || "")}
+                        getOptionLabel={(option) => option ? `${option.MaNganHang} - ${option.TenNganHang}` : ""}
+                        isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Ngân hàng"
+                                required
+                                placeholder="Chọn mã ngân hàng"
+                            />
+                        )}
                         fullWidth
-                        required
                         sx={{ mt: 2 }}
-                        placeholder="VD: VCB, BIDV, AGR..."
                     />
                     <TextField
                         label="Chi nhánh ngân hàng (không bắt buộc)"
@@ -209,7 +224,13 @@ function SupplierLookup() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenEditDlg(false)}>Đóng</Button>
-                    <Button variant="contained" onClick={save} disabled={!name.trim() || !stk.trim() || !maNH.trim()}>Lưu</Button>
+                    <Button
+                        variant="contained"
+                        onClick={save}
+                        disabled={!name.trim() || !stk.trim() || !banks.some((bank) => bank.MaNganHang === maNH)}
+                    >
+                        Lưu
+                    </Button>
                 </DialogActions>
             </Dialog>
 
@@ -321,6 +342,98 @@ function CurrencyLookup() {
     );
 }
 
+function BankLookup() {
+    const [rows, setRows] = useState([]);
+    const [open, setOpen] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [code, setCode] = useState("");
+    const [name, setName] = useState("");
+    const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+    const showToast = (msg, type = "success") => setToast({ open: true, msg, type });
+    const load = useCallback(async () => setRows(await api.listNganHang()), []);
+    useEffect(() => { load(); }, [load]);
+
+    const openAdd = () => { setEditing(null); setCode(""); setName(""); setOpen(true); };
+    const openEdit = (row) => {
+        setEditing(row);
+        setCode(row.MaNganHang);
+        setName(row.TenNganHang);
+        setOpen(true);
+    };
+    const save = async () => {
+        try {
+            if (!code.trim() || !name.trim()) return showToast("Nhập đủ mã và tên ngân hàng", "error");
+            if (editing) await api.updateNganHang(editing.MaNganHang, { tenNganHang: name.trim(), tonTai: editing.TonTai });
+            else await api.createNganHang({ maNganHang: code.trim(), tenNganHang: name.trim() });
+            setOpen(false);
+            await load();
+            showToast("Đã lưu ngân hàng");
+        } catch (err) {
+            showToast(err?.response?.data?.message || "Lưu ngân hàng thất bại", "error");
+        }
+    };
+    const stop = async (row) => {
+        try {
+            await api.deleteNganHang(row.MaNganHang);
+            await load();
+            showToast("Đã ngừng sử dụng ngân hàng");
+        } catch (err) {
+            showToast(err?.response?.data?.message || "Không thể ngừng sử dụng ngân hàng", "error");
+        }
+    };
+    const activate = async (row) => {
+        await api.updateNganHang(row.MaNganHang, { tenNganHang: row.TenNganHang, tonTai: true });
+        await load();
+    };
+
+    return (
+        <Box>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="h5">Admin · Ngân hàng</Typography>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Thêm ngân hàng</Button>
+            </Stack>
+            <Paper sx={{ mt: 1, overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 900 }}>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Mã ngân hàng</TableCell>
+                            <TableCell>Tên ngân hàng</TableCell>
+                            <TableCell>Trạng thái</TableCell>
+                            <TableCell align="right">Thao tác</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {rows.map((row) => (
+                            <TableRow key={row.MaNganHang}>
+                                <TableCell>{row.MaNganHang}</TableCell>
+                                <TableCell>{row.TenNganHang}</TableCell>
+                                <TableCell><Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngừng"} color={row.TonTai ? "success" : "default"} /></TableCell>
+                                <TableCell align="right">
+                                    <IconButton onClick={() => openEdit(row)}><EditIcon /></IconButton>
+                                    {row.TonTai
+                                        ? <IconButton color="error" onClick={() => stop(row)}><DeleteIcon /></IconButton>
+                                        : <Button size="small" onClick={() => activate(row)}>Bật lại</Button>}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </Paper>
+            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+                <DialogTitle>{editing ? "Sửa ngân hàng" : "Thêm ngân hàng"}</DialogTitle>
+                <DialogContent>
+                    <TextField label="Mã ngân hàng" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} disabled={!!editing} fullWidth sx={{ mt: 1 }} />
+                    <TextField label="Tên ngân hàng" value={name} onChange={(e) => setName(e.target.value)} fullWidth sx={{ mt: 2 }} />
+                </DialogContent>
+                <DialogActions><Button onClick={() => setOpen(false)}>Đóng</Button><Button variant="contained" onClick={save}>Lưu</Button></DialogActions>
+            </Dialog>
+            <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast((t) => ({ ...t, open: false }))}>
+                <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
+            </Snackbar>
+        </Box>
+    );
+}
+
 export default function AdminSuppliers() {
     const [tab, setTab] = useState(0);
     return (
@@ -328,8 +441,11 @@ export default function AdminSuppliers() {
             <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
                 <Tab label="Đơn vị hưởng thụ" />
                 <Tab label="Loại tiền" />
+                <Tab label="Ngân hàng" />
             </Tabs>
-            {tab === 0 ? <SupplierLookup /> : <CurrencyLookup />}
+            {tab === 0 && <SupplierLookup />}
+            {tab === 1 && <CurrencyLookup />}
+            {tab === 2 && <BankLookup />}
         </Box>
     );
 }

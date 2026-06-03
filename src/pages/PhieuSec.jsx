@@ -28,7 +28,7 @@ import { NumericFormat } from "react-number-format";
 import { api } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 
-const fmtMoney = (n) => (n ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 4 });
+const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
 const ACTION_COLUMN_WIDTH = 136;
 const stickyActionCellSx = {
@@ -37,6 +37,13 @@ const stickyActionCellSx = {
 };
 const stickyStatusCellSx = {
     position: "sticky", right: ACTION_COLUMN_WIDTH, minWidth: 145, bgcolor: "background.paper", zIndex: 2,
+};
+const DEFAULT_STATUS_ORDER = ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"];
+const STATUS_ORDER_BY_ROLE = {
+    TBP: ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
+    KTT: ["ChoDuyet_KTT", "ChoDuyet_GD", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
+    GD: ["ChoDuyet_GD", "ChoDuyet_KTT", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
+    Admin: ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
 };
 
 const isoToDisplay = (s) => {
@@ -55,6 +62,15 @@ const stripVN = (s = "") =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
 
 const logSoSec = (...args) => console.log("[SoSec][PhieuSec]", ...args);
+const hasSelectedText = () => {
+    if (typeof window === "undefined") return false;
+    return window.getSelection()?.toString().trim().length > 0;
+};
+
+const getDisplayStatus = (phieu) => {
+    if (phieu?.trangThai !== "HoanThanh") return phieu?.trangThai;
+    return phieu?.maLenhChi ? "HoanThanh_DaCoLenhChi" : "HoanThanh_ChuaCoLenhChi";
+};
 
 const DetailField = ({ label, children, sx }) => (
     <Box sx={{ minWidth: 0, minHeight: 56, ...sx }}>
@@ -75,6 +91,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [activeTab, setActiveTab] = useState("group");
     const [donvis, setDonvis] = useState([]);
     const [currencies, setCurrencies] = useState([]);
+    const [banks, setBanks] = useState([]);
 
     // dialog tạo / detail
     const [openCreate, setOpenCreate] = useState(false);
@@ -144,7 +161,13 @@ export default function PhieuSec({ mode = "VND" }) {
     const [returnReason, setReturnReason] = useState("");
     const [returnSubmitting, setReturnSubmitting] = useState(false);
 
-    const canManageLenhChi = ["KTT", "GD", "Admin"].includes(role) || permissions.includes("TaoLenhChi");
+    const hasPermission = (code) =>
+        role === "Admin" ||
+        permissions.includes("Admin") ||
+        permissions.includes(code) ||
+        role === code;
+
+    const canManageLenhChi = hasPermission("KTT") || hasPermission("GD") || hasPermission("TaoLenhChi");
     const canAddLenhChi =
         detail && detail.trangThai === "HoanThanh" && !detail.maLenhChi && canManageLenhChi;
 
@@ -174,14 +197,16 @@ export default function PhieuSec({ mode = "VND" }) {
             sample: (p || []).slice(0, 5),
         });
 
-        const [dv, currencyRows] = await Promise.all([
+        const [dv, currencyRows, bankRows] = await Promise.all([
             api.listDonVi(),
             api.listLoaiTien({ tontai: 1 }),
+            api.listNganHang({ tontai: 1 }),
         ]);
         logSoSec("load:listDonVi result", { count: dv?.length ?? 0 });
         setRows(p);
         setDonvis(dv);
         setCurrencies(currencyRows || []);
+        setBanks(bankRows || []);
         setForm((f) => ({ ...f, donViId: dv?.[0]?.id ?? 1 }));
     };
 
@@ -203,19 +228,21 @@ export default function PhieuSec({ mode = "VND" }) {
     }, [activeTab]);
 
     const canApprove = (p) =>
-        (role === "Admin" && ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD"].includes(p.trangThai)) ||
-        (role === "TBP" && p.trangThai === "ChoDuyet_TBP") ||
-        (role === "KTT" && p.trangThai === "ChoDuyet_KTT") ||
-        (role === "GD" && p.trangThai === "ChoDuyet_GD");
+        (p?.trangThai === "ChoDuyet_TBP" && hasPermission("TBP")) ||
+        (p?.trangThai === "ChoDuyet_KTT" && hasPermission("KTT")) ||
+        (p?.trangThai === "ChoDuyet_GD" && hasPermission("GD"));
 
     const canReject = (p) =>
-        canApprove(p) || (role === "KTT" && p?.trangThai === "ChoDuyet_GD");
+        canApprove(p) || (hasPermission("KTT") && p?.trangThai === "ChoDuyet_GD");
 
     const canReturn = (p) =>
-        ["KTT", "Admin"].includes(role) && ["ChoDuyet_KTT", "ChoDuyet_GD"].includes(p?.trangThai);
+        hasPermission("KTT") && ["ChoDuyet_KTT", "ChoDuyet_GD"].includes(p?.trangThai);
 
     const canEdit = (p) =>
-        p?.trangThai === "ChoDuyet_TBP" && (role === "Admin" || Number(p?.nguoiDangKyId) === Number(user?.id));
+        p?.trangThai === "ChoDuyet_TBP" && (hasPermission("Admin") || Number(p?.nguoiDangKyId) === Number(user?.id));
+
+    const getDonViByPhieu = (p) => donvis.find((d) => d.id === p?.donViId);
+    const getTenNganHang = (p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null;
 
     const resetForm = () => {
         setForm({
@@ -385,16 +412,18 @@ export default function PhieuSec({ mode = "VND" }) {
         const s = dvStk?.trim();
         const m = dvMaNH?.trim();
         const branch = dvChiNhanhNH?.trim() || null;
-        if (!n || !s || !m) {
+        const selectedBank = banks.find((bank) => bank.MaNganHang === m);
+        if (!n || !s || !m || !selectedBank) {
             setToast({ open: true, msg: "Nhập đủ tên đơn vị, số tài khoản và mã ngân hàng", type: "error" });
             return;
         }
         try {
             setSavingDv(true);
             const created = await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch }); // { id, name, ... }
+            const createdWithBank = { ...created, tenNganHang: selectedBank.TenNganHang };
             // cập nhật danh sách + chọn ngay đơn vị mới
             setDonvis((list) => {
-                const next = [...(list || []), created];
+                const next = [...(list || []), createdWithBank];
                 return next.sort((a, b) => String(a.name).localeCompare(String(b.name), "vi"));
             });
             setForm((f) => ({ ...f, donViId: created.id }));
@@ -496,6 +525,9 @@ export default function PhieuSec({ mode = "VND" }) {
         const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
         const qNguoiTaoNorm = stripVN(qNguoiTao.trim().toLowerCase());
 
+        const statusOrder = STATUS_ORDER_BY_ROLE[role] || DEFAULT_STATUS_ORDER;
+        const statusRank = new Map(statusOrder.map((status, index) => [status, index]));
+
         return sourceRows.filter((r) => {
             // Ngày (so sánh theo ngày, bỏ giờ)
             let okDate = true;
@@ -512,7 +544,10 @@ export default function PhieuSec({ mode = "VND" }) {
             // Trạng thái
             let okStatus = true;
             if (qTrangThai) {
-                okStatus = r.trangThai === qTrangThai;
+                const displayStatus = getDisplayStatus(r);
+                okStatus = qTrangThai === "HoanThanh"
+                    ? r.trangThai === "HoanThanh"
+                    : displayStatus === qTrangThai;
             }
             // Mã
             let okMa = true;
@@ -535,6 +570,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     r.tenDonVi, donVi?.name,
                     r.soTaiKhoanHuongThu, donVi?.stk,
                     r.maNganHangHuongThu, donVi?.maNganHang,
+                    getTenNganHang(r),
                     r.chiNhanhNganHangHuongThu, donVi?.chiNhanhNganHang,
                     r.donViId,
                 ].filter(Boolean).join(" ");
@@ -545,11 +581,19 @@ export default function PhieuSec({ mode = "VND" }) {
             if (hasNguoiTao) {
                 okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
             }
-
             return okDate && okStatus && okMa && okNd && okDv && okNguoiTao;
-        });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qFrom, qTo, qTrangThai, donvis]);
+        }).sort((a, b) => {
+            const rankA = statusRank.get(a.trangThai) ?? statusOrder.length;
+            const rankB = statusRank.get(b.trangThai) ?? statusOrder.length;
+            if (rankA !== rankB) return rankA - rankB;
 
+            const dateA = dayjs(a.ngay).isValid() ? dayjs(a.ngay).valueOf() : 0;
+            const dateB = dayjs(b.ngay).isValid() ? dayjs(b.ngay).valueOf() : 0;
+            if (dateA !== dateB) return dateB - dateA;
+
+            return Number(b.id || 0) - Number(a.id || 0);
+        });
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qFrom, qTo, qTrangThai, donvis, role]);
 
     // clear từng filter
     const clearFilter = (key) => {
@@ -652,6 +696,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 "Đơn vị hưởng thụ": row.tenDonVi || donVi?.name,
                 "Số tài khoản": row.soTaiKhoanHuongThu || donVi?.stk,
                 "Mã ngân hàng": row.maNganHangHuongThu || donVi?.maNganHang,
+                "Tên ngân hàng": getTenNganHang(row),
                 "Chi nhánh ngân hàng": row.chiNhanhNganHangHuongThu || donVi?.chiNhanhNganHang,
                 "Loại chi phí": EXPENSE_LABELS[row.maLoaiChiPhi] || row.maLoaiChiPhi,
                 "Loại tiền": row.maLoaiTien || "VND",
@@ -666,7 +711,7 @@ export default function PhieuSec({ mode = "VND" }) {
         const sheet = XLSX.utils.json_to_sheet(data);
         sheet["!cols"] = [
             { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 42 }, { wch: 30 },
-            { wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 12 },
+            { wch: 20 }, { wch: 16 }, { wch: 34 }, { wch: 28 }, { wch: 18 }, { wch: 12 },
             { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 24 }, { wch: 28 },
             { wch: 36 },
         ];
@@ -675,6 +720,81 @@ export default function PhieuSec({ mode = "VND" }) {
         const from = qFrom?.format("YYYY-MM-DD") || "tat-ca";
         const to = qTo?.format("YYYY-MM-DD") || "tat-ca";
         XLSX.writeFile(workbook, `phieu-sec-${isNgoaiTe ? "ngoai-te" : "vnd"}_${from}_${to}.xlsx`);
+    };
+
+    const exportTransferExcel = () => {
+        if (!filteredRows?.length) {
+            setToast({ open: true, msg: "Không có dữ liệu để xuất", type: "warning" });
+            return;
+        }
+
+        const headers = [
+            "STT",
+            "TK chuyển/\nDebit account\n(*)",
+            "Số  tiền chuyển/\n Amount\n(*)",
+            "TK hưởng/\nBeneficiary Account\n(*)",
+            "Tên người hưởng/\nBeneficiary Name\n(*)",
+            "Tên chi nhánh Ngân hàng thụ hưởng/\nBeneficiary Bank\n(*)",
+            "Nội dung/\nReference\n(*)",
+            "Mã người thụ hưởng/\nBeneficiary No",
+            "Số chứng từ/ Ref No",
+            "Ngày thanh toán/ Effective date",
+            "Mã ngân hàng",
+        ];
+
+        const rows = filteredRows.map((row, index) => {
+            const donVi = donvis.find((item) => item.id === row.donViId);
+            return [
+                index + 1,
+                "",
+                Number(row.soTien || 0),
+                row.soTaiKhoanHuongThu || donVi?.stk || "",
+                row.tenDonVi || donVi?.name || "",
+                getTenNganHang(row) || "",
+                row.noiDung || "",
+                "",
+                "",
+                "",
+                row.maNganHangHuongThu || donVi?.maNganHang || "",
+            ];
+        });
+
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        sheet["!cols"] = [
+            { wch: 6 },
+            { wch: 30 },
+            { wch: 29 },
+            { wch: 16 },
+            { wch: 23 },
+            { wch: 54 },
+            { wch: 12 },
+            { wch: 13 },
+            { wch: 10 },
+            { wch: 13 },
+            { wch: 16 },
+        ];
+        sheet["!rows"] = [{ hpt: 93 }, ...rows.map(() => ({ hpt: 15 }))];
+
+        headers.forEach((_, index) => {
+            const cell = sheet[XLSX.utils.encode_cell({ r: 0, c: index })];
+            if (cell) {
+                cell.s = {
+                    fill: { fgColor: { rgb: "BFBFBF" } },
+                    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+                    font: { bold: true },
+                };
+            }
+        });
+        rows.forEach((_, rowIndex) => {
+            const amountCell = sheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: 2 })];
+            if (amountCell) amountCell.z = "#,##0 ;(#,##0)";
+        });
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, "Danh sach");
+        const from = qFrom?.format("YYYY-MM-DD") || "tat-ca";
+        const to = qTo?.format("YYYY-MM-DD") || "tat-ca";
+        XLSX.writeFile(workbook, `sec-chuyen-tien-${isNgoaiTe ? "ngoai-te" : "vnd"}_${from}_${to}.xls`, { bookType: "xls" });
     };
 
     return (
@@ -710,7 +830,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     <Button variant="outlined" startIcon={<RefreshIcon />} onClick={activeTab === "pending" ? loadPendingLenhChi : load}>
                         Tải lại
                     </Button>
-                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportExcel}>
+                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportTransferExcel}>
                         Xuất Excel
                     </Button>
                     <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
@@ -886,6 +1006,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
                                 <TableCell sx={{ whiteSpace: "nowrap" }}>Số tài khoản</TableCell>
                                 <TableCell sx={{ whiteSpace: "nowrap" }}>Mã ngân hàng</TableCell>
+                                <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>Tên ngân hàng</TableCell>
                                 <TableCell sx={{ whiteSpace: "nowrap" }}>Chi nhánh ngân hàng</TableCell>
                                 <TableCell sx={{ whiteSpace: "nowrap" }}>
                                     <Stack direction="row" spacing={0.5} alignItems="center">
@@ -973,6 +1094,8 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 <MenuItem value="ChoDuyet_GD">Chờ duyệt Giám đốc</MenuItem>
                                                 <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
                                                 <MenuItem value="TuChoi">Từ chối</MenuItem>
+                                                <MenuItem value="HoanThanh_ChuaCoLenhChi">Hoàn thành - chờ lệnh chi</MenuItem>
+                                                <MenuItem value="HoanThanh_DaCoLenhChi">Hoàn thành - đã có lệnh chi</MenuItem>
                                             </TextField>
 
                                             <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -998,7 +1121,10 @@ export default function PhieuSec({ mode = "VND" }) {
                                     key={r.id}
                                     hover
                                     sx={{ cursor: "pointer" }}
-                                    onClick={() => openDetailDialog(r)}
+                                    onClick={() => {
+                                        if (hasSelectedText()) return;
+                                        openDetailDialog(r);
+                                    }}
                                 >
                                     <TableCell>{i + 1}</TableCell>
                                     <TableCell>{r.maSoSec || `SS-${r.id}`}</TableCell>
@@ -1009,13 +1135,14 @@ export default function PhieuSec({ mode = "VND" }) {
                                     <TableCell>{donvis.find((d) => d.id === r.donViId)?.name || r.donViId}</TableCell>
                                     <TableCell>{r.soTaiKhoanHuongThu || donvis.find((d) => d.id === r.donViId)?.stk || "—"}</TableCell>
                                     <TableCell>{r.maNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.maNganHang || "—"}</TableCell>
+                                    <TableCell>{getTenNganHang(r) || "—"}</TableCell>
                                     <TableCell>{r.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.chiNhanhNganHang || "—"}</TableCell>
                                     <TableCell>{r.tenNguoiTao || "—"}</TableCell>
                                     <TableCell>{EXPENSE_LABELS[r.maLoaiChiPhi] || r.maLoaiChiPhi || "—"}</TableCell>
                                     <TableCell>{r.maLoaiTien || "VND"}</TableCell>
                                     <TableCell align="right">{fmtMoney(r.soTien)}</TableCell>
                                     <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
-                                    <TableCell sx={stickyStatusCellSx}><StatusChip status={r.trangThai} /></TableCell>
+                                    <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
                                     <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
                                         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 40px)", alignItems: "center" }}>
                                             <Box sx={{ visibility: canEdit(r) || canReturn(r) ? "visible" : "hidden" }}>
@@ -1064,7 +1191,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
                             {filteredRows.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={15}>
+                                    <TableCell colSpan={16}>
                                         <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
                                             Không có bản ghi phù hợp.
                                         </Typography>
@@ -1116,7 +1243,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
                     {detail && (
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, flexWrap: "wrap" }}>
-                            <StatusChip status={detail.trangThai} />
+                            <StatusChip status={getDisplayStatus(detail)} />
                             <Typography
                                 sx={{
                                     px: 1.25,
@@ -1164,6 +1291,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                     </DetailField>
                                     <DetailField label="Số tài khoản hưởng thụ">{detail.soTaiKhoanHuongThu || donvis.find((d) => d.id === detail.donViId)?.stk}</DetailField>
                                     <DetailField label="Mã ngân hàng">{detail.maNganHangHuongThu || donvis.find((d) => d.id === detail.donViId)?.maNganHang}</DetailField>
+                                    <DetailField label="Tên ngân hàng">{getTenNganHang(detail) || "—"}</DetailField>
                                     <DetailField label="Chi nhánh ngân hàng">{detail.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === detail.donViId)?.chiNhanhNganHang}</DetailField>
                                     <DetailField label="Loại chi phí">{EXPENSE_LABELS[detail.maLoaiChiPhi] || detail.maLoaiChiPhi}</DetailField>
                                     <DetailField label="Loại tiền">{detail.maLoaiTien || "VND"}</DetailField>
@@ -1468,14 +1596,14 @@ export default function PhieuSec({ mode = "VND" }) {
                                     const q = stripVN((inputValue || "").toLowerCase().trim());
                                     if (!q) return options;
                                     return options.filter((o) => stripVN(
-                                        [o?.name, o?.stk, o?.maNganHang, o?.chiNhanhNganHang].filter(Boolean).join(" ").toLowerCase()
+                                        [o?.name, o?.stk, o?.maNganHang, o?.tenNganHang, o?.chiNhanhNganHang].filter(Boolean).join(" ").toLowerCase()
                                     ).includes(q));
                                 }}
                                 renderOption={(props, option) => (
                                     <Box component="li" {...props} key={option.id} sx={{ display: "block !important", py: 1 }}>
                                         <Typography>{option.name}</Typography>
                                         <Typography variant="caption" color="text.secondary">
-                                            STK: {option.stk || "—"} · Mã NH: {option.maNganHang || "—"} · CN: {option.chiNhanhNganHang || "—"}
+                                            STK: {option.stk || "—"} · Ma NH: {option.maNganHang || "—"} · Ten NH: {option.tenNganHang || "—"} · CN: {option.chiNhanhNganHang || "—"}
                                         </Typography>
                                     </Box>
                                 )}
@@ -1485,7 +1613,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                         label="Đơn vị hưởng thụ"
                                         placeholder="Gõ tên đơn vị (không dấu)…"
                                         helperText={form.donViId
-                                            ? `STK: ${donvis.find((d) => d.id === form.donViId)?.stk || "—"} · Mã NH: ${donvis.find((d) => d.id === form.donViId)?.maNganHang || "—"} · CN: ${donvis.find((d) => d.id === form.donViId)?.chiNhanhNganHang || "—"}`
+                                            ? `STK: ${donvis.find((d) => d.id === form.donViId)?.stk || "—"} · Ma NH: ${donvis.find((d) => d.id === form.donViId)?.maNganHang || "—"} · Ten NH: ${donvis.find((d) => d.id === form.donViId)?.tenNganHang || "—"} · CN: ${donvis.find((d) => d.id === form.donViId)?.chiNhanhNganHang || "—"}`
                                             : "Nhập tên, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
                                     />
                                 )}
@@ -1541,8 +1669,10 @@ export default function PhieuSec({ mode = "VND" }) {
                         <NumericFormat
                             customInput={TextField}
                             label={`Số tiền (${isNgoaiTe ? form.maLoaiTien || "ngoại tệ" : "VND"})`}
-                            thousandSeparator="."
-                            decimalSeparator=","
+                            thousandSeparator=","
+                            decimalSeparator="."
+                            decimalScale={3}
+                            fixedDecimalScale
                             allowNegative={false}
                             value={form.soTien}
                             onValueChange={(values) => {
@@ -1581,11 +1711,28 @@ export default function PhieuSec({ mode = "VND" }) {
                             required
                             placeholder="VD: 123456789"
                         />
+                        <Autocomplete
+                            options={banks}
+                            value={banks.find((bank) => bank.MaNganHang === dvMaNH) || null}
+                            onChange={(_, value) => setDvMaNH(value?.MaNganHang || "")}
+                            getOptionLabel={(option) => (option ? `${option.MaNganHang} - ${option.TenNganHang}` : "")}
+                            isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
+                            renderInput={(params) => (
+                                <TextField
+                                    {...params}
+                                    label="Ngan hang"
+                                    required
+                                    placeholder="Chon ma ngan hang"
+                                />
+                            )}
+                            fullWidth
+                        />
                         <TextField
                             label="Mã ngân hàng"
                             value={dvMaNH}
                             onChange={(e) => setDvMaNH(e.target.value)}
                             fullWidth
+                            sx={{ display: "none" }}
                             required
                             placeholder="VD: VCB, BIDV, AGR..."
                         />
@@ -1603,7 +1750,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     <Button
                         variant="contained"
                         onClick={saveDonVi}
-                        disabled={savingDv || !dvName.trim() || !dvStk.trim() || !dvMaNH.trim()}
+                        disabled={savingDv || !dvName.trim() || !dvStk.trim() || !banks.some((bank) => bank.MaNganHang === dvMaNH)}
                     >
                         {savingDv ? "Đang lưu..." : "Lưu"}
                     </Button>

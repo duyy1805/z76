@@ -5,7 +5,7 @@ import axios from "axios";
 const BASE = import.meta.env.VITE_API_BASE || "https://nodeapi.z76.vn/sosec";
 const LOGIN_URL = import.meta.env.VITE_LOGIN_URL || "https://apipccc.z76.vn/auth/loginERP";
 const API_KEY = import.meta.env.VITE_API_KEY;
-
+console.log("API_BASE:", BASE);
 const http = axios.create({
     baseURL: BASE,
     timeout: 10000,
@@ -65,6 +65,23 @@ export const api = {
 
     async deleteDonVi(id) {
         const { data } = await http.delete(`/donvi/${id}`);
+        return data;
+    },
+    async listNganHang(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        const { data } = await http.get(`/nganhang${q ? `?${q}` : ""}`);
+        return data;
+    },
+    async createNganHang({ maNganHang, tenNganHang }) {
+        const { data } = await http.post("/nganhang", { maNganHang, tenNganHang });
+        return data;
+    },
+    async updateNganHang(maNganHang, { tenNganHang, tonTai }) {
+        const { data } = await http.put(`/nganhang/${maNganHang}`, { tenNganHang, tonTai });
+        return data;
+    },
+    async deleteNganHang(maNganHang) {
+        const { data } = await http.delete(`/nganhang/${maNganHang}`);
         return data;
     },
 
