@@ -775,13 +775,13 @@ export default function PhieuSec({ mode = "VND" }) {
                 "116000002441",
                 Math.round(Number(row.soTien || 0)),
                 row.soTaiKhoanHuongThu || donVi?.stk || "",
+                row.tenDonVi || donVi?.name || "",
                 row.maNganHangHuongThu || donVi?.maNganHang || "",
-                getTenNganHang(row) || "",
                 row.noiDung || "",
                 "",
                 "",
                 "",
-                row.tenDonVi || donVi?.name || "",
+                getTenNganHang(row) || "",
             ];
         });
 
