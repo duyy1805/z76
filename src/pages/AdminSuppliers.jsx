@@ -33,6 +33,7 @@ function SupplierLookup() {
     const [openEditDlg, setOpenEditDlg] = useState(false);
     const [editingId, setEditingId] = useState(null); // null = thêm mới
     const [name, setName] = useState("");
+    const [tenChuyenKhoan, setTenChuyenKhoan] = useState("");
     const [stk, setStk] = useState("");
     const [maNH, setMaNH] = useState("");
     const [chiNhanhNH, setChiNhanhNH] = useState("");
@@ -67,6 +68,7 @@ function SupplierLookup() {
     const openAdd = () => {
         setEditingId(null);
         setName("");
+        setTenChuyenKhoan("");
         setStk("");
         setMaNH("");
         setChiNhanhNH("");
@@ -76,6 +78,7 @@ function SupplierLookup() {
     const openEdit = (r) => {
         setEditingId(r.id);
         setName(r.name || "");
+        setTenChuyenKhoan(r.tenChuyenKhoan || "");
         setStk(r.stk || "");
         setMaNH(r.maNganHang || "");
         setChiNhanhNH(r.chiNhanhNganHang || "");
@@ -87,17 +90,18 @@ function SupplierLookup() {
         const s = stk?.trim() || null;
         const m = maNH?.trim() || null;
         const branch = chiNhanhNH?.trim() || null;
+        const transferName = tenChuyenKhoan?.trim() || null;
         const bankExists = banks.some((bank) => bank.MaNganHang === m);
-        if (!n || !s || !m || !bankExists) {
-            showToast("Nhập đủ tên đơn vị, số tài khoản và chọn ngân hàng từ danh mục", "error");
+        if (!n || !transferName || !s || !m || !bankExists) {
+            showToast("Nhập đủ tên đơn vị, tên chuyển khoản, số tài khoản và chọn ngân hàng từ danh mục", "error");
             return;
         }
         try {
             if (editingId) {
-                await api.updateDonVi(editingId, { name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch });
+                await api.updateDonVi(editingId, { name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName });
                 showToast("Đã cập nhật đơn vị");
             } else {
-                await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch });
+                await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName });
                 showToast("Đã thêm đơn vị");
             }
             setOpenEditDlg(false);
@@ -119,6 +123,7 @@ function SupplierLookup() {
                 (statusFilter === "inactive" && !row.TonTai);
             const searchable = normalizeSearch([
                 row.name,
+                row.tenChuyenKhoan,
                 row.stk,
                 row.maNganHang,
                 row.tenNganHang,
@@ -157,7 +162,7 @@ function SupplierLookup() {
                     onChange={(e) => setQuery(e.target.value)}
                     size="small"
                     fullWidth
-                    placeholder="Tên, STK, mã/tên ngân hàng, chi nhánh"
+                    placeholder="Tên, tên chuyển khoản, STK, mã/tên ngân hàng, chi nhánh"
                 />
                 <TextField
                     select
@@ -174,11 +179,12 @@ function SupplierLookup() {
             </Stack>
 
             <Paper sx={{ mt: 1, display: { xs: "none", md: "block" }, overflowX: "auto" }}>
-                <Table size="small" sx={{ minWidth: 980 }}>
+                <Table size="small" sx={{ minWidth: 1120 }}>
                     <TableHead>
                         <TableRow>
                             <TableCell>#</TableCell>
                             <TableCell>Tên đơn vị</TableCell>
+                            <TableCell>Tên chuyển khoản</TableCell>
                             <TableCell>STK</TableCell>
                             <TableCell>Mã ngân hàng</TableCell>
                             <TableCell>Chi nhánh ngân hàng</TableCell>
@@ -189,7 +195,7 @@ function SupplierLookup() {
                     <TableBody>
                         {loading && (
                             <TableRow>
-                                <TableCell colSpan={7} align="center">
+                                <TableCell colSpan={8} align="center">
                                     <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
                                         <CircularProgress size={20} />
                                         <Typography variant="body2">Đang tải…</Typography>
@@ -200,7 +206,7 @@ function SupplierLookup() {
 
                         {!loading && filteredRows.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} align="center">
+                                <TableCell colSpan={8} align="center">
                                     Không có dữ liệu
                                 </TableCell>
                             </TableRow>
@@ -209,7 +215,17 @@ function SupplierLookup() {
                         {!loading && filteredRows.map((r, idx) => (
                             <TableRow key={r.id} hover>
                                 <TableCell>{idx + 1}</TableCell>
-                                <TableCell>{r.name}</TableCell>
+                                <TableCell>
+                                    <Typography sx={{ fontWeight: 700 }}>{r.name}</Typography>
+                                    <Typography variant="caption" color="error.main">
+                                        CK: {r.tenChuyenKhoan || "Chưa nhập tên chuyển khoản"}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography sx={{ color: r.tenChuyenKhoan ? "text.primary" : "error.main", fontWeight: r.tenChuyenKhoan ? 500 : 700 }}>
+                                        {r.tenChuyenKhoan || "Chưa nhập"}
+                                    </Typography>
+                                </TableCell>
                                 <TableCell>{r.stk || "—"}</TableCell>
                                 <TableCell>{r.maNganHang ? `${r.maNganHang}${r.tenNganHang ? ` - ${r.tenNganHang}` : ""}` : "—"}</TableCell>
                                 <TableCell>{r.chiNhanhNganHang || "—"}</TableCell>
@@ -248,6 +264,7 @@ function SupplierLookup() {
                             <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                                 <Box sx={{ minWidth: 0 }}>
                                     <Typography sx={{ fontWeight: 800, fontSize: "0.95rem" }} noWrap>{r.name}</Typography>
+                                    <Typography variant="caption" color="text.secondary" noWrap>CK: {r.tenChuyenKhoan || "—"}</Typography>
                                     <Typography variant="caption" color="text.secondary" noWrap>{r.stk || "—"}</Typography>
                                 </Box>
                                 <Chip size="small" label={r.TonTai ? "Đang dùng" : "Ngưng"} color={r.TonTai ? "success" : "default"} />
@@ -278,6 +295,17 @@ function SupplierLookup() {
                         onChange={(e) => setName(e.target.value)}
                         fullWidth
                         sx={{ mt: 1 }}
+                    />
+                    <TextField
+                        label="Tên chuyển khoản"
+                        value={tenChuyenKhoan}
+                        onChange={(e) => setTenChuyenKhoan(e.target.value)}
+                        fullWidth
+                        required
+                        sx={{ mt: 2 }}
+                        placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
+                        helperText="Nhập sai tên chuyển khoản có thể không chuyển tiền được. Vui lòng kiểm tra kỹ trước khi lưu."
+                        FormHelperTextProps={{ sx: { color: "error.main" } }}
                     />
                     <TextField
                         label="Số tài khoản (STK)"
@@ -319,7 +347,7 @@ function SupplierLookup() {
                     <Button
                         variant="contained"
                         onClick={save}
-                        disabled={!name.trim() || !stk.trim() || !banks.some((bank) => bank.MaNganHang === maNH)}
+                        disabled={!name.trim() || !tenChuyenKhoan.trim() || !stk.trim() || !banks.some((bank) => bank.MaNganHang === maNH)}
                     >
                         Lưu
                     </Button>

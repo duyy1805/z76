@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
     Box, Paper, Table, TableContainer, TableHead, TableRow, TableCell, TableBody, Typography,
     Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -33,6 +33,89 @@ import { useAuth } from "../store/useAuth";
 
 const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
+const PAYMENT_CONTENT_MAX_LENGTH = 200;
+const validatePaymentContent = (value = "") => {
+    const content = String(value).trim();
+    if (!content) return "Nhập nội dung";
+    if (content.length > PAYMENT_CONTENT_MAX_LENGTH) return `Nội dung thanh toán không quá ${PAYMENT_CONTENT_MAX_LENGTH} ký tự`;
+    if (content.includes("/")) return "Nội dung thanh toán không được dùng dấu /";
+    return "";
+};
+const VN_NUMBER_WORDS = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+const VN_NUMBER_UNITS = ["", "nghìn", "triệu", "tỷ"];
+
+const capitalizeFirst = (value = "") => value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+
+const readVietnameseTriple = (value, forceFull = false) => {
+    const hundreds = Math.floor(value / 100);
+    const tens = Math.floor((value % 100) / 10);
+    const ones = value % 10;
+    const parts = [];
+
+    if (hundreds > 0) {
+        parts.push(`${VN_NUMBER_WORDS[hundreds]} trăm`);
+    } else if (forceFull && (tens > 0 || ones > 0)) {
+        parts.push("không trăm");
+    }
+
+    if (tens > 1) {
+        parts.push(`${VN_NUMBER_WORDS[tens]} mươi`);
+    } else if (tens === 1) {
+        parts.push("mười");
+    } else if (ones > 0 && (hundreds > 0 || forceFull)) {
+        parts.push("lẻ");
+    }
+
+    if (ones > 0) {
+        if (ones === 1 && tens > 1) parts.push("mốt");
+        else if (ones === 4 && tens > 1) parts.push("tư");
+        else if (ones === 5 && tens >= 1) parts.push("lăm");
+        else parts.push(VN_NUMBER_WORDS[ones]);
+    }
+
+    return parts.join(" ");
+};
+
+const readVietnameseInteger = (value) => {
+    const number = Math.trunc(Math.abs(Number(value)));
+    if (!Number.isFinite(number)) return "";
+    if (number === 0) return VN_NUMBER_WORDS[0];
+
+    const groups = [];
+    let remaining = number;
+    while (remaining > 0) {
+        groups.unshift(remaining % 1000);
+        remaining = Math.floor(remaining / 1000);
+    }
+
+    return groups
+        .map((group, index) => {
+            if (group === 0) return "";
+            const unitIndex = (groups.length - index - 1) % VN_NUMBER_UNITS.length;
+            const billionRepeat = Math.floor((groups.length - index - 1) / VN_NUMBER_UNITS.length);
+            const unit = [VN_NUMBER_UNITS[unitIndex], ...Array(billionRepeat).fill("tỷ")].filter(Boolean).join(" ");
+            return `${readVietnameseTriple(group, index > 0)} ${unit}`.trim();
+        })
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+};
+
+const amountToVietnameseText = (value, currencyCode = "VND") => {
+    if (value === "" || value == null || Number(value) <= 0) return "";
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "";
+
+    const [integerText, decimalText = ""] = String(value).split(".");
+    const integerWords = readVietnameseInteger(integerText);
+    const fractionWords = decimalText.replace(/0+$/, "")
+        ? ` phẩy ${decimalText.replace(/0+$/, "").split("").map((digit) => VN_NUMBER_WORDS[Number(digit)]).join(" ")}`
+        : "";
+    const suffix = currencyCode === "VND" ? "đồng" : currencyCode;
+
+    return `${capitalizeFirst(integerWords)}${fractionWords} ${suffix}`.replace(/\s+/g, " ").trim();
+};
 const ACTION_COLUMN_WIDTH = 136;
 const stickyActionCellSx = {
     position: { xs: "static", md: "sticky" },
@@ -137,6 +220,76 @@ const MobileSectionTitle = ({ children }) => (
     </Typography>
 );
 
+const PaymentContentField = memo(function PaymentContentField({ value, onCommit }) {
+    const [localValue, setLocalValue] = useState(value || "");
+    const deferredValue = useDeferredValue(localValue);
+    const errorText = validatePaymentContent(deferredValue);
+    const helperText = errorText || `${String(deferredValue || "").trim().length}/${PAYMENT_CONTENT_MAX_LENGTH} ký tự. Không dùng dấu /.`;
+
+    useEffect(() => {
+        setLocalValue(value || "");
+    }, [value]);
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            onCommit(localValue);
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [localValue, onCommit]);
+
+    return (
+        <TextField
+            label="Nội dung"
+            fullWidth
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onBlur={() => onCommit(localValue)}
+            error={!!deferredValue && !!errorText}
+            helperText={helperText}
+            inputProps={{ maxLength: PAYMENT_CONTENT_MAX_LENGTH }}
+        />
+    );
+});
+
+const PaymentAmountField = memo(function PaymentAmountField({ value, currencyCode, onCommit }) {
+    const [localValue, setLocalValue] = useState(value ?? "");
+    const deferredValue = useDeferredValue(localValue);
+    const amountText = amountToVietnameseText(deferredValue, currencyCode || "VND");
+
+    useEffect(() => {
+        setLocalValue(value ?? "");
+    }, [value]);
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            onCommit(localValue);
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [localValue, onCommit]);
+
+    return (
+        <>
+            <NumericFormat
+                customInput={TextField}
+                label={`Số tiền (${currencyCode || "VND"})`}
+                thousandSeparator="."
+                decimalSeparator=","
+                allowNegative={false}
+                value={localValue}
+                onValueChange={(values) => {
+                    setLocalValue(values.floatValue ?? "");
+                }}
+                onBlur={() => onCommit(localValue)}
+            />
+            {amountText && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: -1 }}>
+                    Bằng chữ: {amountText}
+                </Typography>
+            )}
+        </>
+    );
+});
+
 export default function PhieuSec({ mode = "VND" }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -163,6 +316,7 @@ export default function PhieuSec({ mode = "VND" }) {
     // dialog thêm đơn vị
     const [openAddDv, setOpenAddDv] = useState(false);
     const [dvName, setDvName] = useState("");
+    const [dvTenChuyenKhoan, setDvTenChuyenKhoan] = useState("");
     const [dvStk, setDvStk] = useState("");
     const [dvMaNH, setDvMaNH] = useState("");
     const [dvChiNhanhNH, setDvChiNhanhNH] = useState("");
@@ -171,12 +325,18 @@ export default function PhieuSec({ mode = "VND" }) {
     const [form, setForm] = useState({
         noiDung: "",
         donViId: 1,
-        soTien: 0,
+        soTien: "",
         nguoiDangKyId: user?.id || null,
         ghiChu: "",
         maLoaiChiPhi: "Khac",
         maLoaiTien: isNgoaiTe ? "" : "VND",
     });
+    const handleNoiDungCommit = useCallback((value) => {
+        setForm((current) => current.noiDung === value ? current : { ...current, noiDung: value });
+    }, []);
+    const handleSoTienCommit = useCallback((value) => {
+        setForm((current) => current.soTien === value ? current : { ...current, soTien: value });
+    }, []);
 
     // nhập lệnh chi
     const [newLenhChi, setNewLenhChi] = useState("");
@@ -297,20 +457,24 @@ export default function PhieuSec({ mode = "VND" }) {
     const canReject = (p) =>
         canApprove(p) || (hasPermission("KTT") && p?.trangThai === "ChoDuyet_GD");
 
+    const isPendingLenhChi = (p) => p?.trangThai === "HoanThanh" && !p?.maLenhChi;
+
     const canReturn = (p) =>
-        hasPermission("KTT") && ["ChoDuyet_KTT", "ChoDuyet_GD"].includes(p?.trangThai);
+        (hasPermission("KTT") && ["ChoDuyet_KTT", "ChoDuyet_GD"].includes(p?.trangThai)) ||
+        (isPendingLenhChi(p) && (hasPermission("TaoLenhChi") || hasPermission("KTT") || hasPermission("Admin")));
 
     const canEdit = (p) =>
         p?.trangThai === "ChoDuyet_TBP" && (hasPermission("Admin") || Number(p?.nguoiDangKyId) === Number(user?.id));
 
     const getDonViByPhieu = (p) => donvis.find((d) => d.id === p?.donViId);
     const getTenNganHang = (p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null;
+    const getTenChuyenKhoan = (p) => p?.tenChuyenKhoanHuongThu || getDonViByPhieu(p)?.tenChuyenKhoan || p?.tenDonVi || getDonViByPhieu(p)?.name || null;
 
     const resetForm = () => {
         setForm({
             noiDung: "",
             donViId: donvis[0]?.id || 1,
-            soTien: 0,
+            soTien: "",
             nguoiDangKyId: user?.id || null,
             ghiChu: "",
             maLoaiChiPhi: "Khac",
@@ -413,7 +577,10 @@ export default function PhieuSec({ mode = "VND" }) {
             if (!canReturn(returnTarget)) throw new Error("Bạn không có quyền trả lại phiếu ở bước này");
             const updated = await api.returnPhieu(returnTarget.id, role, user, reason);
             setDetail((d) => (d && d.id === updated.id ? updated : d));
-            await load();
+            setRows((r) => (r ? r.map((x) => (x.id === updated.id ? updated : x)) : r));
+            setPendingLenhChiRows((r) => (r ? r.filter((x) => x.id !== updated.id) : r));
+            if (activeTab === "pending") await loadPendingLenhChi();
+            else await load();
             setReturnOpen(false);
             setReturnTarget(null);
             setReturnReason("");
@@ -427,13 +594,14 @@ export default function PhieuSec({ mode = "VND" }) {
 
     const submitCreate = async () => {
         try {
-            if (!form.noiDung.trim()) throw new Error("Nhập nội dung");
+            const noiDungError = validatePaymentContent(form.noiDung);
+            if (noiDungError) throw new Error(noiDungError);
             if (!form.soTien || Number(form.soTien) <= 0) throw new Error("Số tiền > 0");
             if (isNgoaiTe && !form.maLoaiTien) throw new Error("Chọn loại tiền ngoại tệ");
 
             const payload = {
                 ngay: new Date().toISOString().slice(0, 10),
-                noiDung: form.noiDung,
+                noiDung: form.noiDung.trim(),
                 donViId: form.donViId,
                 soTien: Number(form.soTien),
                 nguoiDangKyId: user?.id,
@@ -463,6 +631,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
     const openAddDonVi = () => {
         setDvName("");
+        setDvTenChuyenKhoan("");
         setDvStk("");
         setDvMaNH("");
         setDvChiNhanhNH("");
@@ -471,18 +640,19 @@ export default function PhieuSec({ mode = "VND" }) {
 
     const saveDonVi = async () => {
         const n = dvName.trim();
+        const transferName = dvTenChuyenKhoan.trim() || null;
         const s = dvStk?.trim();
         const m = dvMaNH?.trim();
         const branch = dvChiNhanhNH?.trim() || null;
         const selectedBank = banks.find((bank) => bank.MaNganHang === m);
-        if (!n || !s || !m || !selectedBank) {
-            setToast({ open: true, msg: "Nhập đủ tên đơn vị, số tài khoản và mã ngân hàng", type: "error" });
+        if (!n || !transferName || !s || !m || !selectedBank) {
+            setToast({ open: true, msg: "Nhập đủ tên đơn vị, tên chuyển khoản, số tài khoản và mã ngân hàng", type: "error" });
             return;
         }
         try {
             setSavingDv(true);
-            const created = await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch }); // { id, name, ... }
-            const createdWithBank = { ...created, tenNganHang: selectedBank.TenNganHang };
+            const created = await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName }); // { id, name, ... }
+            const createdWithBank = { ...created, tenChuyenKhoan: transferName, tenNganHang: selectedBank.TenNganHang };
             // cập nhật danh sách + chọn ngay đơn vị mới
             setDonvis((list) => {
                 const next = [...(list || []), createdWithBank];
@@ -645,6 +815,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 const donVi = donvis.find((d) => d.id === r.donViId);
                 const searchableDonVi = [
                     r.tenDonVi, donVi?.name,
+                    getTenChuyenKhoan(r),
                     r.soTaiKhoanHuongThu, donVi?.stk,
                     r.maNganHangHuongThu, donVi?.maNganHang,
                     getTenNganHang(r),
@@ -668,6 +839,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     r.tenNguoiTao,
                     r.tenDonVi,
                     donVi?.name,
+                    getTenChuyenKhoan(r),
                     r.soTien,
                     r.maLoaiTien,
                     r.noiDung,
@@ -797,6 +969,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 Ngày: isoToDisplay(row.ngay).split(" ")[0],
                 "Nội dung": row.noiDung,
                 "Đơn vị hưởng thụ": row.tenDonVi || donVi?.name,
+                "Tên chuyển khoản": getTenChuyenKhoan(row),
                 "Số tài khoản": row.soTaiKhoanHuongThu || donVi?.stk,
                 "Mã ngân hàng": row.maNganHangHuongThu || donVi?.maNganHang,
                 "Tên ngân hàng": getTenNganHang(row),
@@ -815,7 +988,7 @@ export default function PhieuSec({ mode = "VND" }) {
         const sheet = XLSX.utils.json_to_sheet(data);
         sheet["!cols"] = [
             { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 42 }, { wch: 30 },
-            { wch: 20 }, { wch: 16 }, { wch: 34 }, { wch: 28 }, { wch: 18 }, { wch: 12 },
+            { wch: 30 }, { wch: 20 }, { wch: 16 }, { wch: 34 }, { wch: 28 }, { wch: 18 }, { wch: 12 },
             { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 24 }, { wch: 28 },
             { wch: 36 },
         ];
@@ -853,7 +1026,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 "116000002441",
                 Math.round(Number(row.soTien || 0)),
                 row.soTaiKhoanHuongThu || donVi?.stk || "",
-                row.tenDonVi || donVi?.name || "",
+                getTenChuyenKhoan(row) || "",
                 row.maNganHangHuongThu || donVi?.maNganHang || "",
                 row.noiDung || "",
                 "",
@@ -1099,409 +1272,415 @@ export default function PhieuSec({ mode = "VND" }) {
             {!filteredRows ? null : (
                 <>
                     <Box sx={{ display: { xs: "none", md: "block" } }}>
-                <TableContainer
-                    component={Paper}
-                    sx={{
-                        maxWidth: "100%",
-                        maxHeight: "calc(100vh - 240px)",
-                        overflow: "auto",
-                    }}
-                >
-                    <Table size="small" stickyHeader sx={{ minWidth: 2100 }}>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>STT</TableCell>
+                        <TableContainer
+                            component={Paper}
+                            sx={{
+                                maxWidth: "100%",
+                                maxHeight: "calc(100vh - 240px)",
+                                overflow: "auto",
+                            }}
+                        >
+                            <Table size="small" stickyHeader sx={{ minWidth: 2100 }}>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>STT</TableCell>
 
-                                {/* Mã sổ séc + filter icon */}
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <span>Mã sổ séc</span>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => setAnchorMa(e.currentTarget)}
-                                            aria-label="Lọc theo Mã sổ séc"
-                                            color={qMa ? "primary" : "default"}
-                                        >
-                                            <FilterListRoundedIcon fontSize="inherit" />
-                                        </IconButton>
-                                    </Stack>
-
-                                    <Popover
-                                        open={Boolean(anchorMa)}
-                                        anchorEl={anchorMa}
-                                        onClose={() => setAnchorMa(null)}
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                        PaperProps={{ sx: { p: 1.5, width: 280 } }}
-                                    >
-                                        <Stack spacing={1}>
-                                            <TextField
-                                                label="Mã sổ séc"
-                                                placeholder="VD: SS-1024 hoặc ABC123"
-                                                value={qMa}
-                                                onChange={(e) => setQMa(e.target.value)}
-                                                autoFocus
-                                                size="small"
-                                            />
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                {!!qMa && (
-                                                    <Button startIcon={<ClearIcon />} onClick={() => clearFilter("ma")} size="small">
-                                                        Xoá
-                                                    </Button>
-                                                )}
-                                                <Button variant="contained" size="small" onClick={() => setAnchorMa(null)}>
-                                                    OK
-                                                </Button>
+                                        {/* Mã sổ séc + filter icon */}
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Mã sổ séc</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => setAnchorMa(e.currentTarget)}
+                                                    aria-label="Lọc theo Mã sổ séc"
+                                                    color={qMa ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
                                             </Stack>
-                                        </Stack>
-                                    </Popover>
-                                </TableCell>
 
-                                {/* Ngày */}
-                                <TableCell>Ngày</TableCell>
-
-                                {/* Nội dung + filter icon */}
-                                <TableCell sx={{ minWidth: 240 }}>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <span>Nội dung</span>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => setAnchorNoiDung(e.currentTarget)}
-                                            aria-label="Lọc theo Nội dung"
-                                            color={qNoiDung ? "primary" : "default"}
-                                        >
-                                            <FilterListRoundedIcon fontSize="inherit" />
-                                        </IconButton>
-                                    </Stack>
-
-                                    <Popover
-                                        open={Boolean(anchorNoiDung)}
-                                        anchorEl={anchorNoiDung}
-                                        onClose={() => setAnchorNoiDung(null)}
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                        PaperProps={{ sx: { p: 1.5, width: 360 } }}
-                                    >
-                                        <Stack spacing={1}>
-                                            <TextField
-                                                label="Nội dung"
-                                                placeholder="Nhập từ khoá…"
-                                                value={qNoiDung}
-                                                onChange={(e) => setQNoiDung(e.target.value)}
-                                                autoFocus
-                                                size="small"
-                                            />
-                                            <Typography variant="caption" color="text.secondary">
-                                                Tìm không dấu, chứa chuỗi.
-                                            </Typography>
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                {!!qNoiDung && (
-                                                    <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nd")} size="small">
-                                                        Xoá
-                                                    </Button>
-                                                )}
-                                                <Button variant="contained" size="small" onClick={() => setAnchorNoiDung(null)}>
-                                                    OK
-                                                </Button>
-                                            </Stack>
-                                        </Stack>
-                                    </Popover>
-                                </TableCell>
-
-                                {/* Đơn vị (TextField filter) */}
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <span>Đơn vị</span>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => setAnchorDonVi(e.currentTarget)}
-                                            aria-label="Lọc theo Đơn vị"
-                                            color={qDonVi ? "primary" : "default"}
-                                        >
-                                            <FilterListRoundedIcon fontSize="inherit" />
-                                        </IconButton>
-                                    </Stack>
-
-                                    <Popover
-                                        open={Boolean(anchorDonVi)}
-                                        anchorEl={anchorDonVi}
-                                        onClose={() => setAnchorDonVi(null)}
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                        PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                    >
-                                        <Stack spacing={1}>
-                                            <TextField
-                                                label="Tên đơn vị"
-                                                placeholder="Nhập từ khoá đơn vị…"
-                                                value={qDonVi}
-                                                onChange={(e) => setQDonVi(e.target.value)}
-                                                autoFocus
-                                                size="small"
-                                            />
-                                            <Typography variant="caption" color="text.secondary">
-                                                Tìm theo tên, STK, mã ngân hàng hoặc chi nhánh.
-                                            </Typography>
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                {!!qDonVi && (
-                                                    <Button startIcon={<ClearIcon />} onClick={() => clearFilter("dv")} size="small">
-                                                        Xoá
-                                                    </Button>
-                                                )}
-                                                <Button variant="contained" size="small" onClick={() => setAnchorDonVi(null)}>
-                                                    OK
-                                                </Button>
-                                            </Stack>
-                                        </Stack>
-                                    </Popover>
-                                </TableCell>
-
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>Số tài khoản</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>Mã ngân hàng</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>Tên ngân hàng</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>Chi nhánh ngân hàng</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <span>Người tạo</span>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => setAnchorNguoiTao(e.currentTarget)}
-                                            aria-label="Lọc theo Người tạo"
-                                            color={qNguoiTao ? "primary" : "default"}
-                                        >
-                                            <FilterListRoundedIcon fontSize="inherit" />
-                                        </IconButton>
-                                    </Stack>
-
-                                    <Popover
-                                        open={Boolean(anchorNguoiTao)}
-                                        anchorEl={anchorNguoiTao}
-                                        onClose={() => setAnchorNguoiTao(null)}
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                        PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                    >
-                                        <Stack spacing={1}>
-                                            <TextField
-                                                label="Tên người tạo"
-                                                placeholder="Nhập tên người tạo…"
-                                                value={qNguoiTao}
-                                                onChange={(e) => setQNguoiTao(e.target.value)}
-                                                autoFocus
-                                                size="small"
-                                            />
-                                            <Typography variant="caption" color="text.secondary">
-                                                Tìm theo tên không dấu, chứa chuỗi.
-                                            </Typography>
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                {!!qNguoiTao && (
-                                                    <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nguoiTao")} size="small">
-                                                        Xoá
-                                                    </Button>
-                                                )}
-                                                <Button variant="contained" size="small" onClick={() => setAnchorNguoiTao(null)}>
-                                                    OK
-                                                </Button>
-                                            </Stack>
-                                        </Stack>
-                                    </Popover>
-                                </TableCell>
-
-                                <TableCell>Loại chi phí</TableCell>
-                                <TableCell>Loại tiền</TableCell>
-                                <TableCell align="right">Số tiền</TableCell>
-                                <TableCell align="right">Mã lệnh chi</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <span>Ngày hoàn thành</span>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => setAnchorCompleted(e.currentTarget)}
-                                            aria-label="Lọc theo ngày hoàn thành"
-                                            color={qCompletedFrom || qCompletedTo ? "primary" : "default"}
-                                        >
-                                            <FilterListRoundedIcon fontSize="inherit" />
-                                        </IconButton>
-                                    </Stack>
-                                    <Popover
-                                        open={Boolean(anchorCompleted)}
-                                        anchorEl={anchorCompleted}
-                                        onClose={() => setAnchorCompleted(null)}
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                        PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                    >
-                                        <LocalizationProvider dateAdapter={AdapterDayjs}>
-                                            <Stack spacing={1.25}>
-                                                <DatePicker
-                                                    label="Từ ngày"
-                                                    value={qCompletedFrom}
-                                                    onChange={setQCompletedFrom}
-                                                    slotProps={{ textField: { size: "small" } }}
-                                                />
-                                                <DatePicker
-                                                    label="Đến ngày"
-                                                    value={qCompletedTo}
-                                                    onChange={setQCompletedTo}
-                                                    slotProps={{ textField: { size: "small" } }}
-                                                />
-                                                <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                    {(qCompletedFrom || qCompletedTo) && (
-                                                        <Button startIcon={<ClearIcon />} onClick={() => clearFilter("completed")} size="small">
-                                                            Xóa
-                                                        </Button>
-                                                    )}
-                                                    <Button variant="contained" size="small" onClick={() => setAnchorCompleted(null)}>
-                                                        OK
-                                                    </Button>
-                                                </Stack>
-                                            </Stack>
-                                        </LocalizationProvider>
-                                    </Popover>
-                                </TableCell>
-                                <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
-                                    <Stack direction="row" spacing={0.5} alignItems="center">
-                                        <span>Trạng thái</span>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => setAnchorTrangThai(e.currentTarget)}
-                                            aria-label="Lọc theo Trạng thái"
-                                            color={qTrangThai ? "primary" : "default"}
-                                        >
-                                            <FilterListRoundedIcon fontSize="inherit" />
-                                        </IconButton>
-                                    </Stack>
-
-                                    <Popover
-                                        open={Boolean(anchorTrangThai)}
-                                        anchorEl={anchorTrangThai}
-                                        onClose={() => setAnchorTrangThai(null)}
-                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                        PaperProps={{ sx: { p: 1.5, width: 240 } }}
-                                    >
-                                        <Stack spacing={1}>
-                                            <TextField
-                                                select
-                                                label="Chọn trạng thái"
-                                                value={qTrangThai}
-                                                onChange={(e) => setQTrangThai(e.target.value)}
-                                                size="small"
+                                            <Popover
+                                                open={Boolean(anchorMa)}
+                                                anchorEl={anchorMa}
+                                                onClose={() => setAnchorMa(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 280 } }}
                                             >
-                                                <MenuItem value="">Tất cả</MenuItem>
-                                                <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
-                                                <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
-                                                <MenuItem value="ChoDuyet_GD">Chờ duyệt Giám đốc</MenuItem>
-                                                <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
-                                                <MenuItem value="TuChoi">Từ chối</MenuItem>
-                                                <MenuItem value="HoanThanh_ChuaCoLenhChi">Hoàn thành - chờ lệnh chi</MenuItem>
-                                                <MenuItem value="HoanThanh_DaCoLenhChi">Hoàn thành - đã có lệnh chi</MenuItem>
-                                            </TextField>
+                                                <Stack spacing={1}>
+                                                    <TextField
+                                                        label="Mã sổ séc"
+                                                        placeholder="VD: SS-1024 hoặc ABC123"
+                                                        value={qMa}
+                                                        onChange={(e) => setQMa(e.target.value)}
+                                                        autoFocus
+                                                        size="small"
+                                                    />
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {!!qMa && (
+                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("ma")} size="small">
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button variant="contained" size="small" onClick={() => setAnchorMa(null)}>
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
 
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                {!!qTrangThai && (
-                                                    <Button startIcon={<ClearIcon />} onClick={() => setQTrangThai("")} size="small">
-                                                        Xoá
-                                                    </Button>
-                                                )}
-                                                <Button variant="contained" size="small" onClick={() => setAnchorTrangThai(null)}>
-                                                    OK
-                                                </Button>
+                                        {/* Ngày */}
+                                        <TableCell>Ngày</TableCell>
+
+                                        {/* Nội dung + filter icon */}
+                                        <TableCell sx={{ minWidth: 240 }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Nội dung</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => setAnchorNoiDung(e.currentTarget)}
+                                                    aria-label="Lọc theo Nội dung"
+                                                    color={qNoiDung ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
                                             </Stack>
-                                        </Stack>
-                                    </Popover>
-                                </TableCell>
-                                <TableCell sx={{ ...stickyActionCellSx, zIndex: 4 }}>Thao tác</TableCell>
-                            </TableRow>
-                        </TableHead>
 
-                        <TableBody>
-                            {filteredRows.map((r, i) => (
-                                <TableRow
-                                    key={r.id}
-                                    hover
-                                    sx={{ cursor: "pointer" }}
-                                    onClick={() => {
-                                        if (hasSelectedText()) return;
-                                        openDetailDialog(r);
-                                    }}
-                                >
-                                    <TableCell>{i + 1}</TableCell>
-                                    <TableCell>{r.maSoSec || `SS-${r.id}`}</TableCell>
-                                    <TableCell>{isoToDisplay(r.ngay).split(" ")[0]}</TableCell>
-                                    <TableCell>
-                                        <Tooltip title={r.ghiChu || ""}><span>{r.noiDung}</span></Tooltip>
-                                    </TableCell>
-                                    <TableCell>{donvis.find((d) => d.id === r.donViId)?.name || r.donViId}</TableCell>
-                                    <TableCell>{r.soTaiKhoanHuongThu || donvis.find((d) => d.id === r.donViId)?.stk || "—"}</TableCell>
-                                    <TableCell>{r.maNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.maNganHang || "—"}</TableCell>
-                                    <TableCell>{getTenNganHang(r) || "—"}</TableCell>
-                                    <TableCell>{r.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.chiNhanhNganHang || "—"}</TableCell>
-                                    <TableCell>{r.tenNguoiTao || "—"}</TableCell>
-                                    <TableCell>{EXPENSE_LABELS[r.maLoaiChiPhi] || r.maLoaiChiPhi || "—"}</TableCell>
-                                    <TableCell>{r.maLoaiTien || "VND"}</TableCell>
-                                    <TableCell align="right">{fmtMoney(r.soTien)}</TableCell>
-                                    <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
-                                    <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
-                                    <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
-                                    <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
-                                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 40px)", alignItems: "center" }}>
-                                            <Box sx={{ visibility: canEdit(r) || canReturn(r) ? "visible" : "hidden" }}>
-                                                {canEdit(r) ? (
-                                                    <IconButton
-                                                        color="primary"
-                                                        onClick={(e) => openEditDialog(r, e)}
-                                                        aria-label="Sửa phiếu"
+                                            <Popover
+                                                open={Boolean(anchorNoiDung)}
+                                                anchorEl={anchorNoiDung}
+                                                onClose={() => setAnchorNoiDung(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 360 } }}
+                                            >
+                                                <Stack spacing={1}>
+                                                    <TextField
+                                                        label="Nội dung"
+                                                        placeholder="Nhập từ khoá…"
+                                                        value={qNoiDung}
+                                                        onChange={(e) => setQNoiDung(e.target.value)}
+                                                        autoFocus
+                                                        size="small"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Tìm không dấu, chứa chuỗi.
+                                                    </Typography>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {!!qNoiDung && (
+                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nd")} size="small">
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button variant="contained" size="small" onClick={() => setAnchorNoiDung(null)}>
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
+
+                                        {/* Đơn vị (TextField filter) */}
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Đơn vị</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => setAnchorDonVi(e.currentTarget)}
+                                                    aria-label="Lọc theo Đơn vị"
+                                                    color={qDonVi ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Stack>
+
+                                            <Popover
+                                                open={Boolean(anchorDonVi)}
+                                                anchorEl={anchorDonVi}
+                                                onClose={() => setAnchorDonVi(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                            >
+                                                <Stack spacing={1}>
+                                                    <TextField
+                                                        label="Tên đơn vị"
+                                                        placeholder="Nhập từ khoá đơn vị…"
+                                                        value={qDonVi}
+                                                        onChange={(e) => setQDonVi(e.target.value)}
+                                                        autoFocus
+                                                        size="small"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Tìm theo tên, STK, mã ngân hàng hoặc chi nhánh.
+                                                    </Typography>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {!!qDonVi && (
+                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("dv")} size="small">
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button variant="contained" size="small" onClick={() => setAnchorDonVi(null)}>
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
+
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>Số tài khoản</TableCell>
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>Mã ngân hàng</TableCell>
+                                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>Tên ngân hàng</TableCell>
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>Chi nhánh ngân hàng</TableCell>
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Người tạo</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => setAnchorNguoiTao(e.currentTarget)}
+                                                    aria-label="Lọc theo Người tạo"
+                                                    color={qNguoiTao ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Stack>
+
+                                            <Popover
+                                                open={Boolean(anchorNguoiTao)}
+                                                anchorEl={anchorNguoiTao}
+                                                onClose={() => setAnchorNguoiTao(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                            >
+                                                <Stack spacing={1}>
+                                                    <TextField
+                                                        label="Tên người tạo"
+                                                        placeholder="Nhập tên người tạo…"
+                                                        value={qNguoiTao}
+                                                        onChange={(e) => setQNguoiTao(e.target.value)}
+                                                        autoFocus
+                                                        size="small"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Tìm theo tên không dấu, chứa chuỗi.
+                                                    </Typography>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {!!qNguoiTao && (
+                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nguoiTao")} size="small">
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button variant="contained" size="small" onClick={() => setAnchorNguoiTao(null)}>
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
+
+                                        <TableCell>Loại chi phí</TableCell>
+                                        <TableCell>Loại tiền</TableCell>
+                                        <TableCell align="right">Số tiền</TableCell>
+                                        <TableCell align="right">Mã lệnh chi</TableCell>
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Ngày hoàn thành</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => setAnchorCompleted(e.currentTarget)}
+                                                    aria-label="Lọc theo ngày hoàn thành"
+                                                    color={qCompletedFrom || qCompletedTo ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Stack>
+                                            <Popover
+                                                open={Boolean(anchorCompleted)}
+                                                anchorEl={anchorCompleted}
+                                                onClose={() => setAnchorCompleted(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                            >
+                                                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                                    <Stack spacing={1.25}>
+                                                        <DatePicker
+                                                            label="Từ ngày"
+                                                            value={qCompletedFrom}
+                                                            onChange={setQCompletedFrom}
+                                                            slotProps={{ textField: { size: "small" } }}
+                                                        />
+                                                        <DatePicker
+                                                            label="Đến ngày"
+                                                            value={qCompletedTo}
+                                                            onChange={setQCompletedTo}
+                                                            slotProps={{ textField: { size: "small" } }}
+                                                        />
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {(qCompletedFrom || qCompletedTo) && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("completed")} size="small">
+                                                                    Xóa
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorCompleted(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </LocalizationProvider>
+                                            </Popover>
+                                        </TableCell>
+                                        <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Trạng thái</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => setAnchorTrangThai(e.currentTarget)}
+                                                    aria-label="Lọc theo Trạng thái"
+                                                    color={qTrangThai ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Stack>
+
+                                            <Popover
+                                                open={Boolean(anchorTrangThai)}
+                                                anchorEl={anchorTrangThai}
+                                                onClose={() => setAnchorTrangThai(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 240 } }}
+                                            >
+                                                <Stack spacing={1}>
+                                                    <TextField
+                                                        select
+                                                        label="Chọn trạng thái"
+                                                        value={qTrangThai}
+                                                        onChange={(e) => setQTrangThai(e.target.value)}
+                                                        size="small"
                                                     >
-                                                        <EditIcon />
-                                                    </IconButton>
-                                                ) : (
-                                                    <Tooltip title="Trả lại để chỉnh sửa">
-                                                        <IconButton
-                                                            color="warning"
-                                                            onClick={(e) => openReturnDialog(r, e)}
-                                                            aria-label="Trả lại phiếu"
-                                                        >
-                                                            <KeyboardReturnIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                )}
-                                            </Box>
-                                            <span>
-                                                <IconButton
-                                                    color="success"
-                                                    disabled={!canApprove(r)}
-                                                    onClick={(e) => handleApprove(r, true, e)}
-                                                >
-                                                    <CheckCircleIcon />
-                                                </IconButton>
-                                            </span>
-                                            <span>
-                                                <IconButton
-                                                    color="error"
-                                                    disabled={!canReject(r)}
-                                                    onClick={(e) => handleApprove(r, false, e)}
-                                                >
-                                                    <CancelIcon />
-                                                </IconButton>
-                                            </span>
-                                        </Box>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                                        <MenuItem value="">Tất cả</MenuItem>
+                                                        <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
+                                                        <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
+                                                        <MenuItem value="ChoDuyet_GD">Chờ duyệt Giám đốc</MenuItem>
+                                                        <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
+                                                        <MenuItem value="TuChoi">Từ chối</MenuItem>
+                                                        <MenuItem value="HoanThanh_ChuaCoLenhChi">Hoàn thành - chờ lệnh chi</MenuItem>
+                                                        <MenuItem value="HoanThanh_DaCoLenhChi">Hoàn thành - đã có lệnh chi</MenuItem>
+                                                    </TextField>
 
-                            {filteredRows.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={17}>
-                                        <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
-                                            Không có bản ghi phù hợp.
-                                        </Typography>
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {!!qTrangThai && (
+                                                            <Button startIcon={<ClearIcon />} onClick={() => setQTrangThai("")} size="small">
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button variant="contained" size="small" onClick={() => setAnchorTrangThai(null)}>
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
+                                        <TableCell sx={{ ...stickyActionCellSx, zIndex: 4 }}>Thao tác</TableCell>
+                                    </TableRow>
+                                </TableHead>
+
+                                <TableBody>
+                                    {filteredRows.map((r, i) => (
+                                        <TableRow
+                                            key={r.id}
+                                            hover
+                                            sx={{ cursor: "pointer" }}
+                                            onClick={() => {
+                                                if (hasSelectedText()) return;
+                                                openDetailDialog(r);
+                                            }}
+                                        >
+                                            <TableCell>{i + 1}</TableCell>
+                                            <TableCell>{r.maSoSec || `SS-${r.id}`}</TableCell>
+                                            <TableCell>{isoToDisplay(r.ngay).split(" ")[0]}</TableCell>
+                                            <TableCell>
+                                                <Tooltip title={r.ghiChu || ""}><span>{r.noiDung}</span></Tooltip>
+                                            </TableCell>
+                                            <TableCell>{donvis.find((d) => d.id === r.donViId)?.name || r.donViId}</TableCell>
+                                            <TableCell>{r.soTaiKhoanHuongThu || donvis.find((d) => d.id === r.donViId)?.stk || "—"}</TableCell>
+                                            <TableCell>{r.maNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.maNganHang || "—"}</TableCell>
+                                            <TableCell>{getTenNganHang(r) || "—"}</TableCell>
+                                            <TableCell>{r.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.chiNhanhNganHang || "—"}</TableCell>
+                                            <TableCell>{r.tenNguoiTao || "—"}</TableCell>
+                                            <TableCell>{EXPENSE_LABELS[r.maLoaiChiPhi] || r.maLoaiChiPhi || "—"}</TableCell>
+                                            <TableCell>{r.maLoaiTien || "VND"}</TableCell>
+                                            <TableCell align="right">
+                                                <Tooltip title={amountToVietnameseText(r.soTien, r.maLoaiTien || "VND") || ""} arrow placement="top">
+                                                    <Typography component="span" sx={{ cursor: "help" }}>
+                                                        {fmtMoney(r.soTien)}
+                                                    </Typography>
+                                                </Tooltip>
+                                            </TableCell>
+                                            <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
+                                            <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
+                                            <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
+                                            <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
+                                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 40px)", alignItems: "center" }}>
+                                                    <Box sx={{ visibility: canEdit(r) || canReturn(r) ? "visible" : "hidden" }}>
+                                                        {canEdit(r) ? (
+                                                            <IconButton
+                                                                color="primary"
+                                                                onClick={(e) => openEditDialog(r, e)}
+                                                                aria-label="Sửa phiếu"
+                                                            >
+                                                                <EditIcon />
+                                                            </IconButton>
+                                                        ) : (
+                                                            <Tooltip title="Trả lại để chỉnh sửa">
+                                                                <IconButton
+                                                                    color="warning"
+                                                                    onClick={(e) => openReturnDialog(r, e)}
+                                                                    aria-label="Trả lại phiếu"
+                                                                >
+                                                                    <KeyboardReturnIcon />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                    </Box>
+                                                    <span>
+                                                        <IconButton
+                                                            color="success"
+                                                            disabled={!canApprove(r)}
+                                                            onClick={(e) => handleApprove(r, true, e)}
+                                                        >
+                                                            <CheckCircleIcon />
+                                                        </IconButton>
+                                                    </span>
+                                                    <span>
+                                                        <IconButton
+                                                            color="error"
+                                                            disabled={!canReject(r)}
+                                                            onClick={(e) => handleApprove(r, false, e)}
+                                                        >
+                                                            <CancelIcon />
+                                                        </IconButton>
+                                                    </span>
+                                                </Box>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+
+                                    {filteredRows.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={17}>
+                                                <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
+                                                    Không có bản ghi phù hợp.
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
                     </Box>
 
                     <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
@@ -1619,18 +1798,25 @@ export default function PhieuSec({ mode = "VND" }) {
                     {detail && (
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, flexWrap: "wrap", width: { xs: "100%", sm: "auto" }, justifyContent: { xs: "space-between", sm: "flex-end" } }}>
                             <StatusChip status={getDisplayStatus(detail)} />
-                            <Typography
-                                sx={{
-                                    px: 1.25,
-                                    py: 0.5,
-                                    borderRadius: 1,
-                                    bgcolor: "success.soft",
-                                    color: "success.darker",
-                                    fontWeight: 700,
-                                }}
+                            <Tooltip
+                                title={amountToVietnameseText(detail.soTien, detail.maLoaiTien || "VND") || ""}
+                                arrow
+                                placement="bottom"
                             >
-                                {fmtMoney(detail.soTien)} {detail.maLoaiTien || "VND"}
-                            </Typography>
+                                <Typography
+                                    sx={{
+                                        px: 1.25,
+                                        py: 0.5,
+                                        borderRadius: 1,
+                                        bgcolor: "success.soft",
+                                        color: "success.darker",
+                                        fontWeight: 700,
+                                        cursor: "help",
+                                    }}
+                                >
+                                    {fmtMoney(detail.soTien)} {detail.maLoaiTien || "VND"}
+                                </Typography>
+                            </Tooltip>
                         </Box>
                     )}
                 </DialogTitle>
@@ -1664,6 +1850,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                     <DetailField label="Đơn vị hưởng thụ">
                                         {detail.tenDonVi || (donvis.find((d) => d.id === detail.donViId)?.name) || `ID: ${detail.donViId}`}
                                     </DetailField>
+                                    <DetailField label="Tên chuyển khoản">{getTenChuyenKhoan(detail)}</DetailField>
                                     <DetailField label="Số tài khoản hưởng thụ">{detail.soTaiKhoanHuongThu || donvis.find((d) => d.id === detail.donViId)?.stk}</DetailField>
                                     <DetailField label="Mã ngân hàng">{detail.maNganHangHuongThu || donvis.find((d) => d.id === detail.donViId)?.maNganHang}</DetailField>
                                     <DetailField label="Tên ngân hàng">{getTenNganHang(detail) || "—"}</DetailField>
@@ -1984,11 +2171,9 @@ export default function PhieuSec({ mode = "VND" }) {
                 <DialogTitle>{editingPhieu ? "Sửa" : "Tạo"} phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} mt={1}>
-                        <TextField
-                            label="Nội dung"
-                            fullWidth
+                        <PaymentContentField
                             value={form.noiDung}
-                            onChange={(e) => setForm({ ...form, noiDung: e.target.value })}
+                            onCommit={handleNoiDungCommit}
                         />
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">
                             <Autocomplete
@@ -2004,12 +2189,15 @@ export default function PhieuSec({ mode = "VND" }) {
                                     const q = stripVN((inputValue || "").toLowerCase().trim());
                                     if (!q) return options;
                                     return options.filter((o) => stripVN(
-                                        [o?.name, o?.stk, o?.maNganHang, o?.tenNganHang, o?.chiNhanhNganHang].filter(Boolean).join(" ").toLowerCase()
+                                        [o?.name, o?.tenChuyenKhoan, o?.stk, o?.maNganHang, o?.tenNganHang, o?.chiNhanhNganHang].filter(Boolean).join(" ").toLowerCase()
                                     ).includes(q));
                                 }}
                                 renderOption={(props, option) => (
                                     <Box component="li" {...props} key={option.id} sx={{ display: "block !important", py: 1 }}>
                                         <Typography>{option.name}</Typography>
+                                        <Typography variant="caption" color="text.secondary" display="block">
+                                            Tên CK: {option.tenChuyenKhoan || "—"}
+                                        </Typography>
                                         <Typography variant="caption" color="text.secondary">
                                             STK: {option.stk || "—"} · Ma NH: {option.maNganHang || "—"} · Ten NH: {option.tenNganHang || "—"} · CN: {option.chiNhanhNganHang || "—"}
                                         </Typography>
@@ -2021,8 +2209,8 @@ export default function PhieuSec({ mode = "VND" }) {
                                         label="Đơn vị hưởng thụ"
                                         placeholder="Gõ tên đơn vị (không dấu)…"
                                         helperText={form.donViId
-                                            ? `STK: ${donvis.find((d) => d.id === form.donViId)?.stk || "—"} · Ma NH: ${donvis.find((d) => d.id === form.donViId)?.maNganHang || "—"} · Ten NH: ${donvis.find((d) => d.id === form.donViId)?.tenNganHang || "—"} · CN: ${donvis.find((d) => d.id === form.donViId)?.chiNhanhNganHang || "—"}`
-                                            : "Nhập tên, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
+                                            ? `Tên CK: ${donvis.find((d) => d.id === form.donViId)?.tenChuyenKhoan || "—"} · STK: ${donvis.find((d) => d.id === form.donViId)?.stk || "—"} · Ma NH: ${donvis.find((d) => d.id === form.donViId)?.maNganHang || "—"} · Ten NH: ${donvis.find((d) => d.id === form.donViId)?.tenNganHang || "—"} · CN: ${donvis.find((d) => d.id === form.donViId)?.chiNhanhNganHang || "—"}`
+                                            : "Nhập tên, tên chuyển khoản, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
                                     />
                                 )}
                                 ListboxProps={{ style: { maxHeight: 320 } }}
@@ -2074,18 +2262,10 @@ export default function PhieuSec({ mode = "VND" }) {
                             </TextField>
                         )}
 
-                        <NumericFormat
-                            customInput={TextField}
-                            label={`Số tiền (${isNgoaiTe ? form.maLoaiTien || "ngoại tệ" : "VND"})`}
-                            thousandSeparator=","
-                            decimalSeparator="."
-                            decimalScale={3}
-                            fixedDecimalScale
-                            allowNegative={false}
+                        <PaymentAmountField
                             value={form.soTien}
-                            onValueChange={(values) => {
-                                setForm({ ...form, soTien: values.floatValue || 0 });
-                            }}
+                            currencyCode={isNgoaiTe ? form.maLoaiTien || "ngoại tệ" : "VND"}
+                            onCommit={handleSoTienCommit}
                         />
                         <TextField
                             label="Ghi chú"
@@ -2110,6 +2290,16 @@ export default function PhieuSec({ mode = "VND" }) {
                             onChange={(e) => setDvName(e.target.value)}
                             fullWidth
                             required
+                        />
+                        <TextField
+                            label="Tên chuyển khoản"
+                            value={dvTenChuyenKhoan}
+                            onChange={(e) => setDvTenChuyenKhoan(e.target.value)}
+                            fullWidth
+                            required
+                            placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
+                            helperText="Nhập sai tên chuyển khoản có thể không chuyển tiền được. Vui lòng kiểm tra kỹ trước khi lưu."
+                            FormHelperTextProps={{ sx: { color: "error.main" } }}
                         />
                         <TextField
                             label="Số tài khoản (STK)"
@@ -2158,7 +2348,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     <Button
                         variant="contained"
                         onClick={saveDonVi}
-                        disabled={savingDv || !dvName.trim() || !dvStk.trim() || !banks.some((bank) => bank.MaNganHang === dvMaNH)}
+                        disabled={savingDv || !dvName.trim() || !dvTenChuyenKhoan.trim() || !dvStk.trim() || !banks.some((bank) => bank.MaNganHang === dvMaNH)}
                     >
                         {savingDv ? "Đang lưu..." : "Lưu"}
                     </Button>

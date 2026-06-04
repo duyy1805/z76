@@ -54,12 +54,12 @@ export const api = {
         const { data } = await http.get("/donvi");
         return data; // [{ id, name, stk, TonTai }]
     },
-    async createDonVi({ name, stk, maNganHang, chiNhanhNganHang }) {
-        const { data } = await http.post("/donvi", { name, stk, maNganHang, chiNhanhNganHang });
+    async createDonVi({ name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan }) {
+        const { data } = await http.post("/donvi", { name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan });
         return data;
     },
-    async updateDonVi(id, { name, stk, maNganHang, chiNhanhNganHang }) {
-        const { data } = await http.put(`/donvi/${id}`, { name, stk, maNganHang, chiNhanhNganHang });
+    async updateDonVi(id, { name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan }) {
+        const { data } = await http.put(`/donvi/${id}`, { name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan });
         return data;
     },
 
