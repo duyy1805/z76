@@ -66,17 +66,17 @@ export default function Login() {
                 alignItems: "center",
                 justifyContent: "center",
                 bgcolor: "background.default",
-                p: 2,
+                p: { xs: 1.5, sm: 2 },
             }}
         >
             <Paper
                 elevation={3}
-                sx={{ p: 4, width: 400, maxWidth: "90vw" }}
+                sx={{ p: { xs: 2.25, sm: 4 }, width: 400, maxWidth: "100%", borderRadius: { xs: 3, sm: 2 } }}
                 component="form"
                 onSubmit={onSubmit}
             >
                 <Stack spacing={2}>
-                    <Typography variant="h5" fontWeight={700} textAlign="center">
+                    <Typography variant="h5" fontWeight={700} textAlign="center" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
                         Đăng nhập Z76
                     </Typography>
 
@@ -123,6 +123,7 @@ export default function Login() {
                         type="submit"
                         variant="contained"
                         size="large"
+                        sx={{ minHeight: 46 }}
                         disabled={loading || !canSubmit}
                         startIcon={loading ? <CircularProgress size={20} /> : null}
                     >

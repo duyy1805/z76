@@ -5,12 +5,16 @@ import {
     Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab
 } from "@mui/material";
 import Autocomplete from "@mui/material/Autocomplete";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../lib/api";
 
 function SupplierLookup() {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const [rows, setRows] = useState([]);
     const [banks, setBanks] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -111,15 +115,15 @@ function SupplierLookup() {
 
     return (
         <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="h5" gutterBottom>Admin · Đơn vị hưởng thụ</Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1} sx={{ mb: 1 }}>
+                <Typography variant="h5" gutterBottom sx={{ fontSize: { xs: "1.15rem", sm: "1.5rem" }, fontWeight: 800 }}>Admin · Đơn vị hưởng thụ</Typography>
                 <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>
                     Thêm đơn vị
                 </Button>
             </Stack>
 
-            <Paper sx={{ mt: 1 }}>
-                <Table size="small">
+            <Paper sx={{ mt: 1, display: { xs: "none", md: "block" }, overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 980 }}>
                     <TableHead>
                         <TableRow>
                             <TableCell>#</TableCell>
@@ -175,8 +179,45 @@ function SupplierLookup() {
                 </Table>
             </Paper>
 
+            <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
+                {loading && (
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                            <CircularProgress size={20} />
+                            <Typography variant="body2">Đang tải…</Typography>
+                        </Stack>
+                    </Paper>
+                )}
+                {!loading && rows.length === 0 && (
+                    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>Không có dữ liệu</Paper>
+                )}
+                {!loading && rows.map((r) => (
+                    <Paper key={r.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2.5 }}>
+                        <Stack spacing={0.75}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                                <Box sx={{ minWidth: 0 }}>
+                                    <Typography sx={{ fontWeight: 800, fontSize: "0.95rem" }} noWrap>{r.name}</Typography>
+                                    <Typography variant="caption" color="text.secondary" noWrap>{r.stk || "—"}</Typography>
+                                </Box>
+                                <Chip size="small" label={r.TonTai ? "Đang dùng" : "Ngưng"} color={r.TonTai ? "success" : "default"} />
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary" noWrap>
+                                {r.maNganHang ? `${r.maNganHang}${r.tenNganHang ? ` - ${r.tenNganHang}` : ""}` : "—"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" noWrap>
+                                Chi nhánh: {r.chiNhanhNganHang || "—"}
+                            </Typography>
+                            <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                                <IconButton size="small" onClick={() => openEdit(r)} aria-label="Sửa"><EditIcon fontSize="small" /></IconButton>
+                                <IconButton size="small" color="error" onClick={() => askRemove(r)} aria-label="Xoá"><DeleteIcon fontSize="small" /></IconButton>
+                            </Stack>
+                        </Stack>
+                    </Paper>
+                ))}
+            </Stack>
+
             {/* Dialog thêm/sửa */}
-            <Dialog open={openEditDlg} onClose={() => setOpenEditDlg(false)} maxWidth="sm" fullWidth>
+            <Dialog open={openEditDlg} onClose={() => setOpenEditDlg(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                 <DialogTitle>{editingId ? "Sửa đơn vị" : "Thêm đơn vị"}</DialogTitle>
                 <DialogContent>
                     <TextField
@@ -235,7 +276,7 @@ function SupplierLookup() {
             </Dialog>
 
             {/* Dialog xác nhận xoá */}
-            <Dialog open={!!confirming} onClose={() => setConfirming(null)}>
+            <Dialog open={!!confirming} onClose={() => setConfirming(null)} fullScreen={isMobile}>
                 <DialogTitle>Xác nhận xoá</DialogTitle>
                 <DialogContent>
                     <Typography>
@@ -264,6 +305,8 @@ function SupplierLookup() {
 }
 
 function CurrencyLookup() {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const [rows, setRows] = useState([]);
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -304,11 +347,11 @@ function CurrencyLookup() {
 
     return (
         <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="h5">Admin · Loại tiền</Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1} sx={{ mb: 1 }}>
+                <Typography variant="h5" sx={{ fontSize: { xs: "1.15rem", sm: "1.5rem" }, fontWeight: 800 }}>Admin · Loại tiền</Typography>
                 <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Thêm loại tiền</Button>
             </Stack>
-            <Paper sx={{ mt: 1, overflowX: "auto" }}>
+            <Paper sx={{ mt: 1, overflowX: "auto", display: { xs: "none", md: "block" } }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
                     <TableHead><TableRow><TableCell>Mã</TableCell><TableCell>Tên loại tiền</TableCell><TableCell>Trạng thái</TableCell><TableCell align="right">Thao tác</TableCell></TableRow></TableHead>
                     <TableBody>
@@ -327,7 +370,26 @@ function CurrencyLookup() {
                     </TableBody>
                 </Table>
             </Paper>
-            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+            <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
+                {rows.map((row) => (
+                    <Paper key={row.MaLoaiTien} variant="outlined" sx={{ p: 1.25, borderRadius: 2.5 }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography sx={{ fontWeight: 800 }}>{row.MaLoaiTien}</Typography>
+                                <Typography variant="body2" color="text.secondary" noWrap>{row.TenLoaiTien}</Typography>
+                            </Box>
+                            <Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngừng"} color={row.TonTai ? "success" : "default"} />
+                        </Stack>
+                        <Stack direction="row" justifyContent="flex-end" spacing={0.5} sx={{ mt: 0.5 }}>
+                            <IconButton size="small" onClick={() => openEdit(row)}><EditIcon fontSize="small" /></IconButton>
+                            {row.MaLoaiTien !== "VND" && (row.TonTai
+                                ? <IconButton size="small" color="error" onClick={() => stop(row)}><DeleteIcon fontSize="small" /></IconButton>
+                                : <Button size="small" onClick={() => activate(row)}>Bật lại</Button>)}
+                        </Stack>
+                    </Paper>
+                ))}
+            </Stack>
+            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
                 <DialogTitle>{editing ? "Sửa loại tiền" : "Thêm loại tiền"}</DialogTitle>
                 <DialogContent>
                     <TextField label="Mã loại tiền" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} disabled={!!editing} fullWidth sx={{ mt: 1 }} />
@@ -343,6 +405,8 @@ function CurrencyLookup() {
 }
 
 function BankLookup() {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const [rows, setRows] = useState([]);
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -388,11 +452,11 @@ function BankLookup() {
 
     return (
         <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="h5">Admin · Ngân hàng</Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1} sx={{ mb: 1 }}>
+                <Typography variant="h5" sx={{ fontSize: { xs: "1.15rem", sm: "1.5rem" }, fontWeight: 800 }}>Admin · Ngân hàng</Typography>
                 <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Thêm ngân hàng</Button>
             </Stack>
-            <Paper sx={{ mt: 1, overflowX: "auto" }}>
+            <Paper sx={{ mt: 1, overflowX: "auto", display: { xs: "none", md: "block" } }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
                     <TableHead>
                         <TableRow>
@@ -419,7 +483,26 @@ function BankLookup() {
                     </TableBody>
                 </Table>
             </Paper>
-            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+            <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
+                {rows.map((row) => (
+                    <Paper key={row.MaNganHang} variant="outlined" sx={{ p: 1.25, borderRadius: 2.5 }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography sx={{ fontWeight: 800 }} noWrap>{row.MaNganHang}</Typography>
+                                <Typography variant="body2" color="text.secondary" noWrap>{row.TenNganHang}</Typography>
+                            </Box>
+                            <Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngừng"} color={row.TonTai ? "success" : "default"} />
+                        </Stack>
+                        <Stack direction="row" justifyContent="flex-end" spacing={0.5} sx={{ mt: 0.5 }}>
+                            <IconButton size="small" onClick={() => openEdit(row)}><EditIcon fontSize="small" /></IconButton>
+                            {row.TonTai
+                                ? <IconButton size="small" color="error" onClick={() => stop(row)}><DeleteIcon fontSize="small" /></IconButton>
+                                : <Button size="small" onClick={() => activate(row)}>Bật lại</Button>}
+                        </Stack>
+                    </Paper>
+                ))}
+            </Stack>
+            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
                 <DialogTitle>{editing ? "Sửa ngân hàng" : "Thêm ngân hàng"}</DialogTitle>
                 <DialogContent>
                     <TextField label="Mã ngân hàng" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} disabled={!!editing} fullWidth sx={{ mt: 1 }} />
@@ -435,10 +518,12 @@ function BankLookup() {
 }
 
 export default function AdminSuppliers() {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const [tab, setTab] = useState(0);
     return (
         <Box>
-            <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
+            <Tabs value={tab} onChange={(_, value) => setTab(value)} variant={isMobile ? "scrollable" : "standard"} allowScrollButtonsMobile sx={{ mb: 2, maxWidth: "100%" }}>
                 <Tab label="Đơn vị hưởng thụ" />
                 <Tab label="Loại tiền" />
                 <Tab label="Ngân hàng" />

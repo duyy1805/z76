@@ -15,6 +15,9 @@ import EditIcon from "@mui/icons-material/Edit";
 import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import ClearIcon from "@mui/icons-material/Clear";
+import CloseIcon from "@mui/icons-material/Close";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import StatusChip from "../components/StatusChip";
 import Autocomplete from "@mui/material/Autocomplete";
 
@@ -32,11 +35,23 @@ const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
 const ACTION_COLUMN_WIDTH = 136;
 const stickyActionCellSx = {
-    position: "sticky", right: 0, width: ACTION_COLUMN_WIDTH, minWidth: ACTION_COLUMN_WIDTH,
-    maxWidth: ACTION_COLUMN_WIDTH, px: 1, boxSizing: "border-box", bgcolor: "background.paper", zIndex: 2,
+    position: { xs: "static", md: "sticky" },
+    right: { md: 0 },
+    width: ACTION_COLUMN_WIDTH,
+    minWidth: ACTION_COLUMN_WIDTH,
+    maxWidth: ACTION_COLUMN_WIDTH,
+    px: 1,
+    boxSizing: "border-box",
+    bgcolor: "background.paper",
+    zIndex: { xs: "auto", md: 2 },
+    boxShadow: { xs: "none", md: (t) => `-1px 0 0 ${t.palette.divider}` },
 };
 const stickyStatusCellSx = {
-    position: "sticky", right: ACTION_COLUMN_WIDTH, minWidth: 145, bgcolor: "background.paper", zIndex: 2,
+    position: { xs: "static", md: "sticky" },
+    right: { md: ACTION_COLUMN_WIDTH },
+    minWidth: 145,
+    bgcolor: "background.paper",
+    zIndex: { xs: "auto", md: 2 },
 };
 const DEFAULT_STATUS_ORDER = ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"];
 const STATUS_ORDER_BY_ROLE = {
@@ -81,7 +96,45 @@ const DetailField = ({ label, children, sx }) => (
     </Box>
 );
 
+const MobileInfoRow = ({ label, children, strong = false }) => (
+    <Stack
+        direction="row"
+        alignItems="flex-start"
+        justifyContent="space-between"
+        spacing={1.5}
+        sx={{ py: 0.85, borderBottom: (t) => `1px dashed ${t.palette.divider}` }}
+    >
+        <Typography variant="caption" color="text.secondary" sx={{ width: 104, flexShrink: 0 }}>
+            {label}
+        </Typography>
+        <Typography
+            sx={{
+                minWidth: 0,
+                textAlign: "right",
+                fontSize: "0.88rem",
+                fontWeight: strong ? 700 : 500,
+                overflowWrap: "anywhere",
+                whiteSpace: "pre-wrap",
+            }}
+        >
+            {children || "—"}
+        </Typography>
+    </Stack>
+);
+
+const MobileSectionTitle = ({ children }) => (
+    <Typography
+        variant="overline"
+        color="text.secondary"
+        sx={{ fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.2 }}
+    >
+        {children}
+    </Typography>
+);
+
 export default function PhieuSec({ mode = "VND" }) {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const { role, user, permissions = [] } = useAuth();
     const isNgoaiTe = mode === "NgoaiTe";
 
@@ -132,6 +185,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qFrom, setQFrom] = useState(null); // dayjs | null
     const [qTo, setQTo] = useState(null);     // dayjs | null
     const [qTrangThai, setQTrangThai] = useState("");
+    const [qMobile, setQMobile] = useState("");
     const [anchorTrangThai, setAnchorTrangThai] = useState(null);
     // anchor Popover cho từng cột
     const [anchorMa, setAnchorMa] = useState(null);
@@ -519,11 +573,13 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasNguoiTao = qNguoiTao.trim() !== "";
         const hasFrom = !!qFrom;
         const hasTo = !!qTo;
+        const hasMobile = qMobile.trim() !== "";
 
         const qMaNorm = stripVN(qMa.trim().toLowerCase());
         const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
         const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
         const qNguoiTaoNorm = stripVN(qNguoiTao.trim().toLowerCase());
+        const qMobileNorm = stripVN(qMobile.trim().toLowerCase());
 
         const statusOrder = STATUS_ORDER_BY_ROLE[role] || DEFAULT_STATUS_ORDER;
         const statusRank = new Map(statusOrder.map((status, index) => [status, index]));
@@ -581,7 +637,29 @@ export default function PhieuSec({ mode = "VND" }) {
             if (hasNguoiTao) {
                 okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
             }
-            return okDate && okStatus && okMa && okNd && okDv && okNguoiTao;
+
+            let okMobile = true;
+            if (hasMobile) {
+                const donVi = donvis.find((d) => d.id === r.donViId);
+                const mobileSearchText = [
+                    r.maSoSec || `SS-${r.id}`,
+                    isoToDisplay(r.ngay).split(" ")[0],
+                    r.tenNguoiTao,
+                    r.tenDonVi,
+                    donVi?.name,
+                    r.soTien,
+                    r.maLoaiTien,
+                    r.noiDung,
+                    r.soTaiKhoanHuongThu,
+                    donVi?.stk,
+                    r.maNganHangHuongThu,
+                    donVi?.maNganHang,
+                    getTenNganHang(r),
+                ].filter(Boolean).join(" ");
+                okMobile = stripVN(String(mobileSearchText).toLowerCase()).includes(qMobileNorm);
+            }
+
+            return okDate && okStatus && okMa && okNd && okDv && okNguoiTao && okMobile;
         }).sort((a, b) => {
             const rankA = statusRank.get(a.trangThai) ?? statusOrder.length;
             const rankB = statusRank.get(b.trangThai) ?? statusOrder.length;
@@ -593,7 +671,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qFrom, qTo, qTrangThai, donvis, role]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qMobile, qFrom, qTo, qTrangThai, donvis, role]);
 
     // clear từng filter
     const clearFilter = (key) => {
@@ -798,11 +876,30 @@ export default function PhieuSec({ mode = "VND" }) {
     };
 
     return (
-        <Box>
+        <Box sx={{ width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
             {/* Header actions */}
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} gap={2} flexWrap="wrap">
-                <Typography variant="h5">Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}</Typography>
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Stack
+                sx={{ display: { xs: "none", md: "flex" } }}
+                direction={{ xs: "column", sm: "row" }}
+                alignItems={{ xs: "stretch", sm: "center" }}
+                justifyContent="space-between"
+                mb={2}
+                gap={2}
+                flexWrap="wrap"
+            >
+                <Typography variant="h5" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, fontWeight: 700 }}>
+                    Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
+                </Typography>
+                <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    flexWrap="wrap"
+                    sx={{
+                        width: { xs: "100%", sm: "auto" },
+                        "& .MuiFormControl-root, & .MuiButton-root": { width: { xs: "100%", sm: "auto" } },
+                    }}
+                >
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <DatePicker
                             label="Từ ngày"
@@ -839,20 +936,148 @@ export default function PhieuSec({ mode = "VND" }) {
                 </Stack>
             </Stack>
 
+            <Stack spacing={1.25} sx={{ display: { xs: "flex", md: "none" }, mb: 1.25 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: "1.1rem", fontWeight: 800, lineHeight: 1.2 }}>
+                            Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {filteredRows ? `${filteredRows.length} phiếu` : "Đang tải..."}
+                        </Typography>
+                    </Box>
+                    <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={openCreateDialog}
+                        sx={{ flexShrink: 0, borderRadius: 999 }}
+                    >
+                        Tạo
+                    </Button>
+                </Stack>
+
+                <Paper variant="outlined" sx={{ p: 1, borderRadius: 2.5, bgcolor: "background.paper" }}>
+                    <Stack spacing={1}>
+                        <TextField
+                            label="Tìm nhanh"
+                            placeholder="Số séc, đơn vị, người tạo..."
+                            value={qMobile}
+                            onChange={(e) => setQMobile(e.target.value)}
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ sx: { fontSize: "0.82rem" } }}
+                            inputProps={{ style: { fontSize: "0.86rem", paddingTop: 8, paddingBottom: 8 } }}
+                        />
+
+                        <Stack direction="row" spacing={1}>
+                            <FormControl size="small" fullWidth>
+                                <InputLabel sx={{ fontSize: "0.82rem" }}>Trạng thái</InputLabel>
+                                <Select
+                                    label="Trạng thái"
+                                    value={qTrangThai}
+                                    onChange={(e) => setQTrangThai(e.target.value)}
+                                    sx={{ fontSize: "0.86rem", "& .MuiSelect-select": { py: 0.85 } }}
+                                >
+                                    <MenuItem value="">Tất cả</MenuItem>
+                                    <MenuItem value="ChoDuyet_TBP">Chờ TBP</MenuItem>
+                                    <MenuItem value="ChoDuyet_KTT">Chờ KTT</MenuItem>
+                                    <MenuItem value="ChoDuyet_GD">Chờ GĐ</MenuItem>
+                                    <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
+                                    <MenuItem value="TuChoi">Từ chối</MenuItem>
+                                    <MenuItem value="HoanThanh_ChuaCoLenhChi">Chờ lệnh chi</MenuItem>
+                                    <MenuItem value="HoanThanh_DaCoLenhChi">Đã có lệnh chi</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<RefreshIcon />}
+                                onClick={activeTab === "pending" ? loadPendingLenhChi : load}
+                                sx={{ minWidth: 82, fontSize: "0.76rem" }}
+                            >
+                                Tải
+                            </Button>
+                        </Stack>
+
+                        <LocalizationProvider dateAdapter={AdapterDayjs}>
+                            <Stack direction="row" spacing={1}>
+                                <DatePicker
+                                    label="Từ"
+                                    value={qFrom}
+                                    onChange={setQFrom}
+                                    slotProps={{
+                                        textField: {
+                                            size: "small",
+                                            fullWidth: true,
+                                            InputLabelProps: { sx: { fontSize: "0.82rem" } },
+                                            inputProps: { style: { fontSize: "0.84rem", paddingTop: 8, paddingBottom: 8 } },
+                                        },
+                                    }}
+                                />
+                                <DatePicker
+                                    label="Đến"
+                                    value={qTo}
+                                    onChange={setQTo}
+                                    minDate={qFrom || undefined}
+                                    slotProps={{
+                                        textField: {
+                                            size: "small",
+                                            fullWidth: true,
+                                            InputLabelProps: { sx: { fontSize: "0.82rem" } },
+                                            inputProps: { style: { fontSize: "0.84rem", paddingTop: 8, paddingBottom: 8 } },
+                                        },
+                                    }}
+                                />
+                            </Stack>
+                        </LocalizationProvider>
+
+                        <Stack direction="row" spacing={1}>
+                            <Button
+                                size="small"
+                                variant="text"
+                                startIcon={<ClearIcon />}
+                                onClick={() => {
+                                    setQMobile("");
+                                    setQTrangThai("");
+                                    setQFrom(null);
+                                    setQTo(null);
+                                }}
+                                sx={{ fontSize: "0.76rem", px: 1 }}
+                            >
+                                Xoá lọc
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="text"
+                                startIcon={<DownloadIcon />}
+                                onClick={exportTransferExcel}
+                                sx={{ fontSize: "0.76rem", px: 1 }}
+                            >
+                                Excel
+                            </Button>
+                        </Stack>
+                    </Stack>
+                </Paper>
+            </Stack>
+
             {canManageLenhChi && (
-                <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)} sx={{ mb: 2 }}>
+                <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)} variant={isMobile ? "scrollable" : "standard"} sx={{ mb: 2, maxWidth: "100%", overflowX: "auto" }}>
                     <Tab value="group" label="Phiếu bộ phận" />
                     <Tab value="pending" label="Cần nhập lệnh chi" />
                 </Tabs>
             )}
 
             {!filteredRows ? null : (
+                <Box sx={{ display: { xs: "none", md: "block" } }}>
                 <TableContainer
                     component={Paper}
                     sx={{
                         maxWidth: "100%",
-                        maxHeight: "calc(100vh - 240px)",
+                        maxHeight: { xs: "calc(100vh - 220px)", md: "calc(100vh - 240px)" },
                         overflow: "auto",
+                        borderRadius: 2,
+                        WebkitOverflowScrolling: "touch",
                     }}
                 >
                     <Table size="small" stickyHeader sx={{ minWidth: 2100 }}>
@@ -1059,7 +1284,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 <TableCell>Loại tiền</TableCell>
                                 <TableCell align="right">Số tiền</TableCell>
                                 <TableCell align="right">Mã lệnh chi</TableCell>
-                                <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
+                                <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: { xs: "auto", md: 4 } }}>
                                     <Stack direction="row" spacing={0.5} alignItems="center">
                                         <span>Trạng thái</span>
                                         <IconButton
@@ -1111,7 +1336,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                         </Stack>
                                     </Popover>
                                 </TableCell>
-                                <TableCell sx={{ ...stickyActionCellSx, zIndex: 4 }}>Thao tác</TableCell>
+                                <TableCell sx={{ ...stickyActionCellSx, zIndex: { xs: "auto", md: 4 } }}>Thao tác</TableCell>
                             </TableRow>
                         </TableHead>
 
@@ -1201,77 +1426,210 @@ export default function PhieuSec({ mode = "VND" }) {
                         </TableBody>
                     </Table>
                 </TableContainer>
+                </Box>
+            )}
+
+            {!filteredRows ? null : (
+                <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, pb: 2 }}>
+                    {filteredRows.map((r) => {
+                        const donVi = getDonViByPhieu(r);
+                        const maSoSec = r.maSoSec || `SS-${r.id}`;
+                        const tenDonVi = r.tenDonVi || donVi?.name || r.donViId || "—";
+
+                        return (
+                            <Paper
+                                key={r.id}
+                                variant="outlined"
+                                onClick={() => openDetailDialog(r)}
+                                sx={{
+                                    p: 1.25,
+                                    borderRadius: 2.5,
+                                    cursor: "pointer",
+                                    bgcolor: "background.paper",
+                                    boxShadow: "0 1px 4px rgba(15, 23, 42, 0.06)",
+                                }}
+                            >
+                                <Stack spacing={0.85}>
+                                    <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={{ fontWeight: 800, fontSize: "0.95rem", lineHeight: 1.25 }} noWrap>
+                                                {maSoSec}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {isoToDisplay(r.ngay).split(" ")[0]}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={{ flexShrink: 0, "& .MuiChip-root": { height: 24, fontSize: "0.72rem" } }}>
+                                            <StatusChip status={getDisplayStatus(r)} />
+                                        </Box>
+                                    </Stack>
+
+                                    <Typography sx={{ fontSize: "1.05rem", fontWeight: 900, lineHeight: 1.2 }}>
+                                        {fmtMoney(r.soTien)} {r.maLoaiTien || "VND"}
+                                    </Typography>
+
+                                    <Box
+                                        sx={{
+                                            display: "grid",
+                                            gridTemplateColumns: "70px minmax(0, 1fr)",
+                                            rowGap: 0.35,
+                                            columnGap: 1,
+                                            fontSize: "0.84rem",
+                                        }}
+                                    >
+                                        <Typography variant="caption" color="text.secondary">Người tạo</Typography>
+                                        <Typography sx={{ fontSize: "0.84rem", minWidth: 0 }} noWrap>{r.tenNguoiTao || "—"}</Typography>
+
+                                        <Typography variant="caption" color="text.secondary">Thụ hưởng</Typography>
+                                        <Typography sx={{ fontSize: "0.84rem", minWidth: 0 }} noWrap>{tenDonVi}</Typography>
+                                    </Box>
+                                </Stack>
+                            </Paper>
+                        );
+                    })}
+
+                    {filteredRows.length === 0 && (
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                            <Typography align="center" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                Không có bản ghi phù hợp.
+                            </Typography>
+                        </Paper>
+                    )}
+                </Stack>
             )}
 
             {/* Dialog chi tiết phiếu */}
-            <Dialog open={openDetail} onClose={handleCloseDetail} maxWidth="md" fullWidth>
+            <Dialog
+                open={openDetail}
+                onClose={handleCloseDetail}
+                maxWidth="md"
+                fullWidth
+                fullScreen={isMobile}
+                PaperProps={{
+                    sx: {
+                        borderRadius: { xs: 0, sm: 3 },
+                        overflow: "hidden",
+                    },
+                }}
+            >
                 <DialogTitle
                     sx={{
-                        pb: 1.5,
-                        display: "flex",
-                        alignItems: { xs: "flex-start", sm: "center" },
-                        justifyContent: "space-between",
-                        flexDirection: { xs: "column", sm: "row" },
-                        gap: 2,
+                        p: { xs: 1.5, sm: 2.5 },
+                        pb: { xs: 1.25, sm: 1.5 },
+                        position: { xs: "sticky", sm: "static" },
+                        top: 0,
+                        zIndex: 2,
+                        bgcolor: "background.paper",
+                        borderBottom: (t) => `1px solid ${t.palette.divider}`,
                     }}
                 >
-                    <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                            Chi tiết phiếu séc
-                        </Typography>
-
-                        {detail && (
-                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap" }}>
-                                <Stack direction="row" alignItems="center" spacing={0.5}>
-                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>Mã sổ séc:</Typography>
-                                    <Typography variant="body2">{detail.maSoSec || `SS-${detail.id}`}</Typography>
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => copy(detail.maSoSec || `SS-${detail.id}`)}
-                                        aria-label="Copy mã sổ séc"
-                                    >
-                                        <ContentCopyIcon fontSize="inherit" />
-                                    </IconButton>
-                                </Stack>
-
-                                <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                                    • Ngày: {isoToDisplay(detail.ngay).split(" ")[0]} • ID: #{detail.id}
-                                </Typography>
+                    {isMobile ? (
+                        <Stack spacing={1.25}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                                <Box sx={{ minWidth: 0 }}>
+                                    <Typography sx={{ fontSize: "0.78rem", color: "text.secondary", fontWeight: 700 }}>
+                                        Chi tiết phiếu séc
+                                    </Typography>
+                                    <Typography sx={{ fontSize: "1rem", fontWeight: 800, lineHeight: 1.2 }} noWrap>
+                                        {detail ? (detail.maSoSec || `SS-${detail.id}`) : "Đang tải..."}
+                                    </Typography>
+                                </Box>
+                                <IconButton onClick={handleCloseDetail} aria-label="Đóng chi tiết" size="small">
+                                    <CloseIcon />
+                                </IconButton>
                             </Stack>
-                        )}
-                    </Box>
 
-                    {detail && (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, flexWrap: "wrap" }}>
-                            <StatusChip status={getDisplayStatus(detail)} />
-                            <Typography
-                                sx={{
-                                    px: 1.25,
-                                    py: 0.5,
-                                    borderRadius: 1,
-                                    bgcolor: "success.soft",
-                                    color: "success.darker",
-                                    fontWeight: 700,
-                                }}
-                            >
-                                {fmtMoney(detail.soTien)} {detail.maLoaiTien || "VND"}
-                            </Typography>
-                        </Box>
+                            {detail && (
+                                <Paper
+                                    elevation={0}
+                                    sx={{
+                                        p: 1.25,
+                                        borderRadius: 2.5,
+                                        bgcolor: "primary.main",
+                                        color: "primary.contrastText",
+                                    }}
+                                >
+                                    <Stack spacing={0.85}>
+                                        <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+                                            <Typography sx={{ fontSize: "0.75rem", opacity: 0.9 }}>
+                                                {isoToDisplay(detail.ngay).split(" ")[0]}
+                                            </Typography>
+                                            <Box sx={{ "& .MuiChip-root": { height: 24, fontSize: "0.72rem", bgcolor: "background.paper" } }}>
+                                                <StatusChip status={getDisplayStatus(detail)} />
+                                            </Box>
+                                        </Stack>
+                                        <Typography sx={{ fontSize: "1.35rem", fontWeight: 900, lineHeight: 1.1 }}>
+                                            {fmtMoney(detail.soTien)} {detail.maLoaiTien || "VND"}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: "0.82rem", opacity: 0.9 }} noWrap>
+                                            {detail.tenDonVi || getDonViByPhieu(detail)?.name || `ID: ${detail.donViId}`}
+                                        </Typography>
+                                    </Stack>
+                                </Paper>
+                            )}
+                        </Stack>
+                    ) : (
+                        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
+                            <Box>
+                                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                                    Chi tiết phiếu séc
+                                </Typography>
+
+                                {detail && (
+                                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap" }}>
+                                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                                            <Typography variant="body2" sx={{ fontWeight: 700 }}>Mã sổ séc:</Typography>
+                                            <Typography variant="body2">{detail.maSoSec || `SS-${detail.id}`}</Typography>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => copy(detail.maSoSec || `SS-${detail.id}`)}
+                                                aria-label="Copy mã sổ séc"
+                                            >
+                                                <ContentCopyIcon fontSize="inherit" />
+                                            </IconButton>
+                                        </Stack>
+
+                                        <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                                            • Ngày: {isoToDisplay(detail.ngay).split(" ")[0]} • ID: #{detail.id}
+                                        </Typography>
+                                    </Stack>
+                                )}
+                            </Box>
+
+                            {detail && (
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, flexWrap: "wrap" }}>
+                                    <StatusChip status={getDisplayStatus(detail)} />
+                                    <Typography
+                                        sx={{
+                                            px: 1.25,
+                                            py: 0.5,
+                                            borderRadius: 1,
+                                            bgcolor: "success.main",
+                                            color: "success.contrastText",
+                                            fontWeight: 700,
+                                        }}
+                                    >
+                                        {fmtMoney(detail.soTien)} {detail.maLoaiTien || "VND"}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Stack>
                     )}
                 </DialogTitle>
 
                 <DialogContent
-                    dividers
+                    dividers={!isMobile}
                     sx={{
                         bgcolor: (t) => (t.palette.mode === "light" ? t.palette.grey[50] : "background.default"),
-                        p: 2.5,
+                        p: { xs: 1.25, sm: 2.5 },
+                        pb: { xs: 2, sm: 2.5 },
                     }}
                 >
                     {!detail ? (
                         <Typography color="text.secondary">Chưa có dữ liệu.</Typography>
                     ) : (
                         <Stack spacing={2.5}>
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                     Thông tin chung
                                 </Typography>
@@ -1301,7 +1659,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 </Box>
                             </Paper>
 
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                     Tài liệu đính kèm
                                 </Typography>
@@ -1357,7 +1715,8 @@ export default function PhieuSec({ mode = "VND" }) {
                                             Chưa có tài liệu đính kèm.
                                         </Typography>
                                     ) : (
-                                        <Table size="small">
+                                        <Box sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                                        <Table size="small" sx={{ minWidth: 720 }}>
                                             <TableHead>
                                                 <TableRow>
                                                     <TableCell>STT</TableCell>
@@ -1402,12 +1761,13 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 ))}
                                             </TableBody>
                                         </Table>
+                                        </Box>
                                     )}
                                 </Stack>
                             </Paper>
 
                             {canAddLenhChi && (
-                                <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                         Lệnh chi
                                     </Typography>
@@ -1429,7 +1789,7 @@ export default function PhieuSec({ mode = "VND" }) {
                             )}
 
                             {detail?.maLenhChi && (
-                                <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                         Lệnh chi
                                     </Typography>
@@ -1449,7 +1809,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 </Paper>
                             )}
 
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                     Lịch sử duyệt
                                 </Typography>
@@ -1485,14 +1845,24 @@ export default function PhieuSec({ mode = "VND" }) {
                 <DialogActions
                     sx={{
                         borderTop: (t) => `1px solid ${t.palette.divider}`,
-                        px: 2.5,
-                        py: 1.5,
+                        px: { xs: 1.25, sm: 2.5 },
+                        py: { xs: 1, sm: 1.5 },
                         display: "flex",
+                        flexDirection: { xs: "column", sm: "row" },
+                        alignItems: { xs: "stretch", sm: "center" },
                         justifyContent: "space-between",
+                        gap: 1,
+                        bgcolor: "background.paper",
+                        "& .MuiStack-root": {
+                            width: { xs: "100%", sm: "auto" },
+                        },
+                        "& .MuiButton-root": {
+                            width: { xs: "100%", sm: "auto" },
+                        },
                     }}
                 >
                     {detail && (
-                        <Stack direction="row" spacing={1}>
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                             {canEdit(detail) && (
                                 <Button
                                     color="primary"
