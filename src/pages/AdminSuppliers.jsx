@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody, Typography,
     Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip,
-    Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab
+    Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab, MenuItem
 } from "@mui/material";
 import Autocomplete from "@mui/material/Autocomplete";
 import AddIcon from "@mui/icons-material/Add";
@@ -10,10 +10,20 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../lib/api";
 
+const normalizeSearch = (value = "") =>
+    String(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .toLowerCase();
+
 function SupplierLookup() {
     const [rows, setRows] = useState([]);
     const [banks, setBanks] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [query, setQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
 
     // Dialog thêm/sửa
     const [openEditDlg, setOpenEditDlg] = useState(false);
@@ -96,6 +106,24 @@ function SupplierLookup() {
 
     const askRemove = (r) => setConfirming(r);
 
+    const filteredRows = useMemo(() => {
+        const q = normalizeSearch(query.trim());
+        return rows.filter((row) => {
+            const okStatus =
+                statusFilter === "all" ||
+                (statusFilter === "active" && row.TonTai) ||
+                (statusFilter === "inactive" && !row.TonTai);
+            const searchable = normalizeSearch([
+                row.name,
+                row.stk,
+                row.maNganHang,
+                row.tenNganHang,
+                row.chiNhanhNganHang,
+            ].filter(Boolean).join(" "));
+            return okStatus && (!q || searchable.includes(q));
+        });
+    }, [rows, query, statusFilter]);
+
     const confirmRemove = async () => {
         if (!confirming) return;
         try {
@@ -116,6 +144,29 @@ function SupplierLookup() {
                 <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>
                     Thêm đơn vị
                 </Button>
+            </Stack>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 1 }}>
+                <TextField
+                    label="Tìm kiếm"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    size="small"
+                    fullWidth
+                    placeholder="Tên, STK, mã/tên ngân hàng, chi nhánh"
+                />
+                <TextField
+                    select
+                    label="Trạng thái"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    size="small"
+                    sx={{ minWidth: 160 }}
+                >
+                    <MenuItem value="all">Tất cả</MenuItem>
+                    <MenuItem value="active">Đang dùng</MenuItem>
+                    <MenuItem value="inactive">Ngưng</MenuItem>
+                </TextField>
             </Stack>
 
             <Paper sx={{ mt: 1 }}>
@@ -143,7 +194,7 @@ function SupplierLookup() {
                             </TableRow>
                         )}
 
-                        {!loading && rows.length === 0 && (
+                        {!loading && filteredRows.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={7} align="center">
                                     Không có dữ liệu
@@ -151,7 +202,7 @@ function SupplierLookup() {
                             </TableRow>
                         )}
 
-                        {!loading && rows.map((r, idx) => (
+                        {!loading && filteredRows.map((r, idx) => (
                             <TableRow key={r.id} hover>
                                 <TableCell>{idx + 1}</TableCell>
                                 <TableCell>{r.name}</TableCell>
@@ -265,6 +316,8 @@ function SupplierLookup() {
 
 function CurrencyLookup() {
     const [rows, setRows] = useState([]);
+    const [query, setQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [code, setCode] = useState("");
@@ -301,6 +354,17 @@ function CurrencyLookup() {
         await api.updateLoaiTien(row.MaLoaiTien, { tenLoaiTien: row.TenLoaiTien, tonTai: true });
         await load();
     };
+    const filteredRows = useMemo(() => {
+        const q = normalizeSearch(query.trim());
+        return rows.filter((row) => {
+            const okStatus =
+                statusFilter === "all" ||
+                (statusFilter === "active" && row.TonTai) ||
+                (statusFilter === "inactive" && !row.TonTai);
+            const searchable = normalizeSearch([row.MaLoaiTien, row.TenLoaiTien].filter(Boolean).join(" "));
+            return okStatus && (!q || searchable.includes(q));
+        });
+    }, [rows, query, statusFilter]);
 
     return (
         <Box>
@@ -308,11 +372,33 @@ function CurrencyLookup() {
                 <Typography variant="h5">Admin · Loại tiền</Typography>
                 <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Thêm loại tiền</Button>
             </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 1 }}>
+                <TextField
+                    label="Tìm kiếm"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    size="small"
+                    fullWidth
+                    placeholder="Mã hoặc tên loại tiền"
+                />
+                <TextField
+                    select
+                    label="Trạng thái"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    size="small"
+                    sx={{ minWidth: 160 }}
+                >
+                    <MenuItem value="all">Tất cả</MenuItem>
+                    <MenuItem value="active">Đang dùng</MenuItem>
+                    <MenuItem value="inactive">Ngưng</MenuItem>
+                </TextField>
+            </Stack>
             <Paper sx={{ mt: 1, overflowX: "auto" }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
                     <TableHead><TableRow><TableCell>Mã</TableCell><TableCell>Tên loại tiền</TableCell><TableCell>Trạng thái</TableCell><TableCell align="right">Thao tác</TableCell></TableRow></TableHead>
                     <TableBody>
-                        {rows.map((row) => (
+                        {filteredRows.map((row) => (
                             <TableRow key={row.MaLoaiTien}>
                                 <TableCell>{row.MaLoaiTien}</TableCell><TableCell>{row.TenLoaiTien}</TableCell>
                                 <TableCell><Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngừng"} color={row.TonTai ? "success" : "default"} /></TableCell>
@@ -344,6 +430,8 @@ function CurrencyLookup() {
 
 function BankLookup() {
     const [rows, setRows] = useState([]);
+    const [query, setQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [code, setCode] = useState("");
@@ -385,12 +473,45 @@ function BankLookup() {
         await api.updateNganHang(row.MaNganHang, { tenNganHang: row.TenNganHang, tonTai: true });
         await load();
     };
+    const filteredRows = useMemo(() => {
+        const q = normalizeSearch(query.trim());
+        return rows.filter((row) => {
+            const okStatus =
+                statusFilter === "all" ||
+                (statusFilter === "active" && row.TonTai) ||
+                (statusFilter === "inactive" && !row.TonTai);
+            const searchable = normalizeSearch([row.MaNganHang, row.TenNganHang].filter(Boolean).join(" "));
+            return okStatus && (!q || searchable.includes(q));
+        });
+    }, [rows, query, statusFilter]);
 
     return (
         <Box>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                 <Typography variant="h5">Admin · Ngân hàng</Typography>
                 <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Thêm ngân hàng</Button>
+            </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 1 }}>
+                <TextField
+                    label="Tìm kiếm"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    size="small"
+                    fullWidth
+                    placeholder="Mã hoặc tên ngân hàng"
+                />
+                <TextField
+                    select
+                    label="Trạng thái"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    size="small"
+                    sx={{ minWidth: 160 }}
+                >
+                    <MenuItem value="all">Tất cả</MenuItem>
+                    <MenuItem value="active">Đang dùng</MenuItem>
+                    <MenuItem value="inactive">Ngưng</MenuItem>
+                </TextField>
             </Stack>
             <Paper sx={{ mt: 1, overflowX: "auto" }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
@@ -403,7 +524,7 @@ function BankLookup() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {rows.map((row) => (
+                        {filteredRows.map((row) => (
                             <TableRow key={row.MaNganHang}>
                                 <TableCell>{row.MaNganHang}</TableCell>
                                 <TableCell>{row.TenNganHang}</TableCell>

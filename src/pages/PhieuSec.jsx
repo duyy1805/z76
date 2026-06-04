@@ -72,6 +72,11 @@ const getDisplayStatus = (phieu) => {
     return phieu?.maLenhChi ? "HoanThanh_DaCoLenhChi" : "HoanThanh_ChuaCoLenhChi";
 };
 
+const getCompletedAt = (phieu) => {
+    if (phieu?.trangThai !== "HoanThanh") return null;
+    return phieu?.gdTime || phieu?.kttTime || null;
+};
+
 const DetailField = ({ label, children, sx }) => (
     <Box sx={{ minWidth: 0, minHeight: 56, ...sx }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
@@ -131,6 +136,8 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qNguoiTao, setQNguoiTao] = useState("");
     const [qFrom, setQFrom] = useState(null); // dayjs | null
     const [qTo, setQTo] = useState(null);     // dayjs | null
+    const [qCompletedFrom, setQCompletedFrom] = useState(null);
+    const [qCompletedTo, setQCompletedTo] = useState(null);
     const [qTrangThai, setQTrangThai] = useState("");
     const [anchorTrangThai, setAnchorTrangThai] = useState(null);
     // anchor Popover cho từng cột
@@ -138,6 +145,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [anchorNoiDung, setAnchorNoiDung] = useState(null);
     const [anchorDonVi, setAnchorDonVi] = useState(null);
     const [anchorNguoiTao, setAnchorNguoiTao] = useState(null);
+    const [anchorCompleted, setAnchorCompleted] = useState(null);
 
     // Tài liệu đính kèm
     const [attachList, setAttachList] = useState([]);         // danh sách tài liệu của phiếu
@@ -519,6 +527,8 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasNguoiTao = qNguoiTao.trim() !== "";
         const hasFrom = !!qFrom;
         const hasTo = !!qTo;
+        const hasCompletedFrom = !!qCompletedFrom;
+        const hasCompletedTo = !!qCompletedTo;
 
         const qMaNorm = stripVN(qMa.trim().toLowerCase());
         const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
@@ -542,6 +552,17 @@ export default function PhieuSec({ mode = "VND" }) {
                 }
             }
             // Trạng thái
+            let okCompletedDate = true;
+            if (hasCompletedFrom || hasCompletedTo) {
+                const completedAt = dayjs(getCompletedAt(r));
+                if (completedAt.isValid()) {
+                    const completedVal = completedAt.startOf("day").valueOf();
+                    if (hasCompletedFrom) okCompletedDate = okCompletedDate && completedVal >= qCompletedFrom.startOf("day").valueOf();
+                    if (hasCompletedTo) okCompletedDate = okCompletedDate && completedVal <= qCompletedTo.startOf("day").valueOf();
+                } else {
+                    okCompletedDate = false;
+                }
+            }
             let okStatus = true;
             if (qTrangThai) {
                 const displayStatus = getDisplayStatus(r);
@@ -581,7 +602,7 @@ export default function PhieuSec({ mode = "VND" }) {
             if (hasNguoiTao) {
                 okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
             }
-            return okDate && okStatus && okMa && okNd && okDv && okNguoiTao;
+            return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao;
         }).sort((a, b) => {
             const rankA = statusRank.get(a.trangThai) ?? statusOrder.length;
             const rankB = statusRank.get(b.trangThai) ?? statusOrder.length;
@@ -593,7 +614,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qFrom, qTo, qTrangThai, donvis, role]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role]);
 
     // clear từng filter
     const clearFilter = (key) => {
@@ -601,6 +622,10 @@ export default function PhieuSec({ mode = "VND" }) {
         if (key === "nd") setQNoiDung("");
         if (key === "dv") setQDonVi("");
         if (key === "nguoiTao") setQNguoiTao("");
+        if (key === "completed") {
+            setQCompletedFrom(null);
+            setQCompletedTo(null);
+        }
     };
 
     const loadAttachments = async (phieuSecId) => {
@@ -702,6 +727,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 "Loại tiền": row.maLoaiTien || "VND",
                 "Số tiền": row.soTien,
                 "Mã lệnh chi": row.maLenhChi,
+                "Ngày hoàn thành": isoToDisplay(getCompletedAt(row)).split(" ")[0],
                 "Trạng thái": row.trangThai,
                 "Người đăng ký": row.tenNguoiTao,
                 "Đơn vị người tạo": row.tenDonViNguoiTao,
@@ -746,16 +772,16 @@ export default function PhieuSec({ mode = "VND" }) {
             const donVi = donvis.find((item) => item.id === row.donViId);
             return [
                 index + 1,
-                "",
-                Number(row.soTien || 0),
+                "116000002441",
+                Math.round(Number(row.soTien || 0)),
                 row.soTaiKhoanHuongThu || donVi?.stk || "",
-                row.tenDonVi || donVi?.name || "",
+                row.maNganHangHuongThu || donVi?.maNganHang || "",
                 getTenNganHang(row) || "",
                 row.noiDung || "",
                 "",
                 "",
                 "",
-                row.maNganHangHuongThu || donVi?.maNganHang || "",
+                row.tenDonVi || donVi?.name || "",
             ];
         });
 
@@ -787,7 +813,7 @@ export default function PhieuSec({ mode = "VND" }) {
         });
         rows.forEach((_, rowIndex) => {
             const amountCell = sheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: 2 })];
-            if (amountCell) amountCell.z = "#,##0 ;(#,##0)";
+            if (amountCell) amountCell.z = "0";
         });
 
         const workbook = XLSX.utils.book_new();
@@ -1059,6 +1085,54 @@ export default function PhieuSec({ mode = "VND" }) {
                                 <TableCell>Loại tiền</TableCell>
                                 <TableCell align="right">Số tiền</TableCell>
                                 <TableCell align="right">Mã lệnh chi</TableCell>
+                                <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                    <Stack direction="row" spacing={0.5} alignItems="center">
+                                        <span>Ngày hoàn thành</span>
+                                        <IconButton
+                                            size="small"
+                                            onClick={(e) => setAnchorCompleted(e.currentTarget)}
+                                            aria-label="Lọc theo ngày hoàn thành"
+                                            color={qCompletedFrom || qCompletedTo ? "primary" : "default"}
+                                        >
+                                            <FilterListRoundedIcon fontSize="inherit" />
+                                        </IconButton>
+                                    </Stack>
+                                    <Popover
+                                        open={Boolean(anchorCompleted)}
+                                        anchorEl={anchorCompleted}
+                                        onClose={() => setAnchorCompleted(null)}
+                                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                        transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                        PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                    >
+                                        <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                            <Stack spacing={1.25}>
+                                                <DatePicker
+                                                    label="Từ ngày"
+                                                    value={qCompletedFrom}
+                                                    onChange={setQCompletedFrom}
+                                                    slotProps={{ textField: { size: "small" } }}
+                                                />
+                                                <DatePicker
+                                                    label="Đến ngày"
+                                                    value={qCompletedTo}
+                                                    onChange={setQCompletedTo}
+                                                    slotProps={{ textField: { size: "small" } }}
+                                                />
+                                                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                    {(qCompletedFrom || qCompletedTo) && (
+                                                        <Button startIcon={<ClearIcon />} onClick={() => clearFilter("completed")} size="small">
+                                                            Xóa
+                                                        </Button>
+                                                    )}
+                                                    <Button variant="contained" size="small" onClick={() => setAnchorCompleted(null)}>
+                                                        OK
+                                                    </Button>
+                                                </Stack>
+                                            </Stack>
+                                        </LocalizationProvider>
+                                    </Popover>
+                                </TableCell>
                                 <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
                                     <Stack direction="row" spacing={0.5} alignItems="center">
                                         <span>Trạng thái</span>
@@ -1142,6 +1216,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                     <TableCell>{r.maLoaiTien || "VND"}</TableCell>
                                     <TableCell align="right">{fmtMoney(r.soTien)}</TableCell>
                                     <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
+                                    <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
                                     <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
                                     <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
                                         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 40px)", alignItems: "center" }}>
@@ -1191,7 +1266,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
                             {filteredRows.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={16}>
+                                    <TableCell colSpan={17}>
                                         <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
                                             Không có bản ghi phù hợp.
                                         </Typography>
