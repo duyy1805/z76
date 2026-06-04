@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import {
     Box, Paper, Typography,
     Dialog, DialogTitle, DialogContent, DialogActions, Button,
@@ -246,6 +248,8 @@ const WallSpacer = () => (<Box sx={{ flex: 1, borderRight: '2px solid #000' }} /
 
 // --- 8. MAIN DASHBOARD ---
 const WarehouseDashboard = () => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [selectedSlot, setSelectedSlot] = useState(null);
     const [openModal, setOpenModal] = useState(false);
 
@@ -313,25 +317,48 @@ const WarehouseDashboard = () => {
 
     return (
         <Box sx={{
-            p: 2, bgcolor: '#f0f2f5', minHeight: '100vh',
-            overflowX: 'auto',
+            p: { xs: 1, sm: 2 }, bgcolor: '#f0f2f5', minHeight: '100vh',
+            width: '100%', maxWidth: '100vw', overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
             display: 'flex', justifyContent: 'flex-start', flexDirection: 'column'
         }}>
 
+            <Paper
+                elevation={0}
+                sx={{
+                    position: 'sticky',
+                    left: { xs: 8, sm: 20 },
+                    zIndex: 100,
+                    p: { xs: 1.25, sm: 1.5 },
+                    mb: 1,
+                    borderRadius: 2,
+                    border: '1px solid #d8dee9',
+                    maxWidth: { xs: 'calc(100vw - 32px)', sm: 520 },
+                }}
+            >
+                <Typography sx={{ fontSize: { xs: '1rem', sm: '1.15rem' }, fontWeight: 800 }}>
+                    Bản đồ kho thành phẩm
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                    Trên điện thoại: kéo ngang để xem toàn bộ sơ đồ, bấm vào ô kệ để xem chi tiết.
+                </Typography>
+            </Paper>
+
             {/* --- NÚT TỔNG HỢP TỒN KHO --- */}
-            <Box sx={{ position: 'sticky', left: 20, top: 0, zIndex: 100, mb: 1 }}>
+            <Box sx={{ position: 'sticky', left: { xs: 8, sm: 20 }, top: 0, zIndex: 100, mb: 1 }}>
                 <Button
                     variant="contained"
                     color="primary"
                     startIcon={<Assessment />}
                     onClick={() => setOpenTotalModal(true)}
-                    sx={{ boxShadow: 3, fontWeight: 'bold' }}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ boxShadow: 3, fontWeight: 'bold', whiteSpace: 'nowrap' }}
                 >
                     Xem Tổng Tồn Kho
                 </Button>
             </Box>
 
-            <Box sx={{ pb: 4 }}>
+            <Box sx={{ pb: 4, minWidth: 1120 }}>
                 {/* HEADER */}
                 <Box sx={{ display: 'flex', mb: 0 }}>
                     <Box sx={{ flexGrow: 1, pr: '2px' }}><TopGateHeader /></Box>
@@ -375,7 +402,7 @@ const WarehouseDashboard = () => {
                 </Box>
 
                 {/* NOTE */}
-                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2, position: 'sticky', left: 0 }}>
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: { xs: 'flex-start', sm: 'center' }, gap: 2, position: 'sticky', left: 0, overflowX: 'auto', pb: 1 }}>
                     {[{ label: 'Trống', color: '#fff', border: true }, { label: '1-25%', color: '#e3f2fd' }, { label: '26-50%', color: '#64b5f6' }, { label: '51-75%', color: '#66bb6a' }, { label: '76-99%', color: '#ffa726' }, { label: 'Full (100%)', color: '#d32f2f', text: '#fff' }].map((note, idx) => (
                         <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Box sx={{ width: 20, height: 20, bgcolor: note.color, border: note.border ? '1px solid #ccc' : 'none', color: note.text || '#000', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
@@ -386,7 +413,7 @@ const WarehouseDashboard = () => {
             </Box>
 
             {/* --- DIALOG CHI TIẾT Ô KỆ --- */}
-            <Dialog open={openModal} onClose={handleClose} maxWidth="md" fullWidth>
+            <Dialog open={openModal} onClose={handleClose} maxWidth="md" fullWidth fullScreen={isMobile}>
                 <DialogTitle sx={{ bgcolor: '#f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Box display="flex" alignItems="center" gap={2}>
                         <Typography variant="h6">Vị trí: <strong>{selectedSlot?.label}</strong></Typography>
@@ -431,7 +458,7 @@ const WarehouseDashboard = () => {
             </Dialog>
 
             {/* --- DIALOG TỔNG TỒN KHO (MỚI THÊM) --- */}
-            <Dialog open={openTotalModal} onClose={() => setOpenTotalModal(false)} maxWidth="sm" fullWidth>
+            <Dialog open={openTotalModal} onClose={() => setOpenTotalModal(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#e3f2fd' }}>
                     <Assessment color="primary" />
                     <Typography variant="h6" fontWeight="bold">Tổng Hợp Tồn Kho</Typography>

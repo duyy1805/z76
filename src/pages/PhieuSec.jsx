@@ -15,6 +15,9 @@ import EditIcon from "@mui/icons-material/Edit";
 import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import ClearIcon from "@mui/icons-material/Clear";
+import CloseIcon from "@mui/icons-material/Close";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import StatusChip from "../components/StatusChip";
 import Autocomplete from "@mui/material/Autocomplete";
 
@@ -32,11 +35,23 @@ const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
 const ACTION_COLUMN_WIDTH = 136;
 const stickyActionCellSx = {
-    position: "sticky", right: 0, width: ACTION_COLUMN_WIDTH, minWidth: ACTION_COLUMN_WIDTH,
-    maxWidth: ACTION_COLUMN_WIDTH, px: 1, boxSizing: "border-box", bgcolor: "background.paper", zIndex: 2,
+    position: { xs: "static", md: "sticky" },
+    right: { md: 0 },
+    width: ACTION_COLUMN_WIDTH,
+    minWidth: ACTION_COLUMN_WIDTH,
+    maxWidth: ACTION_COLUMN_WIDTH,
+    px: 1,
+    boxSizing: "border-box",
+    bgcolor: "background.paper",
+    zIndex: { xs: "auto", md: 2 },
+    boxShadow: { xs: "none", md: (t) => `-1px 0 0 ${t.palette.divider}` },
 };
 const stickyStatusCellSx = {
-    position: "sticky", right: ACTION_COLUMN_WIDTH, minWidth: 145, bgcolor: "background.paper", zIndex: 2,
+    position: { xs: "static", md: "sticky" },
+    right: { md: ACTION_COLUMN_WIDTH },
+    minWidth: 145,
+    bgcolor: "background.paper",
+    zIndex: { xs: "auto", md: 2 },
 };
 const DEFAULT_STATUS_ORDER = ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"];
 const STATUS_ORDER_BY_ROLE = {
@@ -86,7 +101,45 @@ const DetailField = ({ label, children, sx }) => (
     </Box>
 );
 
+const MobileInfoRow = ({ label, children, strong = false }) => (
+    <Stack
+        direction="row"
+        alignItems="flex-start"
+        justifyContent="space-between"
+        spacing={1.5}
+        sx={{ py: 0.85, borderBottom: (t) => `1px dashed ${t.palette.divider}` }}
+    >
+        <Typography variant="caption" color="text.secondary" sx={{ width: 104, flexShrink: 0 }}>
+            {label}
+        </Typography>
+        <Typography
+            sx={{
+                minWidth: 0,
+                textAlign: "right",
+                fontSize: "0.88rem",
+                fontWeight: strong ? 700 : 500,
+                overflowWrap: "anywhere",
+                whiteSpace: "pre-wrap",
+            }}
+        >
+            {children || "—"}
+        </Typography>
+    </Stack>
+);
+
+const MobileSectionTitle = ({ children }) => (
+    <Typography
+        variant="overline"
+        color="text.secondary"
+        sx={{ fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.2 }}
+    >
+        {children}
+    </Typography>
+);
+
 export default function PhieuSec({ mode = "VND" }) {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
     const { role, user, permissions = [] } = useAuth();
     const isNgoaiTe = mode === "NgoaiTe";
 
@@ -139,6 +192,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qCompletedFrom, setQCompletedFrom] = useState(null);
     const [qCompletedTo, setQCompletedTo] = useState(null);
     const [qTrangThai, setQTrangThai] = useState("");
+    const [qMobile, setQMobile] = useState("");
     const [anchorTrangThai, setAnchorTrangThai] = useState(null);
     // anchor Popover cho từng cột
     const [anchorMa, setAnchorMa] = useState(null);
@@ -529,11 +583,13 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasTo = !!qTo;
         const hasCompletedFrom = !!qCompletedFrom;
         const hasCompletedTo = !!qCompletedTo;
+        const hasMobile = qMobile.trim() !== "";
 
         const qMaNorm = stripVN(qMa.trim().toLowerCase());
         const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
         const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
         const qNguoiTaoNorm = stripVN(qNguoiTao.trim().toLowerCase());
+        const qMobileNorm = stripVN(qMobile.trim().toLowerCase());
 
         const statusOrder = STATUS_ORDER_BY_ROLE[role] || DEFAULT_STATUS_ORDER;
         const statusRank = new Map(statusOrder.map((status, index) => [status, index]));
@@ -602,7 +658,29 @@ export default function PhieuSec({ mode = "VND" }) {
             if (hasNguoiTao) {
                 okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
             }
-            return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao;
+
+            let okMobile = true;
+            if (hasMobile) {
+                const donVi = donvis.find((d) => d.id === r.donViId);
+                const mobileSearchText = [
+                    r.maSoSec || `SS-${r.id}`,
+                    isoToDisplay(r.ngay).split(" ")[0],
+                    r.tenNguoiTao,
+                    r.tenDonVi,
+                    donVi?.name,
+                    r.soTien,
+                    r.maLoaiTien,
+                    r.noiDung,
+                    r.soTaiKhoanHuongThu,
+                    donVi?.stk,
+                    r.maNganHangHuongThu,
+                    donVi?.maNganHang,
+                    getTenNganHang(r),
+                ].filter(Boolean).join(" ");
+                okMobile = stripVN(String(mobileSearchText).toLowerCase()).includes(qMobileNorm);
+            }
+
+            return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao && okMobile;
         }).sort((a, b) => {
             const rankA = statusRank.get(a.trangThai) ?? statusOrder.length;
             const rankB = statusRank.get(b.trangThai) ?? statusOrder.length;
@@ -614,7 +692,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role]);
 
     // clear từng filter
     const clearFilter = (key) => {
@@ -824,11 +902,30 @@ export default function PhieuSec({ mode = "VND" }) {
     };
 
     return (
-        <Box>
-            {/* Header actions */}
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} gap={2} flexWrap="wrap">
-                <Typography variant="h5">Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}</Typography>
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        <Box sx={{ width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
+            {/* Header actions - desktop */}
+            <Stack
+                sx={{ display: { xs: "none", md: "flex" } }}
+                direction={{ xs: "column", sm: "row" }}
+                alignItems={{ xs: "stretch", sm: "center" }}
+                justifyContent="space-between"
+                mb={2}
+                gap={2}
+                flexWrap="wrap"
+            >
+                <Typography variant="h5" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, fontWeight: 700 }}>
+                    Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
+                </Typography>
+                <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    flexWrap="wrap"
+                    sx={{
+                        width: { xs: "100%", sm: "auto" },
+                        "& .MuiFormControl-root, & .MuiButton-root": { width: { xs: "100%", sm: "auto" } },
+                    }}
+                >
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <DatePicker
                             label="Từ ngày"
@@ -865,14 +962,143 @@ export default function PhieuSec({ mode = "VND" }) {
                 </Stack>
             </Stack>
 
+            {/* Header actions - mobile */}
+            <Stack spacing={1.25} sx={{ display: { xs: "flex", md: "none" }, mb: 1.25 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: "1.1rem", fontWeight: 800, lineHeight: 1.2 }}>
+                            Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {filteredRows ? `${filteredRows.length} phiếu` : "Đang tải..."}
+                        </Typography>
+                    </Box>
+                    <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={openCreateDialog}
+                        sx={{ flexShrink: 0, borderRadius: 999 }}
+                    >
+                        Tạo
+                    </Button>
+                </Stack>
+
+                <Paper variant="outlined" sx={{ p: 1, borderRadius: 2.5, bgcolor: "background.paper" }}>
+                    <Stack spacing={1}>
+                        <TextField
+                            label="Tìm nhanh"
+                            placeholder="Số séc, đơn vị, người tạo..."
+                            value={qMobile}
+                            onChange={(e) => setQMobile(e.target.value)}
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ sx: { fontSize: "0.82rem" } }}
+                            inputProps={{ style: { fontSize: "0.86rem", paddingTop: 8, paddingBottom: 8 } }}
+                        />
+
+                        <Stack direction="row" spacing={1}>
+                            <FormControl size="small" fullWidth>
+                                <InputLabel sx={{ fontSize: "0.82rem" }}>Trạng thái</InputLabel>
+                                <Select
+                                    label="Trạng thái"
+                                    value={qTrangThai}
+                                    onChange={(e) => setQTrangThai(e.target.value)}
+                                    sx={{ fontSize: "0.86rem", "& .MuiSelect-select": { py: 0.85 } }}
+                                >
+                                    <MenuItem value="">Tất cả</MenuItem>
+                                    <MenuItem value="ChoDuyet_TBP">Chờ TBP</MenuItem>
+                                    <MenuItem value="ChoDuyet_KTT">Chờ KTT</MenuItem>
+                                    <MenuItem value="ChoDuyet_GD">Chờ GĐ</MenuItem>
+                                    <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
+                                    <MenuItem value="TuChoi">Từ chối</MenuItem>
+                                    <MenuItem value="HoanThanh_ChuaCoLenhChi">Chờ lệnh chi</MenuItem>
+                                    <MenuItem value="HoanThanh_DaCoLenhChi">Đã có lệnh chi</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<RefreshIcon />}
+                                onClick={activeTab === "pending" ? loadPendingLenhChi : load}
+                                sx={{ minWidth: 82, fontSize: "0.76rem" }}
+                            >
+                                Tải
+                            </Button>
+                        </Stack>
+
+                        <LocalizationProvider dateAdapter={AdapterDayjs}>
+                            <Stack direction="row" spacing={1}>
+                                <DatePicker
+                                    label="Từ"
+                                    value={qFrom}
+                                    onChange={setQFrom}
+                                    slotProps={{
+                                        textField: {
+                                            size: "small",
+                                            fullWidth: true,
+                                            InputLabelProps: { sx: { fontSize: "0.82rem" } },
+                                            inputProps: { style: { fontSize: "0.84rem", paddingTop: 8, paddingBottom: 8 } },
+                                        },
+                                    }}
+                                />
+                                <DatePicker
+                                    label="Đến"
+                                    value={qTo}
+                                    onChange={setQTo}
+                                    minDate={qFrom || undefined}
+                                    slotProps={{
+                                        textField: {
+                                            size: "small",
+                                            fullWidth: true,
+                                            InputLabelProps: { sx: { fontSize: "0.82rem" } },
+                                            inputProps: { style: { fontSize: "0.84rem", paddingTop: 8, paddingBottom: 8 } },
+                                        },
+                                    }}
+                                />
+                            </Stack>
+                        </LocalizationProvider>
+
+                        <Stack direction="row" spacing={1}>
+                            <Button
+                                size="small"
+                                variant="text"
+                                onClick={() => { setQFrom(null); setQTo(null); setQMobile(""); setQTrangThai(""); }}
+                                startIcon={<ClearIcon />}
+                                sx={{ flex: 1, fontSize: "0.76rem" }}
+                            >
+                                Xoá lọc
+                            </Button>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<DownloadIcon />}
+                                onClick={exportTransferExcel}
+                                sx={{ flex: 1, fontSize: "0.76rem" }}
+                            >
+                                Excel
+                            </Button>
+                        </Stack>
+                    </Stack>
+                </Paper>
+            </Stack>
+
             {canManageLenhChi && (
-                <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)} sx={{ mb: 2 }}>
+                <Tabs
+                    value={activeTab}
+                    onChange={(_, value) => setActiveTab(value)}
+                    variant="scrollable"
+                    allowScrollButtonsMobile
+                    sx={{ mb: 2, minHeight: { xs: 40, md: 48 }, "& .MuiTab-root": { minHeight: { xs: 40, md: 48 } } }}
+                >
                     <Tab value="group" label="Phiếu bộ phận" />
                     <Tab value="pending" label="Cần nhập lệnh chi" />
                 </Tabs>
             )}
 
             {!filteredRows ? null : (
+                <>
+                    <Box sx={{ display: { xs: "none", md: "block" } }}>
                 <TableContainer
                     component={Paper}
                     sx={{
@@ -1276,22 +1502,96 @@ export default function PhieuSec({ mode = "VND" }) {
                         </TableBody>
                     </Table>
                 </TableContainer>
+                    </Box>
+
+                    <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
+                        {filteredRows.length === 0 ? (
+                            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
+                                <Typography align="center" color="text.secondary" variant="body2">
+                                    Không có bản ghi phù hợp.
+                                </Typography>
+                            </Paper>
+                        ) : filteredRows.map((r) => {
+                            const donVi = donvis.find((d) => d.id === r.donViId);
+                            const beneficiaryName = r.tenDonVi || donVi?.name || `ID: ${r.donViId}`;
+                            const createdDate = isoToDisplay(r.ngay).split(" ")[0];
+                            return (
+                                <Paper
+                                    key={r.id}
+                                    variant="outlined"
+                                    onClick={() => openDetailDialog(r)}
+                                    sx={{
+                                        p: 1.25,
+                                        borderRadius: 2.5,
+                                        bgcolor: "background.paper",
+                                        cursor: "pointer",
+                                        boxShadow: "0 6px 18px rgba(15, 23, 42, 0.05)",
+                                    }}
+                                >
+                                    <Stack spacing={0.75}>
+                                        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={{ fontWeight: 800, fontSize: "0.96rem" }} noWrap>
+                                                    {r.maSoSec || `SS-${r.id}`}
+                                                </Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {createdDate} · {r.tenNguoiTao || "—"}
+                                                </Typography>
+                                            </Box>
+                                            <StatusChip status={getDisplayStatus(r)} />
+                                        </Stack>
+
+                                        <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: "primary.main" }}>
+                                            {fmtMoney(r.soTien)} {r.maLoaiTien || "VND"}
+                                        </Typography>
+
+                                        <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+                                            {beneficiaryName}
+                                        </Typography>
+
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
+                                            {r.noiDung || "Không có nội dung"}
+                                        </Typography>
+                                    </Stack>
+                                </Paper>
+                            );
+                        })}
+                    </Stack>
+                </>
             )}
 
             {/* Dialog chi tiết phiếu */}
-            <Dialog open={openDetail} onClose={handleCloseDetail} maxWidth="md" fullWidth>
+            <Dialog
+                open={openDetail}
+                onClose={handleCloseDetail}
+                maxWidth="md"
+                fullWidth
+                fullScreen={isMobile}
+                PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 }, overflow: "hidden" } }}
+            >
                 <DialogTitle
                     sx={{
-                        pb: 1.5,
+                        pb: { xs: 1, sm: 1.5 },
+                        px: { xs: 1.5, sm: 3 },
+                        pt: { xs: 1.25, sm: 2 },
                         display: "flex",
                         alignItems: { xs: "flex-start", sm: "center" },
                         justifyContent: "space-between",
                         flexDirection: { xs: "column", sm: "row" },
-                        gap: 2,
+                        gap: { xs: 1, sm: 2 },
+                        bgcolor: { xs: "primary.main", sm: "background.paper" },
+                        color: { xs: "primary.contrastText", sm: "text.primary" },
                     }}
                 >
-                    <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                    <IconButton
+                        onClick={handleCloseDetail}
+                        aria-label="Đóng"
+                        sx={{ display: { xs: "inline-flex", sm: "none" }, position: "absolute", right: 8, top: 8, color: "primary.contrastText" }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                    <Box sx={{ pr: { xs: 5, sm: 0 } }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: "1.05rem", sm: "1.25rem" } }}>
                             Chi tiết phiếu séc
                         </Typography>
 
@@ -1317,7 +1617,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     </Box>
 
                     {detail && (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, flexWrap: "wrap" }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0, flexWrap: "wrap", width: { xs: "100%", sm: "auto" }, justifyContent: { xs: "space-between", sm: "flex-end" } }}>
                             <StatusChip status={getDisplayStatus(detail)} />
                             <Typography
                                 sx={{
@@ -1339,14 +1639,14 @@ export default function PhieuSec({ mode = "VND" }) {
                     dividers
                     sx={{
                         bgcolor: (t) => (t.palette.mode === "light" ? t.palette.grey[50] : "background.default"),
-                        p: 2.5,
+                        p: { xs: 1.25, sm: 2.5 },
                     }}
                 >
                     {!detail ? (
                         <Typography color="text.secondary">Chưa có dữ liệu.</Typography>
                     ) : (
-                        <Stack spacing={2.5}>
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                        <Stack spacing={{ xs: 1.25, sm: 2.5 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                     Thông tin chung
                                 </Typography>
@@ -1376,7 +1676,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 </Box>
                             </Paper>
 
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                     Tài liệu đính kèm
                                 </Typography>
@@ -1432,57 +1732,84 @@ export default function PhieuSec({ mode = "VND" }) {
                                             Chưa có tài liệu đính kèm.
                                         </Typography>
                                     ) : (
-                                        <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell>STT</TableCell>
-                                                    <TableCell>Tên file</TableCell>
-                                                    <TableCell>Người thêm tài liệu</TableCell>
-                                                    <TableCell>Ngày thêm</TableCell>
-                                                    <TableCell align="right">Xem</TableCell>
-                                                    <TableCell align="right">Xoá</TableCell>
-                                                </TableRow>
-                                            </TableHead>
-                                            <TableBody>
+                                        <>
+                                            <Box sx={{ display: { xs: "none", sm: "block" }, overflowX: "auto" }}>
+                                                <Table size="small">
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell>STT</TableCell>
+                                                            <TableCell>Tên file</TableCell>
+                                                            <TableCell>Người thêm tài liệu</TableCell>
+                                                            <TableCell>Ngày thêm</TableCell>
+                                                            <TableCell align="right">Xem</TableCell>
+                                                            <TableCell align="right">Xoá</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {attachList.map((tl, idx) => (
+                                                            <TableRow key={tl.taiLieuId ?? tl.TaiLieuId ?? idx}>
+                                                                <TableCell>{idx + 1}</TableCell>
+                                                                <TableCell>{tl.fileName ?? tl.FileName}</TableCell>
+                                                                <TableCell>{tl.nguoiTao ?? tl.NguoiTao}</TableCell>
+                                                                <TableCell>
+                                                                    {isoToDisplay(tl.ngayTao ?? tl.NgayTao)}
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <Button
+                                                                        size="small"
+                                                                        onClick={() =>
+                                                                            handleViewAttachment(
+                                                                                tl
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Xem
+                                                                    </Button>
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <IconButton
+                                                                        size="small"
+                                                                        color="error"
+                                                                        onClick={() => handleDeleteAttachment(tl)}
+                                                                    >
+                                                                        <DeleteIcon fontSize="small" />
+                                                                    </IconButton>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </Box>
+
+                                            <Stack spacing={1} sx={{ display: { xs: "flex", sm: "none" } }}>
                                                 {attachList.map((tl, idx) => (
-                                                    <TableRow key={tl.taiLieuId ?? tl.TaiLieuId ?? idx}>
-                                                        <TableCell>{idx + 1}</TableCell>
-                                                        <TableCell>{tl.fileName ?? tl.FileName}</TableCell>
-                                                        <TableCell>{tl.nguoiTao ?? tl.NguoiTao}</TableCell>
-                                                        <TableCell>
-                                                            {isoToDisplay(tl.ngayTao ?? tl.NgayTao)}
-                                                        </TableCell>
-                                                        <TableCell align="right">
-                                                            <Button
-                                                                size="small"
-                                                                onClick={() =>
-                                                                    handleViewAttachment(
-                                                                        tl
-                                                                    )
-                                                                }
-                                                            >
-                                                                Xem
-                                                            </Button>
-                                                        </TableCell>
-                                                        <TableCell align="right">
-                                                            <IconButton
-                                                                size="small"
-                                                                color="error"
-                                                                onClick={() => handleDeleteAttachment(tl)}
-                                                            >
-                                                                <DeleteIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </TableCell>
-                                                    </TableRow>
+                                                    <Paper key={tl.taiLieuId ?? tl.TaiLieuId ?? idx} variant="outlined" sx={{ p: 1, borderRadius: 2 }}>
+                                                        <Stack spacing={0.75}>
+                                                            <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", overflowWrap: "anywhere" }}>
+                                                                {tl.fileName ?? tl.FileName}
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {(tl.nguoiTao ?? tl.NguoiTao) || "—"} · {isoToDisplay(tl.ngayTao ?? tl.NgayTao)}
+                                                            </Typography>
+                                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                                <Button size="small" variant="outlined" onClick={() => handleViewAttachment(tl)}>
+                                                                    Xem
+                                                                </Button>
+                                                                <IconButton size="small" color="error" onClick={() => handleDeleteAttachment(tl)}>
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Stack>
+                                                        </Stack>
+                                                    </Paper>
                                                 ))}
-                                            </TableBody>
-                                        </Table>
+                                            </Stack>
+                                        </>
                                     )}
                                 </Stack>
                             </Paper>
 
                             {canAddLenhChi && (
-                                <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                         Lệnh chi
                                     </Typography>
@@ -1504,7 +1831,7 @@ export default function PhieuSec({ mode = "VND" }) {
                             )}
 
                             {detail?.maLenhChi && (
-                                <Paper variant="outlined" sx={{ p: 2 }}>
+                                <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                         Lệnh chi
                                     </Typography>
@@ -1524,7 +1851,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 </Paper>
                             )}
 
-                            <Paper variant="outlined" sx={{ p: 2 }}>
+                            <Paper variant="outlined" sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: { xs: 2.5, sm: 2 } }}>
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
                                     Lịch sử duyệt
                                 </Typography>
@@ -1560,14 +1887,20 @@ export default function PhieuSec({ mode = "VND" }) {
                 <DialogActions
                     sx={{
                         borderTop: (t) => `1px solid ${t.palette.divider}`,
-                        px: 2.5,
-                        py: 1.5,
+                        px: { xs: 1.25, sm: 2.5 },
+                        py: { xs: 1, sm: 1.5 },
                         display: "flex",
+                        flexDirection: { xs: "column", sm: "row" },
+                        alignItems: { xs: "stretch", sm: "center" },
                         justifyContent: "space-between",
+                        gap: 1,
+                        bgcolor: "background.paper",
+                        "& .MuiStack-root": { width: { xs: "100%", sm: "auto" } },
+                        "& .MuiButton-root": { width: { xs: "100%", sm: "auto" } },
                     }}
                 >
                     {detail && (
-                        <Stack direction="row" spacing={1}>
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                             {canEdit(detail) && (
                                 <Button
                                     color="primary"
@@ -1647,7 +1980,7 @@ export default function PhieuSec({ mode = "VND" }) {
             </Dialog>
 
             {/* Dialog tạo phiếu */}
-            <Dialog open={openCreate} onClose={() => { setOpenCreate(false); resetForm(); }} maxWidth="sm" fullWidth>
+            <Dialog open={openCreate} onClose={() => { setOpenCreate(false); resetForm(); }} maxWidth="sm" fullWidth fullScreen={isMobile}>
                 <DialogTitle>{editingPhieu ? "Sửa" : "Tạo"} phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} mt={1}>
@@ -1766,7 +2099,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     <Button variant="contained" onClick={submitCreate}>{editingPhieu ? "Cập nhật" : "Lưu"}</Button>
                 </DialogActions>
             </Dialog>
-            <Dialog open={openAddDv} onClose={() => setOpenAddDv(false)} maxWidth="sm" fullWidth>
+            <Dialog open={openAddDv} onClose={() => setOpenAddDv(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
                 <DialogTitle>Thêm đơn vị hưởng thụ</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} mt={1}>

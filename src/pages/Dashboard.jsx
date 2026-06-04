@@ -120,14 +120,36 @@ export default function Dashboard() {
     }));
     const hasBarData = barData.some(x => x.count > 0 || x.amount > 0);
     return (
-        <Box>
-            <Typography variant="h5" gutterBottom fontWeight={700}>
+        <Box sx={{ width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
+            <Typography variant="h5" gutterBottom fontWeight={700} sx={{ fontSize: { xs: "1.1rem", sm: "1.5rem" }, lineHeight: 1.25 }}>
                 Tổng quan phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
             </Typography>
 
             {/* ── Filter bar ───────────────────────────────────────── */}
             <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
+                <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1.5}
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    flexWrap="wrap"
+                    sx={{
+                        mb: { xs: 1.25, sm: 2 },
+                        p: { xs: 1, sm: 0 },
+                        borderRadius: { xs: 2, sm: 0 },
+                        border: { xs: (t) => `1px solid ${t.palette.divider}`, sm: "none" },
+                        bgcolor: { xs: "background.paper", sm: "transparent" },
+                        "& .MuiFormControl-root, & .MuiAutocomplete-root": {
+                            width: { xs: "100%", sm: "auto" },
+                        },
+                        "& .MuiInputBase-root": {
+                            fontSize: { xs: "0.86rem", sm: "0.875rem" },
+                        },
+                        "& .MuiButton-root": {
+                            width: { xs: "100%", sm: "auto" },
+                            minHeight: { xs: 36, sm: 36 },
+                        },
+                    }}
+                >
                     <DatePicker label="Từ ngày" value={fromDate} onChange={setFromDate} slotProps={{ textField: { size: "small" } }} maxDate={toDate || undefined} />
                     <DatePicker label="Đến ngày" value={toDate} onChange={setToDate} slotProps={{ textField: { size: "small" } }} minDate={fromDate || undefined} />
 
@@ -141,9 +163,9 @@ export default function Dashboard() {
                         options={donvis}
                         value={benefitDV} onChange={(_, v) => setBenefitDV(v)}
                         getOptionLabel={(o) => o?.name ?? ""} isOptionEqualToValue={(o, v) => o?.id === v?.id}
-                        renderInput={(p) => <TextField {...p} label="Đơn vị thụ hưởng" size="small" />} sx={{ minWidth: 240 }}
+                        renderInput={(p) => <TextField {...p} label="Đơn vị thụ hưởng" size="small" />} sx={{ minWidth: { xs: "100%", sm: 240 } }}
                     />
-                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                    <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 150 } }}>
                         <InputLabel>Loại séc</InputLabel>
                         <Select
                             label="Loại séc"
@@ -160,7 +182,7 @@ export default function Dashboard() {
                         </Select>
                     </FormControl>
                     {isNgoaiTe && (
-                        <FormControl size="small" sx={{ minWidth: 150 }}>
+                        <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 150 } }}>
                             <InputLabel>Loại tiền</InputLabel>
                             <Select label="Loại tiền" value={maLoaiTien} onChange={(e) => setMaLoaiTien(e.target.value)}>
                                 <MenuItem value="">Tất cả</MenuItem>
@@ -171,7 +193,7 @@ export default function Dashboard() {
                         </FormControl>
                     )}
 
-                    <FormControl size="small" sx={{ minWidth: 150, ml: { xs: 0, md: "auto" } }}>
+                    <FormControl size="small" sx={{ minWidth: { xs: "100%", sm: 150 }, ml: { xs: 0, md: "auto" } }}>
                         <InputLabel>Nhóm theo</InputLabel>
                         <Select label="Nhóm theo" value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
                             <MenuItem value="Month">Tháng (YYYY-MM)</MenuItem>
@@ -180,7 +202,7 @@ export default function Dashboard() {
                         </Select>
                     </FormControl>
 
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", sm: "auto" } }}>
                         <Button variant="outlined" onClick={clearFilters}>Xóa lọc</Button>
                         <Button variant="contained" onClick={loadAll} disabled={loading}>
                             {loading ? <CircularProgress size={20} sx={{ color: "white" }} /> : "Áp dụng"}
@@ -193,8 +215,8 @@ export default function Dashboard() {
             <Box
                 sx={{
                     display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
-                    gap: 2, mb: 2,
+                    gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
+                    gap: { xs: 1, sm: 2 }, mb: { xs: 1.25, sm: 2 },
                 }}
             >
                 {[
@@ -205,33 +227,33 @@ export default function Dashboard() {
                     { label: "Từ chối", value: statCards.rejected, color: "error.main" },
                 ].map((c, i) => (
                     <Paper key={i} elevation={1} sx={{
-                        p: 3, textAlign: "center", borderRadius: 2, border: (t) => `1px solid ${t.palette.divider}`,
-                        height: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        p: { xs: 1.15, sm: 3 }, textAlign: "center", borderRadius: 2, border: (t) => `1px solid ${t.palette.divider}`,
+                        minHeight: { xs: 78, sm: 100 }, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                     }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600, color: "text.secondary", mb: 0.5 }}>{c.label}</Typography>
-                        <Typography variant="h3" fontWeight={800} sx={{ color: c.color }}>{c.value ?? 0}</Typography>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600, color: "text.secondary", mb: 0.5, fontSize: { xs: "0.74rem", sm: "1rem" }, lineHeight: 1.2 }}>{c.label}</Typography>
+                        <Typography variant="h3" fontWeight={800} sx={{ color: c.color, fontSize: { xs: "1.7rem", sm: "3rem" }, lineHeight: 1 }}>{c.value ?? 0}</Typography>
                     </Paper>
                 ))}
             </Box>
 
             {/* ── Analytics: Tổng & Biểu đồ ───────────────────────────────────── */}
-            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+            <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderRadius: 2, overflow: "hidden" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>Phân tích</Typography>
 
                 {/* Summary row */}
-                <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ mb: 2 }}>
-                    <Box sx={{ p: 2, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: 220 }}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 1, sm: 2 }} flexWrap="wrap" sx={{ mb: 2 }}>
+                    <Box sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: { xs: "100%", sm: 220 } }}>
                         <Typography variant="body2" color="text.secondary">Tổng số séc</Typography>
                         <Typography variant="h5" fontWeight={800}>{summary.totalCount?.toLocaleString("vi-VN")}</Typography>
                     </Box>
                     {(!isNgoaiTe || maLoaiTien) && (
-                        <Box sx={{ p: 2, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: 220 }}>
+                        <Box sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: { xs: "100%", sm: 220 } }}>
                             <Typography variant="body2" color="text.secondary">Tổng số tiền</Typography>
                             <Typography variant="h5" fontWeight={800}>{fmtMoney(summary.totalAmount)} {isNgoaiTe ? maLoaiTien : "VND"}</Typography>
                         </Box>
                     )}
                     {isNgoaiTe && !maLoaiTien && (summary.byCurrency || []).map((item) => (
-                        <Box key={item.maLoaiTien} sx={{ p: 2, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: 220 }}>
+                        <Box key={item.maLoaiTien} sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: { xs: "100%", sm: 220 } }}>
                             <Typography variant="body2" color="text.secondary">Tổng {item.maLoaiTien}</Typography>
                             <Typography variant="h5" fontWeight={800}>{fmtMoney(item.amount)} {item.maLoaiTien}</Typography>
                         </Box>
@@ -242,7 +264,7 @@ export default function Dashboard() {
 
                 {/* Charts row: Bar (left) + Pie (right) */}
                 <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                    <Box sx={{ flex: 1, minHeight: 320 }}>
+                    <Box sx={{ flex: 1, minHeight: { xs: 260, sm: 320 }, minWidth: 0 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             Biểu đồ cột — {groupBy === "Month" ? "Theo tháng (YYYY-MM)" : groupBy === "CreatorDonVi" ? "Theo bộ phận đăng ký" : "Theo đơn vị thụ hưởng"}
                         </Typography>
@@ -252,7 +274,7 @@ export default function Dashboard() {
                                 <Typography color="text.secondary">Không có dữ liệu phù hợp</Typography>
                             </Paper>
                         ) : (
-                            <ResponsiveContainer width="100%" height={300}>
+                            <ResponsiveContainer width="100%" height={260}>
                                 <BarChart
                                     data={barData}
                                     margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
@@ -280,13 +302,13 @@ export default function Dashboard() {
                         )}
                     </Box>
 
-                    <Box sx={{ flex: 1, minHeight: 320 }}>
+                    <Box sx={{ flex: 1, minHeight: { xs: 260, sm: 320 }, minWidth: 0 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             Tỷ trọng theo trạng thái
                         </Typography>
-                        <ResponsiveContainer width="100%" height={300}>
+                        <ResponsiveContainer width="100%" height={260}>
                             <PieChart>
-                                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110} label>
+                                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={90} label>
                                     {pieData.map((e, i) => (
                                         <Cell key={i} fill={STATUS_COLORS[e.key] || "#8884d8"} />
                                     ))}
