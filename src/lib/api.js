@@ -121,6 +121,12 @@ export const api = {
         const { data } = await http.put(`/phieu/${phieuId}`, payload);
         return data;
     },
+    async deletePhieu(phieuId, user) {
+        const { data } = await http.delete(`/phieu/${phieuId}`, {
+            data: { requesterUserId: user?.id },
+        });
+        return data;
+    },
     // lib/api.js
     async approve(phieuId, role, agree, user, ghiChu = null) {
         const body = {

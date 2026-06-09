@@ -382,6 +382,9 @@ export default function PhieuSec({ mode = "VND" }) {
     const [returnTarget, setReturnTarget] = useState(null);
     const [returnReason, setReturnReason] = useState("");
     const [returnSubmitting, setReturnSubmitting] = useState(false);
+    const [deletePhieuOpen, setDeletePhieuOpen] = useState(false);
+    const [deletePhieuTarget, setDeletePhieuTarget] = useState(null);
+    const [deletePhieuSubmitting, setDeletePhieuSubmitting] = useState(false);
 
     const hasPermission = (code) =>
         role === "Admin" ||
@@ -465,6 +468,12 @@ export default function PhieuSec({ mode = "VND" }) {
 
     const canEdit = (p) =>
         p?.trangThai === "ChoDuyet_TBP" && (hasPermission("Admin") || Number(p?.nguoiDangKyId) === Number(user?.id));
+
+    const canDeletePhieu = (p) =>
+        !!p && (
+            hasPermission("Admin") ||
+            (Number(p?.nguoiDangKyId) === Number(user?.id) && ["ChoDuyet_TBP", "TuChoi"].includes(p?.trangThai))
+        );
 
     const getDonViByPhieu = (p) => donvis.find((d) => d.id === p?.donViId);
     const getTenNganHang = (p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null;
@@ -589,6 +598,33 @@ export default function PhieuSec({ mode = "VND" }) {
             setToast({ open: true, msg: e?.response?.data?.message || e.message || "Lỗi trả lại phiếu", type: "error" });
         } finally {
             setReturnSubmitting(false);
+        }
+    };
+
+    const openDeletePhieuDialog = (p, e) => {
+        e?.stopPropagation();
+        if (!canDeletePhieu(p)) return;
+        setDeletePhieuTarget(p);
+        setDeletePhieuOpen(true);
+    };
+
+    const submitDeletePhieu = async () => {
+        if (!deletePhieuTarget) return;
+        try {
+            setDeletePhieuSubmitting(true);
+            if (!canDeletePhieu(deletePhieuTarget)) throw new Error("Bạn không có quyền xoá phiếu này");
+
+            await api.deletePhieu(deletePhieuTarget.id, user);
+            setRows((r) => (r ? r.filter((x) => x.id !== deletePhieuTarget.id) : r));
+            setPendingLenhChiRows((r) => (r ? r.filter((x) => x.id !== deletePhieuTarget.id) : r));
+            if (detail?.id === deletePhieuTarget.id) handleCloseDetail();
+            setDeletePhieuOpen(false);
+            setDeletePhieuTarget(null);
+            setToast({ open: true, msg: "Đã xoá phiếu", type: "success" });
+        } catch (e) {
+            setToast({ open: true, msg: e?.response?.data?.message || e.message || "Lỗi xoá phiếu", type: "error" });
+        } finally {
+            setDeletePhieuSubmitting(false);
         }
     };
 
@@ -1017,6 +1053,7 @@ export default function PhieuSec({ mode = "VND" }) {
             "Số chứng từ/ Ref No",
             "Ngày thanh toán/ Effective date",
             "Mã ngân hàng",
+            "Tên đơn vị hưởng thụ",
         ];
 
         const rows = filteredRows.map((row, index) => {
@@ -1033,6 +1070,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 "",
                 "",
                 getTenNganHang(row) || "",
+                row.tenDonVi || donVi?.name || "",
             ];
         });
 
@@ -1049,6 +1087,7 @@ export default function PhieuSec({ mode = "VND" }) {
             { wch: 10 },
             { wch: 13 },
             { wch: 16 },
+            { wch: 36 },
         ];
         sheet["!rows"] = [{ hpt: 93 }, ...rows.map(() => ({ hpt: 15 }))];
 
@@ -1382,7 +1421,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                         </TableCell>
 
                                         {/* Đơn vị (TextField filter) */}
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 240 }}>
                                             <Stack direction="row" spacing={0.5} alignItems="center">
                                                 <span>Đơn vị</span>
                                                 <IconButton
@@ -1624,7 +1663,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                             <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
                                             <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
                                             <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
-                                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 40px)", alignItems: "center" }}>
+                                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 40px)", alignItems: "center" }}>
                                                     <Box sx={{ visibility: canEdit(r) || canReturn(r) ? "visible" : "hidden" }}>
                                                         {canEdit(r) ? (
                                                             <IconButton
@@ -1664,6 +1703,17 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             <CancelIcon />
                                                         </IconButton>
                                                     </span>
+                                                    <Box sx={{ visibility: canDeletePhieu(r) ? "visible" : "hidden" }}>
+                                                        <Tooltip title="Xoá phiếu">
+                                                            <IconButton
+                                                                color="error"
+                                                                onClick={(e) => openDeletePhieuDialog(r, e)}
+                                                                aria-label="Xoá phiếu"
+                                                            >
+                                                                <DeleteIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </Box>
                                                 </Box>
                                             </TableCell>
                                         </TableRow>
@@ -2129,6 +2179,16 @@ export default function PhieuSec({ mode = "VND" }) {
                             >
                                 Từ chối
                             </Button>
+                            {canDeletePhieu(detail) && (
+                                <Button
+                                    color="error"
+                                    variant="contained"
+                                    startIcon={<DeleteIcon />}
+                                    onClick={() => openDeletePhieuDialog(detail)}
+                                >
+                                    Xoá
+                                </Button>
+                            )}
                         </Stack>
                     )}
 
@@ -2285,14 +2345,14 @@ export default function PhieuSec({ mode = "VND" }) {
                     <Stack spacing={2} mt={1}>
                         <TextField
                             autoFocus
-                            label="Tên đơn vị (VD: Phòng Kế toán)"
+                            label="Tên đơn vị hưởng thụ (tên hoá đơn)"
                             value={dvName}
                             onChange={(e) => setDvName(e.target.value)}
                             fullWidth
                             required
                         />
                         <TextField
-                            label="Tên chuyển khoản"
+                            label="Tên chuyển khoản - IPay"
                             value={dvTenChuyenKhoan}
                             onChange={(e) => setDvTenChuyenKhoan(e.target.value)}
                             fullWidth
@@ -2351,6 +2411,30 @@ export default function PhieuSec({ mode = "VND" }) {
                         disabled={savingDv || !dvName.trim() || !dvTenChuyenKhoan.trim() || !dvStk.trim() || !banks.some((bank) => bank.MaNganHang === dvMaNH)}
                     >
                         {savingDv ? "Đang lưu..." : "Lưu"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+            <Dialog open={deletePhieuOpen} onClose={() => !deletePhieuSubmitting && setDeletePhieuOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Xoá phiếu</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={1}>
+                        <Typography>
+                            Bạn có chắc muốn xoá phiếu <b>{deletePhieuTarget?.maSoSec || (deletePhieuTarget ? `SS-${deletePhieuTarget.id}` : "")}</b>?
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Phiếu sẽ được ẩn khỏi danh sách, dữ liệu lịch sử và tài liệu vẫn được giữ trong hệ thống.
+                        </Typography>
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeletePhieuOpen(false)} disabled={deletePhieuSubmitting}>Huỷ</Button>
+                    <Button
+                        color="error"
+                        variant="contained"
+                        onClick={submitDeletePhieu}
+                        disabled={deletePhieuSubmitting}
+                    >
+                        {deletePhieuSubmitting ? "Đang xoá..." : "Xoá phiếu"}
                     </Button>
                 </DialogActions>
             </Dialog>

@@ -8,10 +8,18 @@ import dayjs from "dayjs";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const fmtMoney = (n) =>
     (n ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 });
+
+const fmtCompactMoney = (value) => {
+    const n = Number(value || 0);
+    if (Math.abs(n) >= 1_000_000_000) return `${(n / 1_000_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tỷ`;
+    if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tr`;
+    if (Math.abs(n) >= 1_000) return `${(n / 1_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}k`;
+    return n.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
+};
 
 const logSoSecDashboard = (...args) => console.log("[SoSec][Dashboard]", ...args);
 
@@ -52,7 +60,7 @@ export default function Dashboard() {
         creatorDonViId: creatorDV?.id ?? "",
         donViHuongThuId: benefitDV?.id ?? "",
         loaiSec: mode,
-        maLoaiTien,
+        maLoaiTien: isNgoaiTe ? maLoaiTien : "VND",
     });
 
     const loadAll = useCallback(async () => {
@@ -113,11 +121,36 @@ export default function Dashboard() {
         { name: "Hoàn thành", value: summary.byStatus?.completed?.count || 0, key: "completed" },
         { name: "Từ chối", value: summary.byStatus?.rejected?.count || 0, key: "rejected" },
     ].filter(x => x.value > 0);
-    const barData = (grouped || []).map(d => ({
-        label: `${d.label}${isNgoaiTe && !maLoaiTien ? ` (${d.maLoaiTien})` : ""}`,
-        count: Number(d.count ?? 0),
-        amount: Number(d.amount ?? 0),
-    }));
+    const summaryByCurrency = summary.byCurrency || [];
+    const normalizeCurrencyCode = (value) => String(value || "").trim().toUpperCase();
+    const totalCurrencyCode = isNgoaiTe ? normalizeCurrencyCode(maLoaiTien) : "VND";
+    const shouldKeepCurrency = (currency) => {
+        const code = normalizeCurrencyCode(currency);
+        if (!isNgoaiTe) return code === "VND" || code === "";
+        if (maLoaiTien) return code === normalizeCurrencyCode(maLoaiTien);
+        return code !== "VND" && code !== "";
+    };
+    const visibleSummaryByCurrency = summaryByCurrency.filter((item) => shouldKeepCurrency(item.maLoaiTien));
+    const selectedCurrencySummary = totalCurrencyCode
+        ? visibleSummaryByCurrency.find((item) => normalizeCurrencyCode(item.maLoaiTien) === totalCurrencyCode)
+        : null;
+    const singleCurrencySummary = visibleSummaryByCurrency.length === 1 ? visibleSummaryByCurrency[0] : null;
+    const totalAmountDisplay = summary.totalAmount
+        ?? selectedCurrencySummary?.amount
+        ?? (!isNgoaiTe ? singleCurrencySummary?.amount : null);
+    const visibleGrouped = (grouped || []).filter((d) => shouldKeepCurrency(d.maLoaiTien));
+    const groupedCurrencies = [...new Set(visibleGrouped.map((d) => normalizeCurrencyCode(d.maLoaiTien)).filter(Boolean))];
+    const shouldShowCurrencyInChart = groupedCurrencies.length > 1 || (isNgoaiTe && !maLoaiTien);
+    const barData = Array.from(visibleGrouped.reduce((acc, d) => {
+        const currency = normalizeCurrencyCode(d.maLoaiTien) || totalCurrencyCode || "";
+        const label = `${d.label}${shouldShowCurrencyInChart && currency ? ` (${currency})` : ""}`;
+        const key = `${label}__${currency}`;
+        const current = acc.get(key) || { label, currency, count: 0, amount: 0 };
+        current.count += Number(d.count ?? 0);
+        current.amount += Number(d.amount ?? 0);
+        acc.set(key, current);
+        return acc;
+    }, new Map()).values());
     const hasBarData = barData.some(x => x.count > 0 || x.amount > 0);
     return (
         <Box sx={{ width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
@@ -249,10 +282,10 @@ export default function Dashboard() {
                     {(!isNgoaiTe || maLoaiTien) && (
                         <Box sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: { xs: "100%", sm: 220 } }}>
                             <Typography variant="body2" color="text.secondary">Tổng số tiền</Typography>
-                            <Typography variant="h5" fontWeight={800}>{fmtMoney(summary.totalAmount)} {isNgoaiTe ? maLoaiTien : "VND"}</Typography>
+                            <Typography variant="h5" fontWeight={800}>{fmtMoney(totalAmountDisplay)} {totalCurrencyCode}</Typography>
                         </Box>
                     )}
-                    {isNgoaiTe && !maLoaiTien && (summary.byCurrency || []).map((item) => (
+                    {isNgoaiTe && !maLoaiTien && visibleSummaryByCurrency.map((item) => (
                         <Box key={item.maLoaiTien} sx={{ p: { xs: 1.25, sm: 2 }, borderRadius: 1, border: (t) => `1px solid ${t.palette.divider}`, minWidth: { xs: "100%", sm: 220 } }}>
                             <Typography variant="body2" color="text.secondary">Tổng {item.maLoaiTien}</Typography>
                             <Typography variant="h5" fontWeight={800}>{fmtMoney(item.amount)} {item.maLoaiTien}</Typography>
@@ -277,21 +310,31 @@ export default function Dashboard() {
                             <ResponsiveContainer width="100%" height={260}>
                                 <BarChart
                                     data={barData}
-                                    margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
+                                    margin={{ top: 8, right: 28, left: 0, bottom: 8 }}
                                     barCategoryGap={16}
                                 >
-                                    <XAxis dataKey="label" />
-                                    {/* Tách 2 trục Y: trái = count, phải = amount */}
-                                    <YAxis yAxisId="left" />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis
+                                        dataKey="label"
+                                        interval={0}
+                                        tick={{ fontSize: 12 }}
+                                        tickMargin={8}
+                                    />
+                                    <YAxis yAxisId="left" allowDecimals={false} width={34} />
                                     <YAxis
                                         yAxisId="right"
                                         orientation="right"
-                                        tickFormatter={(v) => v.toLocaleString("vi-VN")}
+                                        width={72}
+                                        tickFormatter={fmtCompactMoney}
                                     />
                                     <Tooltip
-                                        formatter={(v, n) =>
-                                             n === "Tổng tiền" ? `${Number(v).toLocaleString("vi-VN")} ${isNgoaiTe ? maLoaiTien || "nguyên tệ" : "VND"}` : v
-                                        }
+                                        formatter={(value, name, item) => {
+                                            if (item?.dataKey === "amount") {
+                                                const currency = item?.payload?.currency || totalCurrencyCode || "VND";
+                                                return [`${fmtMoney(value)} ${currency}`, "Tổng tiền"];
+                                            }
+                                            return [Number(value).toLocaleString("vi-VN"), "Số séc"];
+                                        }}
                                     />
                                     <Legend />
                                     {/* Màu nhẹ, không sặc sỡ */}
