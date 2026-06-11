@@ -33,12 +33,14 @@ import { useAuth } from "../store/useAuth";
 
 const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
-const PAYMENT_CONTENT_MAX_LENGTH = 200;
+const PAYMENT_CONTENT_MAX_LENGTH = 146;
+const PAYMENT_CONTENT_FORBIDDEN_CHARS = /[@$^{}()<>?|\\[\]/]/;
+const PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT = "@ $ ^ { } ( ) < > ? | \\ [ ] /";
 const validatePaymentContent = (value = "") => {
     const content = String(value).trim();
     if (!content) return "Nhập nội dung";
     if (content.length > PAYMENT_CONTENT_MAX_LENGTH) return `Nội dung thanh toán không quá ${PAYMENT_CONTENT_MAX_LENGTH} ký tự`;
-    if (content.includes("/")) return "Nội dung thanh toán không được dùng dấu /";
+    if (PAYMENT_CONTENT_FORBIDDEN_CHARS.test(content)) return `Nội dung thanh toán không được dùng các ký tự: ${PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT}`;
     return "";
 };
 const VN_NUMBER_WORDS = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
@@ -222,20 +224,12 @@ const MobileSectionTitle = ({ children }) => (
 
 const PaymentContentField = memo(function PaymentContentField({ value, onCommit }) {
     const [localValue, setLocalValue] = useState(value || "");
-    const deferredValue = useDeferredValue(localValue);
-    const errorText = validatePaymentContent(deferredValue);
-    const helperText = errorText || `${String(deferredValue || "").trim().length}/${PAYMENT_CONTENT_MAX_LENGTH} ký tự. Không dùng dấu /.`;
+    const errorText = validatePaymentContent(localValue);
+    const helperText = errorText || `${String(localValue || "").trim().length}/${PAYMENT_CONTENT_MAX_LENGTH} ký tự. Không dùng: ${PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT}.`;
 
     useEffect(() => {
         setLocalValue(value || "");
     }, [value]);
-
-    useEffect(() => {
-        const timer = window.setTimeout(() => {
-            onCommit(localValue);
-        }, 250);
-        return () => window.clearTimeout(timer);
-    }, [localValue, onCommit]);
 
     return (
         <TextField
@@ -244,7 +238,7 @@ const PaymentContentField = memo(function PaymentContentField({ value, onCommit 
             value={localValue}
             onChange={(e) => setLocalValue(e.target.value)}
             onBlur={() => onCommit(localValue)}
-            error={!!deferredValue && !!errorText}
+            error={!!localValue && !!errorText}
             helperText={helperText}
             inputProps={{ maxLength: PAYMENT_CONTENT_MAX_LENGTH }}
         />
@@ -1017,7 +1011,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 "Ngày hoàn thành": isoToDisplay(getCompletedAt(row)).split(" ")[0],
                 "Trạng thái": row.trangThai,
                 "Người đăng ký": row.tenNguoiTao,
-                "Đơn vị người tạo": row.tenDonViNguoiTao,
+                "Bộ phận người đăng ký": row.tenDonViNguoiTao,
                 "Ghi chú": row.ghiChu,
             };
         });
@@ -1054,6 +1048,8 @@ export default function PhieuSec({ mode = "VND" }) {
             "Ngày thanh toán/ Effective date",
             "Mã ngân hàng",
             "Tên đơn vị hưởng thụ",
+            "Bộ phận người đăng ký",
+            "Ngày tạo",
         ];
 
         const rows = filteredRows.map((row, index) => {
@@ -1071,10 +1067,13 @@ export default function PhieuSec({ mode = "VND" }) {
                 "",
                 getTenNganHang(row) || "",
                 row.tenDonVi || donVi?.name || "",
+                row.tenDonViNguoiTao || "",
+                isoToDisplay(row.ngay).split(" ")[0],
             ];
         });
 
-        const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        const emptyRows = Array.from({ length: 2 }, () => headers.map(() => ""));
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...emptyRows, ...rows]);
         sheet["!cols"] = [
             { wch: 6 },
             { wch: 30 },
@@ -1088,8 +1087,10 @@ export default function PhieuSec({ mode = "VND" }) {
             { wch: 13 },
             { wch: 16 },
             { wch: 36 },
+            { wch: 28 },
+            { wch: 12 },
         ];
-        sheet["!rows"] = [{ hpt: 93 }, ...rows.map(() => ({ hpt: 15 }))];
+        sheet["!rows"] = [{ hpt: 93 }, ...emptyRows.map(() => ({ hpt: 15 })), ...rows.map(() => ({ hpt: 15 }))];
 
         headers.forEach((_, index) => {
             const cell = sheet[XLSX.utils.encode_cell({ r: 0, c: index })];
@@ -1102,7 +1103,7 @@ export default function PhieuSec({ mode = "VND" }) {
             }
         });
         rows.forEach((_, rowIndex) => {
-            const amountCell = sheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: 2 })];
+            const amountCell = sheet[XLSX.utils.encode_cell({ r: rowIndex + emptyRows.length + 1, c: 2 })];
             if (amountCell) amountCell.z = "0";
         });
 
