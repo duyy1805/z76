@@ -13,6 +13,8 @@ dist-ssr
 PLP review project/
 *.local
 
+*.sql
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -24,4 +26,3 @@ PLP review project/
 *.sln
 *.sw?
 
-*.sql
