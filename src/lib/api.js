@@ -58,8 +58,8 @@ export const api = {
         const { data } = await http.post("/donvi", { name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan });
         return data;
     },
-    async updateDonVi(id, { name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan }) {
-        const { data } = await http.put(`/donvi/${id}`, { name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan });
+    async updateDonVi(id, payload) {
+        const { data } = await http.put(`/donvi/${id}`, payload);
         return data;
     },
 

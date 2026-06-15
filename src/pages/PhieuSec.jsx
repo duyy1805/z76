@@ -245,6 +245,33 @@ const PaymentContentField = memo(function PaymentContentField({ value, onCommit 
     );
 });
 
+const BufferedTextField = memo(function BufferedTextField({ value, onCommit, commitDelay = 350, onBlur, ...props }) {
+    const [localValue, setLocalValue] = useState(value ?? "");
+
+    useEffect(() => {
+        setLocalValue(value ?? "");
+    }, [value]);
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            if (localValue !== (value ?? "")) onCommit(localValue);
+        }, commitDelay);
+        return () => window.clearTimeout(timer);
+    }, [commitDelay, localValue, onCommit, value]);
+
+    return (
+        <TextField
+            {...props}
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onBlur={(e) => {
+                if (localValue !== (value ?? "")) onCommit(localValue);
+                onBlur?.(e);
+            }}
+        />
+    );
+});
+
 const PaymentAmountField = memo(function PaymentAmountField({ value, currencyCode, onCommit }) {
     const [localValue, setLocalValue] = useState(value ?? "");
     const deferredValue = useDeferredValue(localValue);
@@ -253,13 +280,6 @@ const PaymentAmountField = memo(function PaymentAmountField({ value, currencyCod
     useEffect(() => {
         setLocalValue(value ?? "");
     }, [value]);
-
-    useEffect(() => {
-        const timer = window.setTimeout(() => {
-            onCommit(localValue);
-        }, 250);
-        return () => window.clearTimeout(timer);
-    }, [localValue, onCommit]);
 
     return (
         <>
@@ -304,11 +324,12 @@ export default function PhieuSec({ mode = "VND" }) {
     const [openDetail, setOpenDetail] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
     const [detail, setDetail] = useState(null);
-    const [donviInput, setDonviInput] = useState("");
     // toast
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     // dialog thêm đơn vị
     const [openAddDv, setOpenAddDv] = useState(false);
+    const [dvDialogMode, setDvDialogMode] = useState("create");
+    const [editingDonViId, setEditingDonViId] = useState(null);
     const [dvName, setDvName] = useState("");
     const [dvTenChuyenKhoan, setDvTenChuyenKhoan] = useState("");
     const [dvStk, setDvStk] = useState("");
@@ -426,7 +447,7 @@ export default function PhieuSec({ mode = "VND" }) {
         setDonvis(dv);
         setCurrencies(currencyRows || []);
         setBanks(bankRows || []);
-        setForm((f) => ({ ...f, donViId: dv?.[0]?.id ?? 1 }));
+        setForm((f) => ({ ...f, donViId: f.donViId || dv?.[0]?.id || 1 }));
     };
 
     const loadPendingLenhChi = async () => {
@@ -660,11 +681,30 @@ export default function PhieuSec({ mode = "VND" }) {
     };
 
     const openAddDonVi = () => {
+        setDvDialogMode("create");
+        setEditingDonViId(null);
         setDvName("");
         setDvTenChuyenKhoan("");
         setDvStk("");
         setDvMaNH("");
         setDvChiNhanhNH("");
+        setOpenAddDv(true);
+    };
+
+    const openEditDonVi = () => {
+        if (!editingPhieu || !canEdit(editingPhieu) || !form.donViId) return;
+        const selected = donvis.find((item) => item.id === form.donViId);
+        if (!selected) {
+            setToast({ open: true, msg: "Không tìm thấy đơn vị hưởng thụ để sửa", type: "error" });
+            return;
+        }
+        setDvDialogMode("edit");
+        setEditingDonViId(selected.id);
+        setDvName(selected.name || "");
+        setDvTenChuyenKhoan(selected.tenChuyenKhoan || "");
+        setDvStk(selected.stk || "");
+        setDvMaNH(selected.maNganHang || "");
+        setDvChiNhanhNH(selected.chiNhanhNganHang || "");
         setOpenAddDv(true);
     };
 
@@ -681,6 +721,45 @@ export default function PhieuSec({ mode = "VND" }) {
         }
         try {
             setSavingDv(true);
+            if (dvDialogMode === "edit") {
+                if (!editingDonViId) throw new Error("Không xác định đơn vị cần sửa");
+                if (!editingPhieu || !canEdit(editingPhieu)) throw new Error("Bạn không có quyền sửa đơn vị trong phiếu này");
+                const updated = await api.updateDonVi(editingDonViId, {
+                    name: n,
+                    stk: s,
+                    maNganHang: m,
+                    chiNhanhNganHang: branch,
+                    tenChuyenKhoan: transferName,
+                    requesterUserId: user?.id,
+                    requesterRoleCode: hasPermission("Admin") ? "Admin" : role,
+                    phieuId: editingPhieu.id,
+                });
+                const updatedWithBank = {
+                    ...(donvis.find((item) => item.id === editingDonViId) || {}),
+                    ...updated,
+                    id: editingDonViId,
+                    name: updated?.name ?? n,
+                    stk: updated?.stk ?? s,
+                    maNganHang: updated?.maNganHang ?? m,
+                    chiNhanhNganHang: updated?.chiNhanhNganHang ?? branch,
+                    tenChuyenKhoan: updated?.tenChuyenKhoan ?? transferName,
+                    tenNganHang: updated?.tenNganHang ?? selectedBank.TenNganHang,
+                };
+                setDonvis((list) => (list || [])
+                    .map((item) => item.id === editingDonViId ? updatedWithBank : item)
+                    .sort((a, b) => String(a.name).localeCompare(String(b.name), "vi")));
+                setDetail((current) => current?.donViId === editingDonViId ? {
+                    ...current,
+                    tenDonVi: n,
+                    tenChuyenKhoanHuongThu: transferName,
+                    soTaiKhoanHuongThu: s,
+                    maNganHangHuongThu: m,
+                    chiNhanhNganHangHuongThu: branch,
+                } : current);
+                setForm((f) => ({ ...f, donViId: editingDonViId }));
+                setToast({ open: true, msg: "Đã cập nhật đơn vị", type: "success" });
+                await load();
+            } else {
             const created = await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName }); // { id, name, ... }
             const createdWithBank = { ...created, tenChuyenKhoan: transferName, tenNganHang: selectedBank.TenNganHang };
             // cập nhật danh sách + chọn ngay đơn vị mới
@@ -691,6 +770,10 @@ export default function PhieuSec({ mode = "VND" }) {
             setForm((f) => ({ ...f, donViId: created.id }));
             setOpenAddDv(false);
             setToast({ open: true, msg: "Đã thêm đơn vị", type: "success" });
+            }
+            setEditingDonViId(null);
+            setDvDialogMode("create");
+            setOpenAddDv(false);
         } catch (err) {
             const msg = err?.response?.data?.message || "Lưu đơn vị thất bại";
             setToast({ open: true, msg, type: "error" });
@@ -1199,11 +1282,11 @@ export default function PhieuSec({ mode = "VND" }) {
 
                 <Paper variant="outlined" sx={{ p: 1, borderRadius: 2.5, bgcolor: "background.paper" }}>
                     <Stack spacing={1}>
-                        <TextField
+                        <BufferedTextField
                             label="Tìm nhanh"
                             placeholder="Số séc, đơn vị, người tạo..."
                             value={qMobile}
-                            onChange={(e) => setQMobile(e.target.value)}
+                            onCommit={setQMobile}
                             size="small"
                             fullWidth
                             InputLabelProps={{ sx: { fontSize: "0.82rem" } }}
@@ -1348,11 +1431,11 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 PaperProps={{ sx: { p: 1.5, width: 280 } }}
                                             >
                                                 <Stack spacing={1}>
-                                                    <TextField
+                                                    <BufferedTextField
                                                         label="Mã sổ séc"
                                                         placeholder="VD: SS-1024 hoặc ABC123"
                                                         value={qMa}
-                                                        onChange={(e) => setQMa(e.target.value)}
+                                                        onCommit={setQMa}
                                                         autoFocus
                                                         size="small"
                                                     />
@@ -1396,11 +1479,11 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 PaperProps={{ sx: { p: 1.5, width: 360 } }}
                                             >
                                                 <Stack spacing={1}>
-                                                    <TextField
+                                                    <BufferedTextField
                                                         label="Nội dung"
                                                         placeholder="Nhập từ khoá…"
                                                         value={qNoiDung}
-                                                        onChange={(e) => setQNoiDung(e.target.value)}
+                                                        onCommit={setQNoiDung}
                                                         autoFocus
                                                         size="small"
                                                     />
@@ -1444,11 +1527,11 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                             >
                                                 <Stack spacing={1}>
-                                                    <TextField
+                                                    <BufferedTextField
                                                         label="Tên đơn vị"
                                                         placeholder="Nhập từ khoá đơn vị…"
                                                         value={qDonVi}
-                                                        onChange={(e) => setQDonVi(e.target.value)}
+                                                        onCommit={setQDonVi}
                                                         autoFocus
                                                         size="small"
                                                     />
@@ -1495,11 +1578,11 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                             >
                                                 <Stack spacing={1}>
-                                                    <TextField
+                                                    <BufferedTextField
                                                         label="Tên người tạo"
                                                         placeholder="Nhập tên người tạo…"
                                                         value={qNguoiTao}
-                                                        onChange={(e) => setQNguoiTao(e.target.value)}
+                                                        onCommit={setQNguoiTao}
                                                         autoFocus
                                                         size="small"
                                                     />
@@ -2052,10 +2135,10 @@ export default function PhieuSec({ mode = "VND" }) {
                                         Lệnh chi
                                     </Typography>
                                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                                        <TextField
+                                        <BufferedTextField
                                             label="Mã lệnh chi"
                                             value={newLenhChi}
-                                            onChange={(e) => setNewLenhChi(e.target.value)}
+                                            onCommit={setNewLenhChi}
                                             sx={{ flex: 1 }}
                                         />
                                         <Button variant="contained" onClick={saveLenhChi} disabled={savingLC}>
@@ -2242,8 +2325,6 @@ export default function PhieuSec({ mode = "VND" }) {
                                 options={donvis}                                  // [{id, name, ...}]
                                 value={donvis.find(d => d.id === form.donViId) || null}
                                 onChange={(_, val) => setForm({ ...form, donViId: val?.id ?? null })}
-                                inputValue={donviInput}
-                                onInputChange={(_, val) => setDonviInput(val)}
                                 getOptionLabel={(o) => o?.name ?? ""}
                                 isOptionEqualToValue={(o, v) => o?.id === v?.id}
                                 filterOptions={(options, { inputValue }) => {
@@ -2292,6 +2373,28 @@ export default function PhieuSec({ mode = "VND" }) {
                             >
                                 <AddIcon fontSize="small" />
                             </IconButton>
+                            {editingPhieu && (
+                                <Tooltip title={canEdit(editingPhieu) && form.donViId ? "Sửa thông tin đơn vị hưởng thụ" : "Chỉ sửa được khi phiếu đang chờ TBP"}>
+                                    <span>
+                                        <IconButton
+                                            onClick={openEditDonVi}
+                                            color="primary"
+                                            disabled={!canEdit(editingPhieu) || !form.donViId}
+                                            sx={{
+                                                mt: { xs: 0, sm: 0.5 },
+                                                border: '1px solid',
+                                                borderColor: 'divider',
+                                                bgcolor: 'background.paper',
+                                                '&:hover': { bgcolor: 'primary.light', color: 'white' },
+                                                transition: '0.2s',
+                                            }}
+                                            aria-label="Sửa thông tin đơn vị hưởng thụ"
+                                        >
+                                            <EditIcon fontSize="small" />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
+                            )}
 
                         </Stack>
 
@@ -2328,10 +2431,10 @@ export default function PhieuSec({ mode = "VND" }) {
                             currencyCode={isNgoaiTe ? form.maLoaiTien || "ngoại tệ" : "VND"}
                             onCommit={handleSoTienCommit}
                         />
-                        <TextField
+                        <BufferedTextField
                             label="Ghi chú"
                             value={form.ghiChu}
-                            onChange={(e) => setForm({ ...form, ghiChu: e.target.value })}
+                            onCommit={(value) => setForm((current) => ({ ...current, ghiChu: value }))}
                         />
                     </Stack>
                 </DialogContent>
@@ -2340,32 +2443,42 @@ export default function PhieuSec({ mode = "VND" }) {
                     <Button variant="contained" onClick={submitCreate}>{editingPhieu ? "Cập nhật" : "Lưu"}</Button>
                 </DialogActions>
             </Dialog>
-            <Dialog open={openAddDv} onClose={() => setOpenAddDv(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
-                <DialogTitle>Thêm đơn vị hưởng thụ</DialogTitle>
+            <Dialog
+                open={openAddDv}
+                onClose={() => {
+                    setOpenAddDv(false);
+                    setDvDialogMode("create");
+                    setEditingDonViId(null);
+                }}
+                maxWidth="sm"
+                fullWidth
+                fullScreen={isMobile}
+            >
+                <DialogTitle>{dvDialogMode === "edit" ? "Sửa đơn vị hưởng thụ" : "Thêm đơn vị hưởng thụ"}</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} mt={1}>
-                        <TextField
+                        <BufferedTextField
                             autoFocus
                             label="Tên đơn vị hưởng thụ (tên hoá đơn)"
                             value={dvName}
-                            onChange={(e) => setDvName(e.target.value)}
+                            onCommit={setDvName}
                             fullWidth
                             required
                         />
-                        <TextField
+                        <BufferedTextField
                             label="Tên chuyển khoản - IPay"
                             value={dvTenChuyenKhoan}
-                            onChange={(e) => setDvTenChuyenKhoan(e.target.value)}
+                            onCommit={setDvTenChuyenKhoan}
                             fullWidth
                             required
                             placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
                             helperText="Nhập sai tên chuyển khoản có thể không chuyển tiền được. Vui lòng kiểm tra kỹ trước khi lưu."
                             FormHelperTextProps={{ sx: { color: "error.main" } }}
                         />
-                        <TextField
+                        <BufferedTextField
                             label="Số tài khoản (STK)"
                             value={dvStk}
-                            onChange={(e) => setDvStk(e.target.value)}
+                            onCommit={setDvStk}
                             fullWidth
                             required
                             placeholder="VD: 123456789"
@@ -2386,32 +2499,36 @@ export default function PhieuSec({ mode = "VND" }) {
                             )}
                             fullWidth
                         />
-                        <TextField
+                        <BufferedTextField
                             label="Mã ngân hàng"
                             value={dvMaNH}
-                            onChange={(e) => setDvMaNH(e.target.value)}
+                            onCommit={setDvMaNH}
                             fullWidth
                             sx={{ display: "none" }}
                             required
                             placeholder="VD: VCB, BIDV, AGR..."
                         />
-                        <TextField
+                        <BufferedTextField
                             label="Chi nhánh ngân hàng (không bắt buộc)"
                             value={dvChiNhanhNH}
-                            onChange={(e) => setDvChiNhanhNH(e.target.value)}
+                            onCommit={setDvChiNhanhNH}
                             fullWidth
                             placeholder="VD: Chi nhánh Hà Nội"
                         />
                     </Stack>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenAddDv(false)}>Đóng</Button>
+                    <Button onClick={() => {
+                        setOpenAddDv(false);
+                        setDvDialogMode("create");
+                        setEditingDonViId(null);
+                    }}>Đóng</Button>
                     <Button
                         variant="contained"
                         onClick={saveDonVi}
                         disabled={savingDv || !dvName.trim() || !dvTenChuyenKhoan.trim() || !dvStk.trim() || !banks.some((bank) => bank.MaNganHang === dvMaNH)}
                     >
-                        {savingDv ? "Đang lưu..." : "Lưu"}
+                        {savingDv ? "Đang lưu..." : (dvDialogMode === "edit" ? "Cập nhật" : "Lưu")}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -2478,7 +2595,7 @@ export default function PhieuSec({ mode = "VND" }) {
             >
                 <DialogTitle>Từ chối phiếu</DialogTitle>
                 <DialogContent>
-                    <TextField
+                    <BufferedTextField
                         autoFocus
                         fullWidth
                         multiline
@@ -2486,7 +2603,7 @@ export default function PhieuSec({ mode = "VND" }) {
                         margin="dense"
                         label="Lý do từ chối"
                         value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
+                        onCommit={setRejectReason}
                     />
                 </DialogContent>
                 <DialogActions>
@@ -2511,7 +2628,7 @@ export default function PhieuSec({ mode = "VND" }) {
             >
                 <DialogTitle>Trả lại phiếu để chỉnh sửa</DialogTitle>
                 <DialogContent>
-                    <TextField
+                    <BufferedTextField
                         autoFocus
                         fullWidth
                         multiline
@@ -2519,7 +2636,7 @@ export default function PhieuSec({ mode = "VND" }) {
                         margin="dense"
                         label="Lý do trả lại"
                         value={returnReason}
-                        onChange={(e) => setReturnReason(e.target.value)}
+                        onCommit={setReturnReason}
                     />
                 </DialogContent>
                 <DialogActions>

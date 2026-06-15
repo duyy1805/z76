@@ -11,6 +11,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../lib/api";
+import { useAuth } from "../store/useAuth";
 
 const normalizeSearch = (value = "") =>
     String(value)
@@ -23,6 +24,7 @@ const normalizeSearch = (value = "") =>
 function SupplierLookup() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+    const { role, user, permissions = [] } = useAuth();
     const [rows, setRows] = useState([]);
     const [banks, setBanks] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -98,7 +100,15 @@ function SupplierLookup() {
         }
         try {
             if (editingId) {
-                await api.updateDonVi(editingId, { name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName });
+                await api.updateDonVi(editingId, {
+                    name: n,
+                    stk: s,
+                    maNganHang: m,
+                    chiNhanhNganHang: branch,
+                    tenChuyenKhoan: transferName,
+                    requesterUserId: user?.id,
+                    requesterRoleCode: role === "Admin" || permissions.includes("Admin") ? "Admin" : role,
+                });
                 showToast("Đã cập nhật đơn vị");
             } else {
                 await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName });
