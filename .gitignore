@@ -23,3 +23,5 @@ PLP review project/
 *.njsproj
 *.sln
 *.sw?
+
+*.sql

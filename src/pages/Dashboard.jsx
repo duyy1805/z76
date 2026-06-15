@@ -41,7 +41,7 @@ export default function Dashboard() {
 
     // ─── Status cards (giữ như bạn có) ───────────────────────────────────────
     const [statCards, setStatCards] = useState({
-        waitingTBP: 0, waitingKTT: 0, waitingGD: 0, completed: 0, rejected: 0,
+        draft: 0, waitingTBP: 0, waitingKTT: 0, waitingGD: 0, completed: 0, rejected: 0,
     });
 
     // ─── Summary & Grouped data ──────────────────────────────────────────────
@@ -107,6 +107,7 @@ export default function Dashboard() {
 
     // Colors for pie (status)
     const STATUS_COLORS = {
+        draft: "#607d8b",
         waitingTBP: "#fbc02d",
         waitingKTT: "#fdd835",
         waitingGD: "#f9a825",
@@ -115,6 +116,7 @@ export default function Dashboard() {
     };
 
     const pieData = [
+        { name: "Nháp", value: summary.byStatus?.draft?.count || 0, key: "draft" },
         { name: "Chờ TBP", value: summary.byStatus?.waitingTBP?.count || 0, key: "waitingTBP" },
         { name: "Chờ KTT", value: summary.byStatus?.waitingKTT?.count || 0, key: "waitingKTT" },
         { name: "Chờ GĐ", value: summary.byStatus?.waitingGD?.count || 0, key: "waitingGD" },
@@ -253,6 +255,7 @@ export default function Dashboard() {
                 }}
             >
                 {[
+                    { label: "Nháp", value: statCards.draft, color: "text.secondary" },
                     { label: "Chờ trưởng bộ phận", value: statCards.waitingTBP, color: "warning.main" },
                     { label: "Chờ kế toán trưởng", value: statCards.waitingKTT, color: "warning.main" },
                     { label: "Chờ Giám đốc", value: statCards.waitingGD, color: "warning.main" },

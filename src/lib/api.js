@@ -121,6 +121,14 @@ export const api = {
         const { data } = await http.put(`/phieu/${phieuId}`, payload);
         return data;
     },
+    async submitPhieu(phieuId, user) {
+        const { data } = await http.post(`/phieu/${phieuId}/submit`, {
+            requesterUserId: user?.id,
+            requesterRoleCode: user?.role,
+            requesterIdDonVi: user?.idDonVi,
+        });
+        return data;
+    },
     async deletePhieu(phieuId, user) {
         const { data } = await http.delete(`/phieu/${phieuId}`, {
             data: { requesterUserId: user?.id },

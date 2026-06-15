@@ -13,6 +13,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
+import SendIcon from "@mui/icons-material/Send";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import ClearIcon from "@mui/icons-material/Clear";
 import CloseIcon from "@mui/icons-material/Close";
@@ -118,7 +119,10 @@ const amountToVietnameseText = (value, currencyCode = "VND") => {
 
     return `${capitalizeFirst(integerWords)}${fractionWords} ${suffix}`.replace(/\s+/g, " ").trim();
 };
-const ACTION_COLUMN_WIDTH = 136;
+const ACTION_BUTTON_SIZE = 40;
+const ACTION_BUTTON_COUNT = 4;
+const ACTION_COLUMN_PADDING_X = 16;
+const ACTION_COLUMN_WIDTH = ACTION_BUTTON_SIZE * ACTION_BUTTON_COUNT + ACTION_COLUMN_PADDING_X;
 const stickyActionCellSx = {
     position: { xs: "static", md: "sticky" },
     right: { md: 0 },
@@ -138,12 +142,12 @@ const stickyStatusCellSx = {
     bgcolor: "background.paper",
     zIndex: { xs: "auto", md: 2 },
 };
-const DEFAULT_STATUS_ORDER = ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"];
+const DEFAULT_STATUS_ORDER = ["KhoiTao", "ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"];
 const STATUS_ORDER_BY_ROLE = {
     TBP: ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
     KTT: ["ChoDuyet_KTT", "ChoDuyet_GD", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
     GD: ["ChoDuyet_GD", "ChoDuyet_KTT", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
-    Admin: ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
+    Admin: ["KhoiTao", "ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"],
 };
 
 const isoToDisplay = (s) => {
@@ -400,6 +404,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [deletePhieuOpen, setDeletePhieuOpen] = useState(false);
     const [deletePhieuTarget, setDeletePhieuTarget] = useState(null);
     const [deletePhieuSubmitting, setDeletePhieuSubmitting] = useState(false);
+    const [submitPhieuId, setSubmitPhieuId] = useState(null);
 
     const hasPermission = (code) =>
         role === "Admin" ||
@@ -482,12 +487,15 @@ export default function PhieuSec({ mode = "VND" }) {
         (isPendingLenhChi(p) && (hasPermission("TaoLenhChi") || hasPermission("KTT") || hasPermission("Admin")));
 
     const canEdit = (p) =>
-        p?.trangThai === "ChoDuyet_TBP" && (hasPermission("Admin") || Number(p?.nguoiDangKyId) === Number(user?.id));
+        p?.trangThai === "KhoiTao" && (hasPermission("Admin") || Number(p?.nguoiDangKyId) === Number(user?.id));
+
+    const canSubmitPhieu = (p) =>
+        p?.trangThai === "KhoiTao" && (hasPermission("Admin") || Number(p?.nguoiDangKyId) === Number(user?.id));
 
     const canDeletePhieu = (p) =>
         !!p && (
             hasPermission("Admin") ||
-            (Number(p?.nguoiDangKyId) === Number(user?.id) && ["ChoDuyet_TBP", "TuChoi"].includes(p?.trangThai))
+            (Number(p?.nguoiDangKyId) === Number(user?.id) && ["KhoiTao", "TuChoi"].includes(p?.trangThai))
         );
 
     const getDonViByPhieu = (p) => donvis.find((d) => d.id === p?.donViId);
@@ -556,6 +564,22 @@ export default function PhieuSec({ mode = "VND" }) {
         } catch (e) {
             logSoSec("approve:error", e?.response?.data || e);
             setToast({ open: true, msg: e.message ?? "Lỗi duyệt phiếu", type: "error" });
+        }
+    };
+
+    const handleSubmitPhieu = async (p, e) => {
+        e?.stopPropagation();
+        if (!canSubmitPhieu(p)) return;
+        try {
+            setSubmitPhieuId(p.id);
+            const updated = await api.submitPhieu(p.id, { ...user, role });
+            setRows((r) => (r ? r.map((x) => (x.id === updated.id ? updated : x)) : r));
+            setDetail((d) => (d && d.id === updated.id ? updated : d));
+            setToast({ open: true, msg: "Đã trình TBP", type: "success" });
+        } catch (e) {
+            setToast({ open: true, msg: e?.response?.data?.message || e.message || "Lỗi trình phiếu", type: "error" });
+        } finally {
+            setSubmitPhieuId(null);
         }
     };
 
@@ -674,7 +698,7 @@ export default function PhieuSec({ mode = "VND" }) {
             setOpenCreate(false);
             resetForm();
             await load();
-            setToast({ open: true, msg: editingPhieu ? "Đã cập nhật phiếu" : "Đã tạo phiếu", type: "success" });
+            setToast({ open: true, msg: editingPhieu ? "Đã cập nhật phiếu nháp" : "Đã lưu nháp", type: "success" });
         } catch (e) {
             setToast({ open: true, msg: e?.response?.data?.message || e.message || "Lỗi lưu phiếu", type: "error" });
         }
@@ -1303,6 +1327,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                     sx={{ fontSize: "0.86rem", "& .MuiSelect-select": { py: 0.85 } }}
                                 >
                                     <MenuItem value="">Tất cả</MenuItem>
+                                    <MenuItem value="KhoiTao">Nháp</MenuItem>
                                     <MenuItem value="ChoDuyet_TBP">Chờ TBP</MenuItem>
                                     <MenuItem value="ChoDuyet_KTT">Chờ KTT</MenuItem>
                                     <MenuItem value="ChoDuyet_GD">Chờ GĐ</MenuItem>
@@ -1685,6 +1710,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                         size="small"
                                                     >
                                                         <MenuItem value="">Tất cả</MenuItem>
+                                                        <MenuItem value="KhoiTao">Nháp</MenuItem>
                                                         <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
                                                         <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
                                                         <MenuItem value="ChoDuyet_GD">Chờ duyệt Giám đốc</MenuItem>
@@ -1747,7 +1773,14 @@ export default function PhieuSec({ mode = "VND" }) {
                                             <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
                                             <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
                                             <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
-                                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 40px)", alignItems: "center" }}>
+                                                <Box
+                                                    sx={{
+                                                        display: "grid",
+                                                        gridTemplateColumns: `repeat(${ACTION_BUTTON_COUNT}, ${ACTION_BUTTON_SIZE}px)`,
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                    }}
+                                                >
                                                     <Box sx={{ visibility: canEdit(r) || canReturn(r) ? "visible" : "hidden" }}>
                                                         {canEdit(r) ? (
                                                             <IconButton
@@ -1769,15 +1802,30 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             </Tooltip>
                                                         )}
                                                     </Box>
-                                                    <span>
-                                                        <IconButton
-                                                            color="success"
-                                                            disabled={!canApprove(r)}
-                                                            onClick={(e) => handleApprove(r, true, e)}
-                                                        >
-                                                            <CheckCircleIcon />
-                                                        </IconButton>
-                                                    </span>
+                                                    {canSubmitPhieu(r) ? (
+                                                        <Tooltip title="Trình TBP">
+                                                            <span>
+                                                                <IconButton
+                                                                    color="success"
+                                                                    disabled={submitPhieuId === r.id}
+                                                                    onClick={(e) => handleSubmitPhieu(r, e)}
+                                                                    aria-label="Trình TBP"
+                                                                >
+                                                                    <SendIcon />
+                                                                </IconButton>
+                                                            </span>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <span>
+                                                            <IconButton
+                                                                color="success"
+                                                                disabled={!canApprove(r)}
+                                                                onClick={(e) => handleApprove(r, true, e)}
+                                                            >
+                                                                <CheckCircleIcon />
+                                                            </IconButton>
+                                                        </span>
+                                                    )}
                                                     <span>
                                                         <IconButton
                                                             color="error"
@@ -2222,6 +2270,17 @@ export default function PhieuSec({ mode = "VND" }) {
                 >
                     {detail && (
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                            {canSubmitPhieu(detail) && (
+                                <Button
+                                    color="success"
+                                    variant="contained"
+                                    startIcon={<SendIcon />}
+                                    disabled={submitPhieuId === detail.id}
+                                    onClick={() => handleSubmitPhieu(detail)}
+                                >
+                                    Trình TBP
+                                </Button>
+                            )}
                             {canEdit(detail) && (
                                 <Button
                                     color="primary"
@@ -2374,7 +2433,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 <AddIcon fontSize="small" />
                             </IconButton>
                             {editingPhieu && (
-                                <Tooltip title={canEdit(editingPhieu) && form.donViId ? "Sửa thông tin đơn vị hưởng thụ" : "Chỉ sửa được khi phiếu đang chờ TBP"}>
+                                <Tooltip title={canEdit(editingPhieu) && form.donViId ? "Sửa thông tin đơn vị hưởng thụ" : "Chỉ sửa được khi phiếu đang nháp"}>
                                     <span>
                                         <IconButton
                                             onClick={openEditDonVi}
@@ -2440,7 +2499,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setOpenCreate(false); resetForm(); }}>Đóng</Button>
-                    <Button variant="contained" onClick={submitCreate}>{editingPhieu ? "Cập nhật" : "Lưu"}</Button>
+                    <Button variant="contained" onClick={submitCreate}>{editingPhieu ? "Cập nhật nháp" : "Lưu nháp"}</Button>
                 </DialogActions>
             </Dialog>
             <Dialog
