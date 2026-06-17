@@ -35,8 +35,8 @@ import { useAuth } from "../store/useAuth";
 const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
 const PAYMENT_CONTENT_MAX_LENGTH = 146;
-const PAYMENT_CONTENT_FORBIDDEN_CHARS = /[@$^{}()<>?|\\[\]/]/;
-const PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT = "@ $ ^ { } ( ) < > ? | \\ [ ] /";
+const PAYMENT_CONTENT_FORBIDDEN_CHARS = /['"@$^{}()<>?|\\[\]/]/;
+const PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT = "' \" @ $ ^ { } ( ) < > ? | \\ [ ] /";
 const validatePaymentContent = (value = "") => {
     const content = String(value).trim();
     if (!content) return "Nhập nội dung";
@@ -165,7 +165,10 @@ const isoToDisplay = (s) => {
 const stripVN = (s = "") =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
 
-const logSoSec = (...args) => console.log("[SoSec][PhieuSec]", ...args);
+const DEBUG_SOSEC = import.meta.env.VITE_DEBUG_SOSEC === "1";
+const logSoSec = (...args) => {
+    if (DEBUG_SOSEC) console.log("[SoSec][PhieuSec]", ...args);
+};
 const hasSelectedText = () => {
     if (typeof window === "undefined") return false;
     return window.getSelection()?.toString().trim().length > 0;
@@ -225,6 +228,147 @@ const MobileSectionTitle = ({ children }) => (
         {children}
     </Typography>
 );
+
+const BANK_TRANSFER_GUIDE_IMAGES = [
+    {
+        src: "/assets/image/nh1.jpg",
+        alt: "Màn hình nhập số tài khoản và chọn ngân hàng hưởng thụ",
+        caption: "Nhập STK và chọn đúng ngân hàng.",
+    },
+    {
+        src: "/assets/image/nh2.jpg",
+        alt: "Màn hình app ngân hàng hiển thị tên người nhận sau khi chọn tài khoản",
+        caption: "Lấy tên người nhận hiện ra.",
+    },
+];
+
+const BankTransferNameGuide = () => {
+    const [previewImage, setPreviewImage] = useState(null);
+
+    return (
+        <>
+            <Paper
+                variant="outlined"
+                sx={{
+                    p: 2,
+                    bgcolor: "grey.50",
+                    borderRadius: 2,
+                    height: "fit-content",
+                }}
+            >
+                <Stack spacing={1.5}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        Cách lấy tên chuyển khoản
+                    </Typography>
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gap: 1.25,
+                        }}
+                    >
+                        {BANK_TRANSFER_GUIDE_IMAGES.map((image) => (
+                            <Box key={image.src}>
+                                <Box
+                                    component="button"
+                                    type="button"
+                                    onClick={() => setPreviewImage(image)}
+                                    sx={{
+                                        p: 0,
+                                        width: "100%",
+                                        aspectRatio: "9 / 14",
+                                        border: (t) => `1px solid ${t.palette.divider}`,
+                                        borderRadius: 1.5,
+                                        bgcolor: "background.paper",
+                                        cursor: "zoom-in",
+                                        display: "block",
+                                    }}
+                                >
+                                    <Box
+                                        component="img"
+                                        alt={image.alt}
+                                        src={image.src}
+                                        sx={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "contain",
+                                            display: "block",
+                                        }}
+                                    />
+                                </Box>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                                    {image.caption}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </Box>
+                    <Stack spacing={1}>
+                        {[
+                            "Mở app ngân hàng và chọn chuyển tiền.",
+                            "Nhập số tài khoản, chọn đúng ngân hàng.",
+                            "Đợi app hiện tên người nhận, rồi nhập đúng tên đó vào ô Tên chuyển khoản - IPay.",
+                        ].map((text, index) => (
+                            <Stack key={text} direction="row" spacing={1} alignItems="flex-start">
+                                <Box
+                                    sx={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: "50%",
+                                        bgcolor: "primary.main",
+                                        color: "primary.contrastText",
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                        mt: 0.2,
+                                    }}
+                                >
+                                    {index + 1}
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    {text}
+                                </Typography>
+                            </Stack>
+                        ))}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                        Bấm vào ảnh để xem lớn.
+                    </Typography>
+                </Stack>
+            </Paper>
+            <Dialog
+                open={!!previewImage}
+                onClose={() => setPreviewImage(null)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>{previewImage?.caption || "Ảnh hướng dẫn"}</DialogTitle>
+                <DialogContent>
+                    {previewImage && (
+                        <Box
+                            component="img"
+                            alt={previewImage.alt}
+                            src={previewImage.src}
+                            sx={{
+                                width: "100%",
+                                maxHeight: "78vh",
+                                objectFit: "contain",
+                                display: "block",
+                                borderRadius: 1.5,
+                                bgcolor: "background.paper",
+                            }}
+                        />
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPreviewImage(null)}>Đóng</Button>
+                </DialogActions>
+            </Dialog>
+        </>
+    );
+};
 
 const PaymentContentField = memo(function PaymentContentField({ value, onCommit }) {
     const [localValue, setLocalValue] = useState(value || "");
@@ -498,9 +642,9 @@ export default function PhieuSec({ mode = "VND" }) {
             (Number(p?.nguoiDangKyId) === Number(user?.id) && ["KhoiTao", "TuChoi"].includes(p?.trangThai))
         );
 
-    const getDonViByPhieu = (p) => donvis.find((d) => d.id === p?.donViId);
-    const getTenNganHang = (p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null;
-    const getTenChuyenKhoan = (p) => p?.tenChuyenKhoanHuongThu || getDonViByPhieu(p)?.tenChuyenKhoan || p?.tenDonVi || getDonViByPhieu(p)?.name || null;
+    const getDonViByPhieu = useCallback((p) => donvis.find((d) => d.id === p?.donViId), [donvis]);
+    const getTenNganHang = useCallback((p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null, [getDonViByPhieu]);
+    const getTenChuyenKhoan = useCallback((p) => p?.tenChuyenKhoanHuongThu || getDonViByPhieu(p)?.tenChuyenKhoan || p?.tenDonVi || getDonViByPhieu(p)?.name || null, [getDonViByPhieu]);
 
     const resetForm = () => {
         setForm({
@@ -784,16 +928,16 @@ export default function PhieuSec({ mode = "VND" }) {
                 setToast({ open: true, msg: "Đã cập nhật đơn vị", type: "success" });
                 await load();
             } else {
-            const created = await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName }); // { id, name, ... }
-            const createdWithBank = { ...created, tenChuyenKhoan: transferName, tenNganHang: selectedBank.TenNganHang };
-            // cập nhật danh sách + chọn ngay đơn vị mới
-            setDonvis((list) => {
-                const next = [...(list || []), createdWithBank];
-                return next.sort((a, b) => String(a.name).localeCompare(String(b.name), "vi"));
-            });
-            setForm((f) => ({ ...f, donViId: created.id }));
-            setOpenAddDv(false);
-            setToast({ open: true, msg: "Đã thêm đơn vị", type: "success" });
+                const created = await api.createDonVi({ name: n, stk: s, maNganHang: m, chiNhanhNganHang: branch, tenChuyenKhoan: transferName }); // { id, name, ... }
+                const createdWithBank = { ...created, tenChuyenKhoan: transferName, tenNganHang: selectedBank.TenNganHang };
+                // cập nhật danh sách + chọn ngay đơn vị mới
+                setDonvis((list) => {
+                    const next = [...(list || []), createdWithBank];
+                    return next.sort((a, b) => String(a.name).localeCompare(String(b.name), "vi"));
+                });
+                setForm((f) => ({ ...f, donViId: created.id }));
+                setOpenAddDv(false);
+                setToast({ open: true, msg: "Đã thêm đơn vị", type: "success" });
             }
             setEditingDonViId(null);
             setDvDialogMode("create");
@@ -901,7 +1045,7 @@ export default function PhieuSec({ mode = "VND" }) {
         const statusOrder = STATUS_ORDER_BY_ROLE[role] || DEFAULT_STATUS_ORDER;
         const statusRank = new Map(statusOrder.map((status, index) => [status, index]));
 
-        return sourceRows.filter((r) => {
+        const matchedRows = sourceRows.filter((r) => {
             // Ngày (so sánh theo ngày, bỏ giờ)
             let okDate = true;
             if (hasFrom || hasTo) {
@@ -990,7 +1134,11 @@ export default function PhieuSec({ mode = "VND" }) {
             }
 
             return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao && okMobile;
-        }).sort((a, b) => {
+        });
+
+        if (activeTab === "pending") return matchedRows;
+
+        return matchedRows.sort((a, b) => {
             const rankA = statusRank.get(a.trangThai) ?? statusOrder.length;
             const rankB = statusRank.get(b.trangThai) ?? statusOrder.length;
             if (rankA !== rankB) return rankA - rankB;
@@ -1001,7 +1149,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
 
     // clear từng filter
     const clearFilter = (key) => {
@@ -1073,7 +1221,6 @@ export default function PhieuSec({ mode = "VND" }) {
         const id = tl.taiLieuId ?? tl.TaiLieuId;
         const name = tl.fileName ?? tl.FileName ?? "Tài liệu";
         const url = api.getTaiLieuPhieuSecUrl(id);
-        console.log(tl)
         setPreviewTitle(name);
         setPreviewUrl(url);
         setPreviewOpen(true);
@@ -1090,50 +1237,6 @@ export default function PhieuSec({ mode = "VND" }) {
         setDetail(null);
         setAttachList([]);
         setAttachFiles([]);
-    };
-
-    const exportExcel = () => {
-        if (!filteredRows?.length) {
-            setToast({ open: true, msg: "Không có dữ liệu để xuất", type: "warning" });
-            return;
-        }
-
-        const data = filteredRows.map((row, index) => {
-            const donVi = donvis.find((item) => item.id === row.donViId);
-            return {
-                STT: index + 1,
-                "Mã sổ séc": row.maSoSec || `SS-${row.id}`,
-                Ngày: isoToDisplay(row.ngay).split(" ")[0],
-                "Nội dung": row.noiDung,
-                "Đơn vị hưởng thụ": row.tenDonVi || donVi?.name,
-                "Tên chuyển khoản": getTenChuyenKhoan(row),
-                "Số tài khoản": row.soTaiKhoanHuongThu || donVi?.stk,
-                "Mã ngân hàng": row.maNganHangHuongThu || donVi?.maNganHang,
-                "Tên ngân hàng": getTenNganHang(row),
-                "Chi nhánh ngân hàng": row.chiNhanhNganHangHuongThu || donVi?.chiNhanhNganHang,
-                "Loại chi phí": EXPENSE_LABELS[row.maLoaiChiPhi] || row.maLoaiChiPhi,
-                "Loại tiền": row.maLoaiTien || "VND",
-                "Số tiền": row.soTien,
-                "Mã lệnh chi": row.maLenhChi,
-                "Ngày hoàn thành": isoToDisplay(getCompletedAt(row)).split(" ")[0],
-                "Trạng thái": row.trangThai,
-                "Người đăng ký": row.tenNguoiTao,
-                "Bộ phận người đăng ký": row.tenDonViNguoiTao,
-                "Ghi chú": row.ghiChu,
-            };
-        });
-        const sheet = XLSX.utils.json_to_sheet(data);
-        sheet["!cols"] = [
-            { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 42 }, { wch: 30 },
-            { wch: 30 }, { wch: 20 }, { wch: 16 }, { wch: 34 }, { wch: 28 }, { wch: 18 }, { wch: 12 },
-            { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 24 }, { wch: 28 },
-            { wch: 36 },
-        ];
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, sheet, "Phieu sec");
-        const from = qFrom?.format("YYYY-MM-DD") || "tat-ca";
-        const to = qTo?.format("YYYY-MM-DD") || "tat-ca";
-        XLSX.writeFile(workbook, `phieu-sec-${isNgoaiTe ? "ngoai-te" : "vnd"}_${from}_${to}.xlsx`);
     };
 
     const exportTransferExcel = () => {
@@ -1155,25 +1258,28 @@ export default function PhieuSec({ mode = "VND" }) {
             "Ngày thanh toán/ Effective date",
             "Mã ngân hàng",
             "Tên đơn vị hưởng thụ",
+            "Nội dung effect",
             "Bộ phận người đăng ký",
             "Ngày tạo",
         ];
 
         const rows = filteredRows.map((row, index) => {
             const donVi = donvis.find((item) => item.id === row.donViId);
+            const maNganHang = row.maNganHangHuongThu || donVi?.maNganHang || "";
             return [
                 index + 1,
                 "116000002441",
                 Math.round(Number(row.soTien || 0)),
                 row.soTaiKhoanHuongThu || donVi?.stk || "",
                 getTenChuyenKhoan(row) || "",
-                row.maNganHangHuongThu || donVi?.maNganHang || "",
+                maNganHang,
                 row.noiDung || "",
                 "",
                 "",
                 "",
                 getTenNganHang(row) || "",
                 row.tenDonVi || donVi?.name || "",
+                `${row.noiDung || ""}/${getTenNganHang(row)}`,
                 row.tenDonViNguoiTao || "",
                 isoToDisplay(row.ngay).split(" ")[0],
             ];
@@ -1194,6 +1300,7 @@ export default function PhieuSec({ mode = "VND" }) {
             { wch: 13 },
             { wch: 16 },
             { wch: 36 },
+            { wch: 42 },
             { wch: 28 },
             { wch: 12 },
         ];
@@ -1211,7 +1318,7 @@ export default function PhieuSec({ mode = "VND" }) {
         });
         rows.forEach((_, rowIndex) => {
             const amountCell = sheet[XLSX.utils.encode_cell({ r: rowIndex + emptyRows.length + 1, c: 2 })];
-            if (amountCell) amountCell.z = "0";
+            if (amountCell) amountCell.z = "#,##0";
         });
 
         const workbook = XLSX.utils.book_new();
@@ -2509,71 +2616,76 @@ export default function PhieuSec({ mode = "VND" }) {
                     setDvDialogMode("create");
                     setEditingDonViId(null);
                 }}
-                maxWidth="sm"
+                maxWidth="lg"
                 fullWidth
                 fullScreen={isMobile}
             >
                 <DialogTitle>{dvDialogMode === "edit" ? "Sửa đơn vị hưởng thụ" : "Thêm đơn vị hưởng thụ"}</DialogTitle>
                 <DialogContent>
-                    <Stack spacing={2} mt={1}>
-                        <BufferedTextField
-                            autoFocus
-                            label="Tên đơn vị hưởng thụ (tên hoá đơn)"
-                            value={dvName}
-                            onCommit={setDvName}
-                            fullWidth
-                            required
-                        />
-                        <BufferedTextField
-                            label="Tên chuyển khoản - IPay"
-                            value={dvTenChuyenKhoan}
-                            onCommit={setDvTenChuyenKhoan}
-                            fullWidth
-                            required
-                            placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
-                            helperText="Nhập sai tên chuyển khoản có thể không chuyển tiền được. Vui lòng kiểm tra kỹ trước khi lưu."
-                            FormHelperTextProps={{ sx: { color: "error.main" } }}
-                        />
-                        <BufferedTextField
-                            label="Số tài khoản (STK)"
-                            value={dvStk}
-                            onCommit={setDvStk}
-                            fullWidth
-                            required
-                            placeholder="VD: 123456789"
-                        />
-                        <Autocomplete
-                            options={banks}
-                            value={banks.find((bank) => bank.MaNganHang === dvMaNH) || null}
-                            onChange={(_, value) => setDvMaNH(value?.MaNganHang || "")}
-                            getOptionLabel={(option) => (option ? `${option.MaNganHang} - ${option.TenNganHang}` : "")}
-                            isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
-                            renderInput={(params) => (
-                                <TextField
-                                    {...params}
-                                    label="Ngan hang"
-                                    required
-                                    placeholder="Chon ma ngan hang"
-                                />
-                            )}
-                            fullWidth
-                        />
-                        <BufferedTextField
-                            label="Mã ngân hàng"
-                            value={dvMaNH}
-                            onCommit={setDvMaNH}
-                            fullWidth
-                            sx={{ display: "none" }}
-                            required
-                            placeholder="VD: VCB, BIDV, AGR..."
-                        />
-                        <BufferedTextField
-                            label="Chi nhánh ngân hàng (không bắt buộc)"
-                            value={dvChiNhanhNH}
-                            onCommit={setDvChiNhanhNH}
-                            fullWidth
-                            placeholder="VD: Chi nhánh Hà Nội"
-                        />
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} mt={1} alignItems="flex-start">
+                        <Stack spacing={2} sx={{ flex: 1, width: "100%", minWidth: 0 }}>
+                            <BufferedTextField
+                                autoFocus
+                                label="Tên đơn vị hưởng thụ (tên hoá đơn)"
+                                value={dvName}
+                                onCommit={setDvName}
+                                fullWidth
+                                required
+                            />
+                            <BufferedTextField
+                                label="Tên chuyển khoản - IPay"
+                                value={dvTenChuyenKhoan}
+                                onCommit={setDvTenChuyenKhoan}
+                                fullWidth
+                                required
+                                placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
+                                helperText="Xem hướng dẫn lấy tên chuyển khoản ở bên phải."
+                                FormHelperTextProps={{ sx: { color: "text.secondary" } }}
+                            />
+                            <BufferedTextField
+                                label="Số tài khoản (STK)"
+                                value={dvStk}
+                                onCommit={setDvStk}
+                                fullWidth
+                                required
+                                placeholder="VD: 123456789"
+                            />
+                            <Autocomplete
+                                options={banks}
+                                value={banks.find((bank) => bank.MaNganHang === dvMaNH) || null}
+                                onChange={(_, value) => setDvMaNH(value?.MaNganHang || "")}
+                                getOptionLabel={(option) => (option ? `${option.MaNganHang} - ${option.TenNganHang}` : "")}
+                                isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Ngan hang"
+                                        required
+                                        placeholder="Chon ma ngan hang"
+                                    />
+                                )}
+                                fullWidth
+                            />
+                            <BufferedTextField
+                                label="Mã ngân hàng"
+                                value={dvMaNH}
+                                onCommit={setDvMaNH}
+                                fullWidth
+                                sx={{ display: "none" }}
+                                required
+                                placeholder="VD: VCB, BIDV, AGR..."
+                            />
+                            <BufferedTextField
+                                label="Chi nhánh ngân hàng (không bắt buộc)"
+                                value={dvChiNhanhNH}
+                                onCommit={setDvChiNhanhNH}
+                                fullWidth
+                                placeholder="VD: Chi nhánh Hà Nội"
+                            />
+                        </Stack>
+                        <Box sx={{ width: { xs: "100%", md: 360 }, flexShrink: 0 }}>
+                            <BankTransferNameGuide />
+                        </Box>
                     </Stack>
                 </DialogContent>
                 <DialogActions>

@@ -21,6 +21,142 @@ const normalizeSearch = (value = "") =>
         .replace(/Đ/g, "D")
         .toLowerCase();
 
+const BANK_TRANSFER_GUIDE_IMAGES = [
+    {
+        src: "/assets/image/nh1.jpg",
+        alt: "Màn hình nhập số tài khoản và chọn ngân hàng hưởng thụ",
+        caption: "Nhập STK và chọn đúng ngân hàng.",
+    },
+    {
+        src: "/assets/image/nh2.jpg",
+        alt: "Màn hình app ngân hàng hiển thị tên người nhận sau khi chọn tài khoản",
+        caption: "Lấy tên người nhận hiện ra.",
+    },
+];
+
+const BankTransferNameGuide = () => {
+    const [previewImage, setPreviewImage] = useState(null);
+
+    return (
+        <>
+            <Paper
+                variant="outlined"
+                sx={{
+                    p: 2,
+                    bgcolor: "grey.50",
+                    borderRadius: 2,
+                    height: "fit-content",
+                }}
+            >
+                <Stack spacing={1.5}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        Cách lấy tên chuyển khoản
+                    </Typography>
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gap: 1.25,
+                        }}
+                    >
+                        {BANK_TRANSFER_GUIDE_IMAGES.map((image) => (
+                            <Box key={image.src}>
+                                <Box
+                                    component="button"
+                                    type="button"
+                                    onClick={() => setPreviewImage(image)}
+                                    sx={{
+                                        p: 0,
+                                        width: "100%",
+                                        aspectRatio: "9 / 14",
+                                        border: (t) => `1px solid ${t.palette.divider}`,
+                                        borderRadius: 1.5,
+                                        bgcolor: "background.paper",
+                                        cursor: "zoom-in",
+                                        display: "block",
+                                    }}
+                                >
+                                    <Box
+                                        component="img"
+                                        alt={image.alt}
+                                        src={image.src}
+                                        sx={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "contain",
+                                            display: "block",
+                                        }}
+                                    />
+                                </Box>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                                    {image.caption}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </Box>
+                    <Stack spacing={1}>
+                        {[
+                            "Mở app ngân hàng và chọn chuyển tiền.",
+                            "Nhập số tài khoản, chọn đúng ngân hàng.",
+                            "Đợi app hiện tên người nhận, rồi nhập đúng tên đó vào ô Tên chuyển khoản.",
+                        ].map((text, index) => (
+                            <Stack key={text} direction="row" spacing={1} alignItems="flex-start">
+                                <Box
+                                    sx={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: "50%",
+                                        bgcolor: "primary.main",
+                                        color: "primary.contrastText",
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                        mt: 0.2,
+                                    }}
+                                >
+                                    {index + 1}
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    {text}
+                                </Typography>
+                            </Stack>
+                        ))}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                        Bấm vào ảnh để xem lớn.
+                    </Typography>
+                </Stack>
+            </Paper>
+            <Dialog open={!!previewImage} onClose={() => setPreviewImage(null)} maxWidth="sm" fullWidth>
+                <DialogTitle>{previewImage?.caption || "Ảnh hướng dẫn"}</DialogTitle>
+                <DialogContent>
+                    {previewImage && (
+                        <Box
+                            component="img"
+                            alt={previewImage.alt}
+                            src={previewImage.src}
+                            sx={{
+                                width: "100%",
+                                maxHeight: "78vh",
+                                objectFit: "contain",
+                                display: "block",
+                                borderRadius: 1.5,
+                                bgcolor: "background.paper",
+                            }}
+                        />
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPreviewImage(null)}>Đóng</Button>
+                </DialogActions>
+            </Dialog>
+        </>
+    );
+};
+
 function SupplierLookup() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -295,62 +431,64 @@ function SupplierLookup() {
             </Stack>
 
             {/* Dialog thêm/sửa */}
-            <Dialog open={openEditDlg} onClose={() => setOpenEditDlg(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
+            <Dialog open={openEditDlg} onClose={() => setOpenEditDlg(false)} maxWidth="lg" fullWidth fullScreen={isMobile}>
                 <DialogTitle>{editingId ? "Sửa đơn vị" : "Thêm đơn vị"}</DialogTitle>
                 <DialogContent>
-                    <TextField
-                        autoFocus
-                        label="Tên đơn vị (VD: Phòng Kế toán)"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        fullWidth
-                        sx={{ mt: 1 }}
-                    />
-                    <TextField
-                        label="Tên chuyển khoản"
-                        value={tenChuyenKhoan}
-                        onChange={(e) => setTenChuyenKhoan(e.target.value)}
-                        fullWidth
-                        required
-                        sx={{ mt: 2 }}
-                        placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
-                        helperText="Nhập sai tên chuyển khoản có thể không chuyển tiền được. Vui lòng kiểm tra kỹ trước khi lưu."
-                        FormHelperTextProps={{ sx: { color: "error.main" } }}
-                    />
-                    <TextField
-                        label="Số tài khoản (STK)"
-                        value={stk}
-                        onChange={(e) => setStk(e.target.value)}
-                        fullWidth
-                        required
-                        sx={{ mt: 2 }}
-                        placeholder="VD: 123456789"
-                    />
-                    <Autocomplete
-                        options={banks}
-                        value={banks.find((bank) => bank.MaNganHang === maNH) || null}
-                        onChange={(_, value) => setMaNH(value?.MaNganHang || "")}
-                        getOptionLabel={(option) => option ? `${option.MaNganHang} - ${option.TenNganHang}` : ""}
-                        isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
-                        renderInput={(params) => (
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} mt={1} alignItems="flex-start">
+                        <Stack spacing={2} sx={{ flex: 1, width: "100%", minWidth: 0 }}>
                             <TextField
-                                {...params}
-                                label="Ngân hàng"
-                                required
-                                placeholder="Chọn mã ngân hàng"
+                                autoFocus
+                                label="Tên đơn vị (VD: Phòng Kế toán)"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                fullWidth
                             />
-                        )}
-                        fullWidth
-                        sx={{ mt: 2 }}
-                    />
-                    <TextField
-                        label="Chi nhánh ngân hàng (không bắt buộc)"
-                        value={chiNhanhNH}
-                        onChange={(e) => setChiNhanhNH(e.target.value)}
-                        fullWidth
-                        sx={{ mt: 2 }}
-                        placeholder="VD: Chi nhánh Hà Nội"
-                    />
+                            <TextField
+                                label="Tên chuyển khoản"
+                                value={tenChuyenKhoan}
+                                onChange={(e) => setTenChuyenKhoan(e.target.value)}
+                                fullWidth
+                                required
+                                placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
+                                helperText="Xem hướng dẫn lấy tên chuyển khoản ở bên phải."
+                                FormHelperTextProps={{ sx: { color: "text.secondary" } }}
+                            />
+                            <TextField
+                                label="Số tài khoản (STK)"
+                                value={stk}
+                                onChange={(e) => setStk(e.target.value)}
+                                fullWidth
+                                required
+                                placeholder="VD: 123456789"
+                            />
+                            <Autocomplete
+                                options={banks}
+                                value={banks.find((bank) => bank.MaNganHang === maNH) || null}
+                                onChange={(_, value) => setMaNH(value?.MaNganHang || "")}
+                                getOptionLabel={(option) => option ? `${option.MaNganHang} - ${option.TenNganHang}` : ""}
+                                isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Ngân hàng"
+                                        required
+                                        placeholder="Chọn mã ngân hàng"
+                                    />
+                                )}
+                                fullWidth
+                            />
+                            <TextField
+                                label="Chi nhánh ngân hàng (không bắt buộc)"
+                                value={chiNhanhNH}
+                                onChange={(e) => setChiNhanhNH(e.target.value)}
+                                fullWidth
+                                placeholder="VD: Chi nhánh Hà Nội"
+                            />
+                        </Stack>
+                        <Box sx={{ width: { xs: "100%", md: 360 }, flexShrink: 0 }}>
+                            <BankTransferNameGuide />
+                        </Box>
+                    </Stack>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setOpenEditDlg(false)}>Đóng</Button>
