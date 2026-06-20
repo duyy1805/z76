@@ -3,12 +3,10 @@ import Shell from "./components/Layout/Shell";
 
 import Dashboard from "./pages/Dashboard";
 import PhieuSec from "./pages/PhieuSec";
-import Checkbooks from "./pages/Checkbooks";
 import AdminSuppliers from "./pages/AdminSuppliers";
 
 import Login from "./pages/Login";
 
-import WarehouseLayout from "./components/PLP/WarehouseMap";
 import { useAuth } from "./store/useAuth";
 
 
@@ -39,7 +37,6 @@ export default function App() {
       </Route>
 
       {/* BẢN ĐỒ KHO HÀNG */}
-      <Route path="/warehouse-map" element={<WarehouseLayout />} />
       {/* ROUTE MẶC ĐỊNH */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

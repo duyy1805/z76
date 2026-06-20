@@ -11,7 +11,7 @@
 - UI: MUI components and MUI icons.
 - Routing: React Router, routes defined in `src/App.jsx`.
 - API: Axios wrappers under `src/lib`.
-- State/auth: existing Zustand auth helpers.
+- State/auth: React context helpers in `src/store/useAuth.jsx`.
 - Charts: Recharts.
 - Dates: Dayjs.
 
@@ -25,24 +25,16 @@
 - Entry point: `src/main.jsx`.
 - App routes: `src/App.jsx`.
 - Main authenticated shell: `RequireAuth`, `Shell`, token from `useAuth()`.
-- So-sec/check workflow page: `src/pages/PhieuSec.jsx`, route `/phieu`.
+- So-sec/check workflow page: `src/pages/PhieuSec.jsx`, routes `/phieu-vnd` and `/phieu-ngoai-te`.
 - So-sec dashboard: `src/pages/Dashboard.jsx`.
 - Status chip labels: `src/components/StatusChip.jsx`.
 - So-sec API wrapper: `src/lib/api.js`.
-- Invoice page: `src/pages/invoice/HoaDon.jsx`, route `/invoice`.
-- Invoice API wrapper: `src/lib/api_invoice.js`.
-- TGSX workflow uses `RequireAuth_TGSX`, `Shell_TGSX`, and `token_tgsx`.
-- TGSX API wrapper: `src/lib/api_tgsx.js`.
-- Warehouse map is public at `/warehouse-map` and uses `src/components/PLP/WarehouseMap.jsx`.
 
 ## API Notes
 - So-sec frontend API wrapper: `src/lib/api.js`.
   - Default base: `https://nodeapi.z76.vn/sosec`.
   - Login default: `https://apipccc.z76.vn/auth/loginERP`.
   - Token attach helper: `attachAuthToken(token)`.
-- Invoice API wrapper: `src/lib/api_invoice.js`.
-  - Default base: `https://nodeapi.z76.vn/invoice/invoice`.
-  - Token attach helper: `attachInvoiceAuthToken(token)`.
 - Prefer existing API wrappers over raw Axios calls inside pages.
 - Backend so-sec route is usually `D:\Code\QLHD\server\routes\sosec.js`.
 - SQL snapshot/migration files relevant to so-sec may be in this repo:
