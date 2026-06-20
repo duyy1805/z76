@@ -2,7 +2,8 @@ import React, { memo, useCallback, useDeferredValue, useEffect, useMemo, useStat
 import {
     Box, Paper, Table, TableContainer, TableHead, TableRow, TableCell, TableBody, Typography,
     Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-    TextField, Tooltip, IconButton, Snackbar, Alert, Popover, MenuItem, FormControl, InputLabel, Select, Tabs, Tab
+    TextField, Tooltip, IconButton, Snackbar, Alert, Popover, MenuItem, FormControl, InputLabel, Select, Tabs, Tab,
+    Checkbox, ListItemText
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import AddIcon from "@mui/icons-material/Add";
@@ -35,8 +36,8 @@ import { useAuth } from "../store/useAuth";
 const fmtMoney = (n) => (n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const EXPENSE_LABELS = { TienDien: "Tiền điện", TienGiaCong: "Tiền gia công", Khac: "Khác" };
 const PAYMENT_CONTENT_MAX_LENGTH = 146;
-const PAYMENT_CONTENT_FORBIDDEN_CHARS = /['"@$^{}()<>?|\\[\]/]/;
-const PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT = "' \" @ $ ^ { } ( ) < > ? | \\ [ ] /";
+const PAYMENT_CONTENT_FORBIDDEN_CHARS = /['"@%$^{}()<>?|\\[\]/]/;
+const PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT = "' \" @ % $ ^ { } ( ) < > ? | \\ [ ] /";
 const validatePaymentContent = (value = "") => {
     const content = String(value).trim();
     if (!content) return "Nhập nội dung";
@@ -143,6 +144,17 @@ const stickyStatusCellSx = {
     zIndex: { xs: "auto", md: 2 },
 };
 const DEFAULT_STATUS_ORDER = ["KhoiTao", "ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"];
+const STATUS_FILTER_OPTIONS = [
+    { value: "KhoiTao", label: "Nháp" },
+    { value: "ChoDuyet_TBP", label: "Chờ duyệt TBP" },
+    { value: "ChoDuyet_KTT", label: "Chờ duyệt KTT" },
+    { value: "ChoDuyet_GD", label: "Chờ duyệt Giám đốc" },
+    { value: "TuChoi", label: "Từ chối" },
+    { value: "HoanThanh_ChuaCoLenhChi", label: "Chưa có lệnh chi" },
+    { value: "HoanThanh_DaCoLenhChi", label: "Có lệnh chi" },
+];
+const getStatusFilterLabel = (value) =>
+    STATUS_FILTER_OPTIONS.find((option) => option.value === value)?.label || value;
 const STATUS_ORDER_BY_ROLE = {
     TBP: ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
     KTT: ["ChoDuyet_KTT", "ChoDuyet_GD", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
@@ -164,6 +176,10 @@ const isoToDisplay = (s) => {
 // bỏ dấu để tìm không dấu
 const stripVN = (s = "") =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+const isSameId = (left, right) =>
+    left !== null && left !== undefined &&
+    right !== null && right !== undefined &&
+    String(left) === String(right);
 
 const DEBUG_SOSEC = import.meta.env.VITE_DEBUG_SOSEC === "1";
 const logSoSec = (...args) => {
@@ -514,7 +530,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qTo, setQTo] = useState(null);     // dayjs | null
     const [qCompletedFrom, setQCompletedFrom] = useState(null);
     const [qCompletedTo, setQCompletedTo] = useState(null);
-    const [qTrangThai, setQTrangThai] = useState("");
+    const [qTrangThai, setQTrangThai] = useState([]);
     const [qMobile, setQMobile] = useState("");
     const [anchorTrangThai, setAnchorTrangThai] = useState(null);
     // anchor Popover cho từng cột
@@ -556,6 +572,9 @@ export default function PhieuSec({ mode = "VND" }) {
         permissions.includes(code) ||
         role === code;
 
+    const canDeleteAttachment =
+        hasPermission("Admin") ||
+        (detail?.trangThai === "KhoiTao" && Number(detail?.nguoiDangKyId) === Number(user?.id));
     const canManageLenhChi = hasPermission("KTT") || hasPermission("GD") || hasPermission("TaoLenhChi");
     const canAddLenhChi =
         detail && detail.trangThai === "HoanThanh" && !detail.maLenhChi && canManageLenhChi;
@@ -642,7 +661,13 @@ export default function PhieuSec({ mode = "VND" }) {
             (Number(p?.nguoiDangKyId) === Number(user?.id) && ["KhoiTao", "TuChoi"].includes(p?.trangThai))
         );
 
-    const getDonViByPhieu = useCallback((p) => donvis.find((d) => d.id === p?.donViId), [donvis]);
+    const handleStatusFilterChange = (event) => {
+        const value = event.target.value;
+        const selectedStatuses = typeof value === "string" ? value.split(",") : value;
+        setQTrangThai(selectedStatuses.includes("__all__") ? [] : selectedStatuses);
+    };
+
+    const getDonViByPhieu = useCallback((p) => donvis.find((d) => isSameId(d.id, p?.donViId)), [donvis]);
     const getTenNganHang = useCallback((p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null, [getDonViByPhieu]);
     const getTenChuyenKhoan = useCallback((p) => p?.tenChuyenKhoanHuongThu || getDonViByPhieu(p)?.tenChuyenKhoan || p?.tenDonVi || getDonViByPhieu(p)?.name || null, [getDonViByPhieu]);
 
@@ -861,7 +886,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
     const openEditDonVi = () => {
         if (!editingPhieu || !canEdit(editingPhieu) || !form.donViId) return;
-        const selected = donvis.find((item) => item.id === form.donViId);
+        const selected = donvis.find((item) => isSameId(item.id, form.donViId));
         if (!selected) {
             setToast({ open: true, msg: "Không tìm thấy đơn vị hưởng thụ để sửa", type: "error" });
             return;
@@ -903,7 +928,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     phieuId: editingPhieu.id,
                 });
                 const updatedWithBank = {
-                    ...(donvis.find((item) => item.id === editingDonViId) || {}),
+                    ...(donvis.find((item) => isSameId(item.id, editingDonViId)) || {}),
                     ...updated,
                     id: editingDonViId,
                     name: updated?.name ?? n,
@@ -914,9 +939,9 @@ export default function PhieuSec({ mode = "VND" }) {
                     tenNganHang: updated?.tenNganHang ?? selectedBank.TenNganHang,
                 };
                 setDonvis((list) => (list || [])
-                    .map((item) => item.id === editingDonViId ? updatedWithBank : item)
+                    .map((item) => isSameId(item.id, editingDonViId) ? updatedWithBank : item)
                     .sort((a, b) => String(a.name).localeCompare(String(b.name), "vi")));
-                setDetail((current) => current?.donViId === editingDonViId ? {
+                setDetail((current) => isSameId(current?.donViId, editingDonViId) ? {
                     ...current,
                     tenDonVi: n,
                     tenChuyenKhoanHuongThu: transferName,
@@ -1071,11 +1096,13 @@ export default function PhieuSec({ mode = "VND" }) {
                 }
             }
             let okStatus = true;
-            if (qTrangThai) {
+            if (qTrangThai.length) {
                 const displayStatus = getDisplayStatus(r);
-                okStatus = qTrangThai === "HoanThanh"
-                    ? r.trangThai === "HoanThanh"
-                    : displayStatus === qTrangThai;
+                okStatus = qTrangThai.some((status) =>
+                    status === "HoanThanh"
+                        ? r.trangThai === "HoanThanh"
+                        : displayStatus === status
+                );
             }
             // Mã
             let okMa = true;
@@ -1227,6 +1254,10 @@ export default function PhieuSec({ mode = "VND" }) {
     };
 
     const handleDeleteAttachment = (tl) => {
+        if (!canDeleteAttachment) {
+            setToast({ open: true, msg: "Chỉ admin hoặc người tạo phiếu nháp mới được xoá tài liệu", type: "error" });
+            return;
+        }
         setDeleteTarget(tl);     // lưu lại file được chọn
         setConfirmOpen(true);    // mở dialog
     };
@@ -1248,7 +1279,7 @@ export default function PhieuSec({ mode = "VND" }) {
         const headers = [
             "STT",
             "TK chuyển/\nDebit account\n(*)",
-            "Số  tiền chuyển/\n Amount\n(*)",
+            "Số tiền chuyển/\n Amount\n(*)",
             "TK hưởng/\nBeneficiary Account\n(*)",
             "Tên người hưởng/\nBeneficiary Name\n(*)",
             "Tên chi nhánh Ngân hàng thụ hưởng/\nBeneficiary Bank\n(*)",
@@ -1260,6 +1291,7 @@ export default function PhieuSec({ mode = "VND" }) {
             "Tên đơn vị hưởng thụ",
             "Nội dung effect",
             "Bộ phận người đăng ký",
+            "Nợ",
             "Ngày tạo",
         ];
 
@@ -1281,6 +1313,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 row.tenDonVi || donVi?.name || "",
                 `${row.noiDung || ""}/${getTenNganHang(row)}`,
                 row.tenDonViNguoiTao || "",
+                "331",
                 isoToDisplay(row.ngay).split(" ")[0],
             ];
         });
@@ -1303,6 +1336,7 @@ export default function PhieuSec({ mode = "VND" }) {
             { wch: 42 },
             { wch: 28 },
             { wch: 12 },
+            { wch: 12 },
         ];
         sheet["!rows"] = [{ hpt: 93 }, ...emptyRows.map(() => ({ hpt: 15 })), ...rows.map(() => ({ hpt: 15 }))];
 
@@ -1323,9 +1357,8 @@ export default function PhieuSec({ mode = "VND" }) {
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, sheet, "Danh sach");
-        const from = qFrom?.format("YYYY-MM-DD") || "tat-ca";
-        const to = qTo?.format("YYYY-MM-DD") || "tat-ca";
-        XLSX.writeFile(workbook, `sec-chuyen-tien-${isNgoaiTe ? "ngoai-te" : "vnd"}_${from}_${to}.xls`, { bookType: "xls" });
+        const downloadedAt = dayjs().format("HHmm_DDMMYYYY");
+        XLSX.writeFile(workbook, `sec-chuyen-tien-${isNgoaiTe ? "ngoai-te" : "vnd"}_${downloadedAt}.xls`, { bookType: "xls" });
     };
 
     return (
@@ -1426,22 +1459,38 @@ export default function PhieuSec({ mode = "VND" }) {
 
                         <Stack direction="row" spacing={1}>
                             <FormControl size="small" fullWidth>
-                                <InputLabel sx={{ fontSize: "0.82rem" }}>Trạng thái</InputLabel>
+                                <InputLabel shrink sx={{ fontSize: "0.82rem" }}>Trạng thái</InputLabel>
                                 <Select
                                     label="Trạng thái"
+                                    multiple
+                                    displayEmpty
                                     value={qTrangThai}
-                                    onChange={(e) => setQTrangThai(e.target.value)}
-                                    sx={{ fontSize: "0.86rem", "& .MuiSelect-select": { py: 0.85 } }}
+                                    onChange={handleStatusFilterChange}
+                                    renderValue={(selected) =>
+                                        selected.length
+                                            ? selected.map(getStatusFilterLabel).join(", ")
+                                            : "Tất cả"
+                                    }
+                                    sx={{
+                                        fontSize: "0.86rem",
+                                        "& .MuiSelect-select": {
+                                            py: 0.85,
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                        },
+                                    }}
                                 >
-                                    <MenuItem value="">Tất cả</MenuItem>
-                                    <MenuItem value="KhoiTao">Nháp</MenuItem>
-                                    <MenuItem value="ChoDuyet_TBP">Chờ TBP</MenuItem>
-                                    <MenuItem value="ChoDuyet_KTT">Chờ KTT</MenuItem>
-                                    <MenuItem value="ChoDuyet_GD">Chờ GĐ</MenuItem>
-                                    <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
-                                    <MenuItem value="TuChoi">Từ chối</MenuItem>
-                                    <MenuItem value="HoanThanh_ChuaCoLenhChi">Chờ lệnh chi</MenuItem>
-                                    <MenuItem value="HoanThanh_DaCoLenhChi">Đã có lệnh chi</MenuItem>
+                                    <MenuItem value="__all__">
+                                        <Checkbox checked={qTrangThai.length === 0} />
+                                        <ListItemText primary="Tất cả" />
+                                    </MenuItem>
+                                    {STATUS_FILTER_OPTIONS.map((option) => (
+                                        <MenuItem key={option.value} value={option.value}>
+                                            <Checkbox checked={qTrangThai.includes(option.value)} />
+                                            <ListItemText primary={option.label} />
+                                        </MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                             <Button
@@ -1794,7 +1843,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     size="small"
                                                     onClick={(e) => setAnchorTrangThai(e.currentTarget)}
                                                     aria-label="Lọc theo Trạng thái"
-                                                    color={qTrangThai ? "primary" : "default"}
+                                                    color={qTrangThai.length > 0 ? "primary" : "default"}
                                                 >
                                                     <FilterListRoundedIcon fontSize="inherit" />
                                                 </IconButton>
@@ -1809,27 +1858,43 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 PaperProps={{ sx: { p: 1.5, width: 240 } }}
                                             >
                                                 <Stack spacing={1}>
-                                                    <TextField
-                                                        select
-                                                        label="Chọn trạng thái"
-                                                        value={qTrangThai}
-                                                        onChange={(e) => setQTrangThai(e.target.value)}
-                                                        size="small"
-                                                    >
-                                                        <MenuItem value="">Tất cả</MenuItem>
-                                                        <MenuItem value="KhoiTao">Nháp</MenuItem>
-                                                        <MenuItem value="ChoDuyet_TBP">Chờ duyệt TBP</MenuItem>
-                                                        <MenuItem value="ChoDuyet_KTT">Chờ duyệt KTT</MenuItem>
-                                                        <MenuItem value="ChoDuyet_GD">Chờ duyệt Giám đốc</MenuItem>
-                                                        <MenuItem value="HoanThanh">Hoàn thành</MenuItem>
-                                                        <MenuItem value="TuChoi">Từ chối</MenuItem>
-                                                        <MenuItem value="HoanThanh_ChuaCoLenhChi">Hoàn thành - chờ lệnh chi</MenuItem>
-                                                        <MenuItem value="HoanThanh_DaCoLenhChi">Hoàn thành - đã có lệnh chi</MenuItem>
-                                                    </TextField>
+                                                    <FormControl size="small" fullWidth>
+                                                        <InputLabel shrink>Chọn trạng thái</InputLabel>
+                                                        <Select
+                                                            multiple
+                                                            displayEmpty
+                                                            label="Chọn trạng thái"
+                                                            value={qTrangThai}
+                                                            onChange={handleStatusFilterChange}
+                                                            renderValue={(selected) =>
+                                                                selected.length
+                                                                    ? selected.map(getStatusFilterLabel).join(", ")
+                                                                    : "Tất cả"
+                                                            }
+                                                            sx={{
+                                                                "& .MuiSelect-select": {
+                                                                    whiteSpace: "nowrap",
+                                                                    overflow: "hidden",
+                                                                    textOverflow: "ellipsis",
+                                                                },
+                                                            }}
+                                                        >
+                                                            <MenuItem value="__all__">
+                                                                <Checkbox checked={qTrangThai.length === 0} />
+                                                                <ListItemText primary="Tất cả" />
+                                                            </MenuItem>
+                                                            {STATUS_FILTER_OPTIONS.map((option) => (
+                                                                <MenuItem key={option.value} value={option.value}>
+                                                                    <Checkbox checked={qTrangThai.includes(option.value)} />
+                                                                    <ListItemText primary={option.label} />
+                                                                </MenuItem>
+                                                            ))}
+                                                        </Select>
+                                                    </FormControl>
 
                                                     <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {!!qTrangThai && (
-                                                            <Button startIcon={<ClearIcon />} onClick={() => setQTrangThai("")} size="small">
+                                                        {qTrangThai.length > 0 && (
+                                                            <Button startIcon={<ClearIcon />} onClick={() => setQTrangThai([])} size="small">
                                                                 Xoá
                                                             </Button>
                                                         )}
@@ -2218,7 +2283,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             <TableCell>Người thêm tài liệu</TableCell>
                                                             <TableCell>Ngày thêm</TableCell>
                                                             <TableCell align="right">Xem</TableCell>
-                                                            <TableCell align="right">Xoá</TableCell>
+                                                            {canDeleteAttachment && <TableCell align="right">Xoá</TableCell>}
                                                         </TableRow>
                                                     </TableHead>
                                                     <TableBody>
@@ -2242,15 +2307,17 @@ export default function PhieuSec({ mode = "VND" }) {
                                                                         Xem
                                                                     </Button>
                                                                 </TableCell>
-                                                                <TableCell align="right">
-                                                                    <IconButton
-                                                                        size="small"
-                                                                        color="error"
-                                                                        onClick={() => handleDeleteAttachment(tl)}
-                                                                    >
-                                                                        <DeleteIcon fontSize="small" />
-                                                                    </IconButton>
-                                                                </TableCell>
+                                                                {canDeleteAttachment && (
+                                                                    <TableCell align="right">
+                                                                        <IconButton
+                                                                            size="small"
+                                                                            color="error"
+                                                                            onClick={() => handleDeleteAttachment(tl)}
+                                                                        >
+                                                                            <DeleteIcon fontSize="small" />
+                                                                        </IconButton>
+                                                                    </TableCell>
+                                                                )}
                                                             </TableRow>
                                                         ))}
                                                     </TableBody>
@@ -2271,9 +2338,11 @@ export default function PhieuSec({ mode = "VND" }) {
                                                                 <Button size="small" variant="outlined" onClick={() => handleViewAttachment(tl)}>
                                                                     Xem
                                                                 </Button>
-                                                                <IconButton size="small" color="error" onClick={() => handleDeleteAttachment(tl)}>
-                                                                    <DeleteIcon fontSize="small" />
-                                                                </IconButton>
+                                                                {canDeleteAttachment && (
+                                                                    <IconButton size="small" color="error" onClick={() => handleDeleteAttachment(tl)}>
+                                                                        <DeleteIcon fontSize="small" />
+                                                                    </IconButton>
+                                                                )}
                                                             </Stack>
                                                         </Stack>
                                                     </Paper>
@@ -2489,10 +2558,10 @@ export default function PhieuSec({ mode = "VND" }) {
                             <Autocomplete
                                 sx={{ flex: 1 }}
                                 options={donvis}                                  // [{id, name, ...}]
-                                value={donvis.find(d => d.id === form.donViId) || null}
+                                value={donvis.find((d) => isSameId(d.id, form.donViId)) || null}
                                 onChange={(_, val) => setForm({ ...form, donViId: val?.id ?? null })}
                                 getOptionLabel={(o) => o?.name ?? ""}
-                                isOptionEqualToValue={(o, v) => o?.id === v?.id}
+                                isOptionEqualToValue={(o, v) => isSameId(o?.id, v?.id)}
                                 filterOptions={(options, { inputValue }) => {
                                     const q = stripVN((inputValue || "").toLowerCase().trim());
                                     if (!q) return options;
@@ -2517,7 +2586,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                         label="Đơn vị hưởng thụ"
                                         placeholder="Gõ tên đơn vị (không dấu)…"
                                         helperText={form.donViId
-                                            ? `Tên CK: ${donvis.find((d) => d.id === form.donViId)?.tenChuyenKhoan || "—"} · STK: ${donvis.find((d) => d.id === form.donViId)?.stk || "—"} · Ma NH: ${donvis.find((d) => d.id === form.donViId)?.maNganHang || "—"} · Ten NH: ${donvis.find((d) => d.id === form.donViId)?.tenNganHang || "—"} · CN: ${donvis.find((d) => d.id === form.donViId)?.chiNhanhNganHang || "—"}`
+                                            ? `Tên CK: ${donvis.find((d) => isSameId(d.id, form.donViId))?.tenChuyenKhoan || "—"} · STK: ${donvis.find((d) => isSameId(d.id, form.donViId))?.stk || "—"} · Ma NH: ${donvis.find((d) => isSameId(d.id, form.donViId))?.maNganHang || "—"} · Ten NH: ${donvis.find((d) => isSameId(d.id, form.donViId))?.tenNganHang || "—"} · CN: ${donvis.find((d) => isSameId(d.id, form.donViId))?.chiNhanhNganHang || "—"}`
                                             : "Nhập tên, tên chuyển khoản, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
                                     />
                                 )}
@@ -2743,12 +2812,13 @@ export default function PhieuSec({ mode = "VND" }) {
                         variant="contained"
                         onClick={async () => {
                             try {
-                                await api.deleteTaiLieuPhieuSec(deleteTarget?.TaiLieuId);
+                                if (!canDeleteAttachment) throw new Error("Chỉ admin hoặc người tạo phiếu nháp mới được xoá tài liệu");
+                                await api.deleteTaiLieuPhieuSec(deleteTarget?.taiLieuId ?? deleteTarget?.TaiLieuId);
                                 setToast({ open: true, msg: "Đã xoá tài liệu", type: "success" });
                                 await loadAttachments(detail.id);
                             } catch (err) {
                                 console.error(err);
-                                setToast({ open: true, msg: "Xóa thất bại", type: "error" });
+                                setToast({ open: true, msg: err?.message || "Xóa thất bại", type: "error" });
                             } finally {
                                 setConfirmOpen(false);
                             }
