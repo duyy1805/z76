@@ -43,7 +43,14 @@ export default function PhieuSecFormDialog({
             <DialogContent>
                 <Stack spacing={2} mt={1}>
                     <PaymentContentField value={form.noiDung} onCommit={onContentCommit} />
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "flex-start" }}>
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "minmax(0, 1fr) 48px 48px", sm: "minmax(0, 1fr) 56px 56px" },
+                            gap: 1,
+                            alignItems: "start",
+                        }}
+                    >
                         <Autocomplete
                             sx={{ flex: 1 }}
                             options={donvis}
@@ -77,13 +84,20 @@ export default function PhieuSecFormDialog({
                                     {...params}
                                     label="Đơn vị hưởng thụ"
                                     placeholder="Gõ tên đơn vị (không dấu)…"
-                                    helperText={selectedDonVi
-                                        ? `Tên CK: ${selectedDonVi.tenChuyenKhoan || "—"} · STK: ${selectedDonVi.stk || "—"} · Mã NH: ${selectedDonVi.maNganHang || "—"} · Tên NH: ${selectedDonVi.tenNganHang || "—"} · CN: ${selectedDonVi.chiNhanhNganHang || "—"}`
-                                        : "Nhập tên, tên chuyển khoản, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
                                 />
                             )}
                         />
-                        <IconButton onClick={onAddDonVi} color="primary" sx={{ border: "1px solid", borderColor: "divider" }}>
+                        <IconButton
+                            onClick={onAddDonVi}
+                            color="primary"
+                            sx={{
+                                width: { xs: 48, sm: 56 },
+                                height: { xs: 48, sm: 56 },
+                                border: "1px solid",
+                                borderColor: "divider",
+                                bgcolor: "background.paper",
+                            }}
+                        >
                             <AddIcon fontSize="small" />
                         </IconButton>
                         {editingPhieu && (
@@ -93,14 +107,35 @@ export default function PhieuSecFormDialog({
                                         onClick={onEditDonVi}
                                         color="primary"
                                         disabled={!canEdit || !form.donViId}
-                                        sx={{ border: "1px solid", borderColor: "divider" }}
+                                        sx={{
+                                            width: { xs: 48, sm: 56 },
+                                            height: { xs: 48, sm: 56 },
+                                            border: "1px solid",
+                                            borderColor: "divider",
+                                            bgcolor: "background.paper",
+                                        }}
                                     >
                                         <EditIcon fontSize="small" />
                                     </IconButton>
                                 </span>
                             </Tooltip>
                         )}
-                    </Stack>
+                        {!editingPhieu && <Box />}
+                        <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                                gridColumn: { xs: "1", sm: "1 / -1" },
+                                px: 1.75,
+                                mt: -0.25,
+                                overflowWrap: "anywhere",
+                            }}
+                        >
+                            {selectedDonVi
+                                ? `Tên CK: ${selectedDonVi.tenChuyenKhoan || "—"} · STK: ${selectedDonVi.stk || "—"} · Mã NH: ${selectedDonVi.maNganHang || "—"} · Tên NH: ${selectedDonVi.tenNganHang || "—"} · CN: ${selectedDonVi.chiNhanhNganHang || "—"}`
+                                : "Nhập tên, tên chuyển khoản, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
+                        </Typography>
+                    </Box>
 
                     {isNgoaiTe ? (
                         <TextField select required label="Loại tiền" value={form.maLoaiTien} onChange={(event) => onFormChange({ maLoaiTien: event.target.value })}>

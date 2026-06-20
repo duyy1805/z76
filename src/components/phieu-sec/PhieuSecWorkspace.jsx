@@ -674,6 +674,31 @@ export default function PhieuSec({ mode = "VND" }) {
         });
     }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
 
+    const visibleAmountSummary = useMemo(() => {
+        const summaryRows = filteredRows || [];
+        const byCurrency = new Map();
+
+        summaryRows.forEach((row) => {
+            const currency = String(row?.maLoaiTien || (isNgoaiTe ? "" : "VND"))
+                .trim()
+                .toUpperCase();
+            const amount = Number(row?.soTien);
+            const safeAmount = Number.isFinite(amount) ? amount : 0;
+            const key = currency || "KHÁC";
+            byCurrency.set(key, (byCurrency.get(key) || 0) + safeAmount);
+        });
+
+        if (!isNgoaiTe && !byCurrency.has("VND")) {
+            byCurrency.set("VND", 0);
+        }
+
+        return {
+            count: summaryRows.length,
+            currencies: Array.from(byCurrency, ([currency, amount]) => ({ currency, amount }))
+                .sort((left, right) => left.currency.localeCompare(right.currency)),
+        };
+    }, [filteredRows, isNgoaiTe]);
+
     // clear từng filter
     const clearFilter = (key) => {
         if (key === "ma") setQMa("");
@@ -784,20 +809,43 @@ export default function PhieuSec({ mode = "VND" }) {
     };
 
     return (
-        <Box sx={{ width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
+        <Box
+            sx={{
+                width: "100%",
+                maxWidth: "100%",
+                height: { md: "calc(100vh - 108px)" },
+                minHeight: 0,
+                display: { md: "flex" },
+                flexDirection: { md: "column" },
+                overflow: { xs: "visible", md: "hidden" },
+            }}
+        >
             {/* Header actions - desktop */}
             <Stack
-                sx={{ display: { xs: "none", md: "flex" } }}
                 direction={{ xs: "column", sm: "row" }}
                 alignItems={{ xs: "stretch", sm: "center" }}
                 justifyContent="space-between"
-                mb={2}
+                mb={1.5}
                 gap={2}
                 flexWrap="wrap"
+                sx={{
+                    display: { xs: "none", md: "flex" },
+                    px: 2,
+                    py: 1.25,
+                    border: (theme) => `1px solid ${theme.palette.divider}`,
+                    borderRadius: 1.25,
+                    bgcolor: "background.paper",
+                    boxShadow: "0 1px 2px rgba(16,24,40,.04)",
+                }}
             >
-                <Typography variant="h5" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, fontWeight: 700 }}>
-                    Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
-                </Typography>
+                <Box>
+                    <Typography variant="h5" sx={{ fontSize: "1.35rem", fontWeight: 800 }}>
+                        Phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
+                        {filteredRows ? `${filteredRows.length} phiếu trong danh sách hiện tại` : "Đang tải dữ liệu..."}
+                    </Typography>
+                </Box>
                 <Stack
                     direction={{ xs: "column", sm: "row" }}
                     spacing={1}
@@ -806,46 +854,80 @@ export default function PhieuSec({ mode = "VND" }) {
                     sx={{
                         width: { xs: "100%", sm: "auto" },
                         "& .MuiFormControl-root, & .MuiButton-root": { width: { xs: "100%", sm: "auto" } },
+                        "& .MuiInputBase-root": { height: 38 },
                     }}
                 >
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                        <DatePicker
-                            label="Từ ngày"
-                            value={qFrom}
-                            onChange={setQFrom}
-                            slotProps={{ textField: { size: "small" } }}
-                        />
-                        <DatePicker
-                            label="Đến ngày"
-                            value={qTo}
-                            onChange={setQTo}
-                            slotProps={{ textField: { size: "small" } }}
-                            minDate={qFrom || undefined}
-                        />
-                    </LocalizationProvider>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                        <LocalizationProvider dateAdapter={AdapterDayjs}>
+                            <DatePicker
+                                label="Từ ngày"
+                                value={qFrom}
+                                onChange={setQFrom}
+                                slotProps={{
+                                    textField: {
+                                        size: "small",
+                                        sx: { width: 190 },
+                                    },
+                                }}
+                            />
+                            <DatePicker
+                                label="Đến ngày"
+                                value={qTo}
+                                onChange={setQTo}
+                                slotProps={{
+                                    textField: {
+                                        size: "small",
+                                        sx: { width: 190 },
+                                    },
+                                }}
+                                minDate={qFrom || undefined}
+                            />
+                        </LocalizationProvider>
 
-                    <Button
-                        variant="text"
-                        onClick={() => { setQFrom(null); setQTo(null); }}
-                        startIcon={<ClearIcon />}
-                    >
-                        Xoá ngày
-                    </Button>
+                        <Tooltip title="Xoá bộ lọc ngày">
+                            <span>
+                                <IconButton
+                                    onClick={() => { setQFrom(null); setQTo(null); }}
+                                    disabled={!qFrom && !qTo}
+                                    aria-label="Xoá bộ lọc ngày"
+                                    sx={{
+                                        width: 38,
+                                        height: 38,
+                                        color: "text.secondary",
+                                        border: (theme) => `1px solid ${theme.palette.divider}`,
+                                    }}
+                                >
+                                    <ClearIcon fontSize="small" />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    </Stack>
 
-                    <Button variant="outlined" startIcon={<RefreshIcon />} onClick={activeTab === "pending" ? loadPendingLenhChi : load}>
+                    <Button size="small" variant="outlined" color="secondary" startIcon={<RefreshIcon />} onClick={activeTab === "pending" ? loadPendingLenhChi : load}>
                         Tải lại
                     </Button>
-                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={exportTransferExcel}>
+                    <Button size="small" variant="outlined" color="secondary" startIcon={<DownloadIcon />} onClick={exportTransferExcel}>
                         Xuất Excel
                     </Button>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
                         Tạo phiếu
                     </Button>
                 </Stack>
             </Stack>
 
             {/* Header actions - mobile */}
-            <Stack spacing={1.25} sx={{ display: { xs: "flex", md: "none" }, mb: 1.25 }}>
+            <Stack
+                spacing={1.25}
+                sx={{
+                    display: { xs: "flex", md: "none" },
+                    mb: 1.25,
+                    p: 1.25,
+                    borderRadius: 1.25,
+                    bgcolor: "background.paper",
+                    border: (theme) => `1px solid ${theme.palette.divider}`,
+                    boxShadow: "0 1px 2px rgba(16,24,40,.04)",
+                }}
+            >
                 <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
                     <Box sx={{ minWidth: 0 }}>
                         <Typography sx={{ fontSize: "1.1rem", fontWeight: 800, lineHeight: 1.2 }}>
@@ -866,7 +948,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     </Button>
                 </Stack>
 
-                <Paper variant="outlined" sx={{ p: 1, borderRadius: 2.5, bgcolor: "background.paper" }}>
+                <Paper elevation={0} sx={{ p: 0, borderRadius: 2.5, bgcolor: "background.paper" }}>
                     <Stack spacing={1}>
                         <BufferedTextField
                             label="Tìm nhanh"
@@ -988,25 +1070,141 @@ export default function PhieuSec({ mode = "VND" }) {
                     onChange={(_, value) => setActiveTab(value)}
                     variant="scrollable"
                     allowScrollButtonsMobile
-                    sx={{ mb: 2, minHeight: { xs: 40, md: 48 }, "& .MuiTab-root": { minHeight: { xs: 40, md: 48 } } }}
+                    sx={{
+                        mb: 1.5,
+                        minHeight: { xs: 40, md: 44 },
+                        px: { xs: 0, md: 0.5 },
+                        bgcolor: "background.paper",
+                        border: (theme) => `1px solid ${theme.palette.divider}`,
+                        borderRadius: 1.25,
+                        "& .MuiTabs-indicator": { height: 3, borderRadius: "3px 3px 0 0" },
+                        "& .MuiTab-root": {
+                            minHeight: { xs: 40, md: 44 },
+                            textTransform: "none",
+                            fontWeight: 700,
+                            fontSize: "0.82rem",
+                        },
+                    }}
                 >
                     <Tab value="group" label="Phiếu bộ phận" />
                     <Tab value="pending" label="Cần nhập lệnh chi" />
                 </Tabs>
             )}
 
+            <Stack
+                direction={{ xs: "column", sm: "row" }}
+                alignItems={{ xs: "stretch", sm: "center" }}
+                justifyContent="space-between"
+                spacing={1}
+                sx={{
+                    mb: 1.25,
+                    px: { xs: 1.25, sm: 1.5 },
+                    py: 1,
+                    bgcolor: "#F8FAFC",
+                    border: (theme) => `1px solid ${theme.palette.divider}`,
+                    borderRadius: 1.25,
+                }}
+            >
+                <Stack direction="row" spacing={0.75} alignItems="baseline">
+                    <Typography variant="body2" color="text.secondary">
+                        Danh sách hiện tại
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 800, color: "text.primary" }}>
+                        {visibleAmountSummary.count.toLocaleString("vi-VN")} phiếu
+                    </Typography>
+                </Stack>
+
+                <Stack
+                    direction="row"
+                    spacing={1.25}
+                    alignItems="center"
+                    sx={{
+                        minWidth: 0,
+                        overflowX: { xs: "auto", sm: "visible" },
+                        pb: { xs: 0.25, sm: 0 },
+                    }}
+                >
+                    {visibleAmountSummary.currencies.length ? (
+                        visibleAmountSummary.currencies.map(({ currency, amount }, index) => (
+                            <Stack
+                                key={currency}
+                                direction="row"
+                                spacing={0.6}
+                                alignItems="baseline"
+                                sx={{ flexShrink: 0 }}
+                            >
+                                {index > 0 && (
+                                    <Typography color="text.disabled" sx={{ mr: 0.5 }}>
+                                        ·
+                                    </Typography>
+                                )}
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 650 }}>
+                                    Tổng
+                                </Typography>
+                                <Typography
+                                    variant="body2"
+                                    sx={{
+                                        fontWeight: 850,
+                                        color: "primary.dark",
+                                        fontVariantNumeric: "tabular-nums",
+                                    }}
+                                >
+                                    {fmtMoney(amount)} {currency}
+                                </Typography>
+                            </Stack>
+                        ))
+                    ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                            Chưa có giá trị ngoại tệ
+                        </Typography>
+                    )}
+                </Stack>
+            </Stack>
+
             {!filteredRows ? null : (
                 <>
-                    <Box sx={{ display: { xs: "none", md: "block" } }}>
+                    <Box
+                        sx={{
+                            display: { xs: "none", md: "block" },
+                            flex: 1,
+                            minHeight: 0,
+                            overflow: "hidden",
+                        }}
+                    >
                         <TableContainer
                             component={Paper}
                             sx={{
                                 maxWidth: "100%",
-                                maxHeight: "calc(100vh - 240px)",
+                                height: "100%",
+                                maxHeight: "none",
                                 overflow: "auto",
+                                border: (theme) => `1px solid ${theme.palette.divider}`,
+                                borderRadius: 1.25,
+                                boxShadow: "0 1px 3px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.04)",
+                                "& .MuiTableCell-head": {
+                                    py: 1.4,
+                                    whiteSpace: "nowrap",
+                                    borderBottom: "1px solid #D0D5DD",
+                                },
+                                "& .MuiTableCell-body": {
+                                    py: 1.15,
+                                    fontSize: "0.83rem",
+                                    lineHeight: 1.45,
+                                },
+                                "& .MuiTableRow-root:hover .MuiTableCell-body": {
+                                    bgcolor: "#F7FAFF",
+                                },
                             }}
                         >
-                            <Table size="small" stickyHeader sx={{ minWidth: 2100 }}>
+                            <Table
+                                size="small"
+                                stickyHeader
+                                sx={{
+                                    minWidth: 2100,
+                                    "& .MuiTableCell-root:first-of-type": { pl: 2 },
+                                    "& .MuiTableCell-root:last-of-type": { pr: 1.5 },
+                                }}
+                            >
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>STT</TableCell>

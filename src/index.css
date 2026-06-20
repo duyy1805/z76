@@ -17,7 +17,34 @@ body,
 
 body {
   overflow-x: hidden;
-  background: #f4f6f8;
+  background: #f5f7fb;
+  color: #101828;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f2f4f7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c5cad3;
+  border: 2px solid #f2f4f7;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #98a2b3;
 }
 
 * {
