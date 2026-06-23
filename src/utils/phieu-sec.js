@@ -155,6 +155,16 @@ export function isoToDisplay(value) {
     return `${pad(serverTime.getDate())}/${pad(serverTime.getMonth() + 1)}/${serverTime.getFullYear()} ${pad(serverTime.getHours())}:${pad(serverTime.getMinutes())}`;
 }
 
+export function isoToDateKey(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    const serverTime = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+    const pad = (part) => String(part).padStart(2, "0");
+    return `${serverTime.getFullYear()}-${pad(serverTime.getMonth() + 1)}-${pad(serverTime.getDate())}`;
+}
+
 export const stripVN = (value = "") =>
     value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
 
@@ -171,8 +181,8 @@ export function getDisplayStatus(phieu) {
 }
 
 export function getCompletedAt(phieu) {
-    if (phieu?.trangThai !== "HoanThanh") return null;
-    return phieu?.gdTime || phieu?.kttTime || null;
+    if (!phieu?.maLenhChi) return null;
+    return phieu?.ngayNhapLenhChi || null;
 }
 
 export const getStatusFilterLabel = (value) =>

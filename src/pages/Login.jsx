@@ -67,7 +67,8 @@ export default function Login() {
     return (
         <Box
             sx={{
-                minHeight: "100vh",
+                minHeight: "100dvh",
+                minWidth: 0,
                 display: "grid",
                 gridTemplateColumns: { xs: "1fr", lg: "minmax(420px, 0.9fr) minmax(560px, 1.1fr)" },
                 bgcolor: "background.default",
@@ -156,11 +157,12 @@ export default function Login() {
 
             <Box
                 sx={{
-                    minHeight: "100vh",
+                    minHeight: "100dvh",
+                    minWidth: 0,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    p: { xs: 2, sm: 4, lg: 6 },
+                    p: { xs: 1.5, sm: 4, lg: 6 },
                     position: "relative",
                 }}
             >
@@ -210,9 +212,9 @@ export default function Login() {
                             label="Tên đăng nhập"
                             value={username}
                             onChange={(event) => setUsername(event.target.value)}
-                            autoFocus
                             fullWidth
                             autoComplete="username"
+                            inputProps={{ style: { fontSize: 16 } }}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -229,6 +231,7 @@ export default function Login() {
                             onChange={(event) => setPassword(event.target.value)}
                             fullWidth
                             autoComplete="current-password"
+                            inputProps={{ style: { fontSize: 16 } }}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">

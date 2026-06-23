@@ -27,6 +27,7 @@ import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import * as XLSX from "xlsx";
+import { NumericFormat } from "react-number-format";
 
 
 import { api } from "../../lib/api";
@@ -59,6 +60,7 @@ import {
     hasPhieuPermission,
     hasSelectedText,
     isSameId,
+    isoToDateKey,
     isoToDisplay,
     stickyActionCellSx,
     stickyStatusCellSx,
@@ -115,6 +117,104 @@ const MobileSectionTitle = ({ children }) => (
     </Typography>
 );
 
+const AmountFilterButton = React.memo(function AmountFilterButton({
+    operator,
+    amount,
+    onApply,
+    onClear,
+}) {
+    const [anchorEl, setAnchorEl] = useState(null);
+    const [draftOperator, setDraftOperator] = useState(operator);
+    const [draftAmount, setDraftAmount] = useState(amount);
+
+    const openFilter = (event) => {
+        setDraftOperator(operator);
+        setDraftAmount(amount);
+        setAnchorEl(event.currentTarget);
+    };
+
+    const closeFilter = () => setAnchorEl(null);
+
+    return (
+        <>
+            <IconButton
+                size="small"
+                onClick={openFilter}
+                aria-label="Lọc theo số tiền"
+                color={amount !== "" ? "primary" : "default"}
+            >
+                <FilterListRoundedIcon fontSize="inherit" />
+            </IconButton>
+            <Popover
+                open={Boolean(anchorEl)}
+                anchorEl={anchorEl}
+                onClose={closeFilter}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+                PaperProps={{ sx: { p: 1.5, width: 300 } }}
+            >
+                <Stack spacing={1.25}>
+                    <Stack direction="row" spacing={1}>
+                        <TextField
+                            select
+                            size="small"
+                            label="Điều kiện"
+                            value={draftOperator}
+                            onChange={(event) => setDraftOperator(event.target.value)}
+                            sx={{ width: 105, flexShrink: 0 }}
+                        >
+                            {["=", ">", "<", ">=", "<="].map((item) => (
+                                <MenuItem key={item} value={item}>{item}</MenuItem>
+                            ))}
+                        </TextField>
+                        <NumericFormat
+                            customInput={TextField}
+                            autoFocus
+                            fullWidth
+                            size="small"
+                            label="Số tiền"
+                            value={draftAmount}
+                            thousandSeparator=","
+                            decimalSeparator="."
+                            allowNegative={false}
+                            decimalScale={2}
+                            onValueChange={(values) => setDraftAmount(values.value)}
+                        />
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                        Ví dụ: &gt;= 100000000
+                    </Typography>
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        {amount !== "" && (
+                            <Button
+                                startIcon={<ClearIcon />}
+                                onClick={() => {
+                                    setDraftOperator("=");
+                                    setDraftAmount("");
+                                    onClear();
+                                }}
+                                size="small"
+                            >
+                                Xoá
+                            </Button>
+                        )}
+                        <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => {
+                                onApply(draftOperator, draftAmount);
+                                closeFilter();
+                            }}
+                        >
+                            OK
+                        </Button>
+                    </Stack>
+                </Stack>
+            </Popover>
+        </>
+    );
+});
+
 export default function PhieuSec({ mode = "VND" }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -168,11 +268,15 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qNoiDung, setQNoiDung] = useState("");
     const [qDonVi, setQDonVi] = useState(""); // text input cho đơn vị
     const [qNguoiTao, setQNguoiTao] = useState("");
+    const [qDonViNguoiTao, setQDonViNguoiTao] = useState("");
     const [qFrom, setQFrom] = useState(null); // dayjs | null
     const [qTo, setQTo] = useState(null);     // dayjs | null
     const [qCompletedFrom, setQCompletedFrom] = useState(null);
     const [qCompletedTo, setQCompletedTo] = useState(null);
     const [qTrangThai, setQTrangThai] = useState([]);
+    const [qLoaiChiPhi, setQLoaiChiPhi] = useState("");
+    const [qSoTienOperator, setQSoTienOperator] = useState("=");
+    const [qSoTien, setQSoTien] = useState("");
     const [qMobile, setQMobile] = useState("");
     const [anchorTrangThai, setAnchorTrangThai] = useState(null);
     // anchor Popover cho từng cột
@@ -180,6 +284,8 @@ export default function PhieuSec({ mode = "VND" }) {
     const [anchorNoiDung, setAnchorNoiDung] = useState(null);
     const [anchorDonVi, setAnchorDonVi] = useState(null);
     const [anchorNguoiTao, setAnchorNguoiTao] = useState(null);
+    const [anchorDonViNguoiTao, setAnchorDonViNguoiTao] = useState(null);
+    const [anchorLoaiChiPhi, setAnchorLoaiChiPhi] = useState(null);
     const [anchorCompleted, setAnchorCompleted] = useState(null);
 
 
@@ -482,10 +588,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 nguoiNhapId: user?.id,
             });
 
-            const fresh = { ...detail, maLenhChi: newLenhChi.trim() };
-
-            setDetail(fresh);
-            setRows((r) => r?.map((x) => (x.id === detail.id ? { ...x, maLenhChi: fresh.maLenhChi } : x)));
+            await load();
             setPendingLenhChiRows((r) => r?.filter((x) => x.id !== detail.id));
             setNewLenhChi("");
             handleCloseDetail();
@@ -551,16 +654,19 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasNd = qNoiDung.trim() !== "";
         const hasDv = qDonVi.trim() !== "";
         const hasNguoiTao = qNguoiTao.trim() !== "";
+        const hasDonViNguoiTao = qDonViNguoiTao.trim() !== "";
         const hasFrom = !!qFrom;
         const hasTo = !!qTo;
         const hasCompletedFrom = !!qCompletedFrom;
         const hasCompletedTo = !!qCompletedTo;
+        const hasSoTien = qSoTien !== "" && Number.isFinite(Number(qSoTien));
         const hasMobile = qMobile.trim() !== "";
 
         const qMaNorm = stripVN(qMa.trim().toLowerCase());
         const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
         const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
         const qNguoiTaoNorm = stripVN(qNguoiTao.trim().toLowerCase());
+        const qDonViNguoiTaoNorm = stripVN(qDonViNguoiTao.trim().toLowerCase());
         const qMobileNorm = stripVN(qMobile.trim().toLowerCase());
 
         const statusOrder = STATUS_ORDER_BY_ROLE[role] || DEFAULT_STATUS_ORDER;
@@ -582,11 +688,10 @@ export default function PhieuSec({ mode = "VND" }) {
             // Trạng thái
             let okCompletedDate = true;
             if (hasCompletedFrom || hasCompletedTo) {
-                const completedAt = dayjs(getCompletedAt(r));
-                if (completedAt.isValid()) {
-                    const completedVal = completedAt.startOf("day").valueOf();
-                    if (hasCompletedFrom) okCompletedDate = okCompletedDate && completedVal >= qCompletedFrom.startOf("day").valueOf();
-                    if (hasCompletedTo) okCompletedDate = okCompletedDate && completedVal <= qCompletedTo.startOf("day").valueOf();
+                const completedDateKey = isoToDateKey(getCompletedAt(r));
+                if (completedDateKey) {
+                    if (hasCompletedFrom) okCompletedDate = okCompletedDate && completedDateKey >= qCompletedFrom.format("YYYY-MM-DD");
+                    if (hasCompletedTo) okCompletedDate = okCompletedDate && completedDateKey <= qCompletedTo.format("YYYY-MM-DD");
                 } else {
                     okCompletedDate = false;
                 }
@@ -634,6 +739,32 @@ export default function PhieuSec({ mode = "VND" }) {
                 okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
             }
 
+            let okDonViNguoiTao = true;
+            if (hasDonViNguoiTao) {
+                okDonViNguoiTao = stripVN(String(r.tenDonViNguoiTao || "").toLowerCase()).includes(qDonViNguoiTaoNorm);
+            }
+
+            const okLoaiChiPhi = !qLoaiChiPhi || r.maLoaiChiPhi === qLoaiChiPhi;
+
+            let okSoTien = true;
+            if (hasSoTien) {
+                const rowAmount = Number(r.soTien);
+                const filterAmount = Number(qSoTien);
+                if (!Number.isFinite(rowAmount)) {
+                    okSoTien = false;
+                } else if (qSoTienOperator === ">") {
+                    okSoTien = rowAmount > filterAmount;
+                } else if (qSoTienOperator === "<") {
+                    okSoTien = rowAmount < filterAmount;
+                } else if (qSoTienOperator === ">=") {
+                    okSoTien = rowAmount >= filterAmount;
+                } else if (qSoTienOperator === "<=") {
+                    okSoTien = rowAmount <= filterAmount;
+                } else {
+                    okSoTien = rowAmount === filterAmount;
+                }
+            }
+
             let okMobile = true;
             if (hasMobile) {
                 const donVi = donvis.find((d) => d.id === r.donViId);
@@ -641,6 +772,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     r.maSoSec || `SS-${r.id}`,
                     isoToDisplay(r.ngay).split(" ")[0],
                     r.tenNguoiTao,
+                    r.tenDonViNguoiTao,
                     r.tenDonVi,
                     donVi?.name,
                     getTenChuyenKhoan(r),
@@ -656,7 +788,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 okMobile = stripVN(String(mobileSearchText).toLowerCase()).includes(qMobileNorm);
             }
 
-            return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao && okMobile;
+            return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao && okDonViNguoiTao && okLoaiChiPhi && okSoTien && okMobile;
         });
 
         if (activeTab === "pending") return matchedRows;
@@ -672,7 +804,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qDonViNguoiTao, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
 
     const visibleAmountSummary = useMemo(() => {
         const summaryRows = filteredRows || [];
@@ -705,6 +837,11 @@ export default function PhieuSec({ mode = "VND" }) {
         if (key === "nd") setQNoiDung("");
         if (key === "dv") setQDonVi("");
         if (key === "nguoiTao") setQNguoiTao("");
+        if (key === "donViNguoiTao") setQDonViNguoiTao("");
+        if (key === "soTien") {
+            setQSoTienOperator("=");
+            setQSoTien("");
+        }
         if (key === "completed") {
             setQCompletedFrom(null);
             setQCompletedTo(null);
@@ -997,6 +1134,30 @@ export default function PhieuSec({ mode = "VND" }) {
                                     ))}
                                 </Select>
                             </FormControl>
+                            <FormControl size="small" fullWidth>
+                                <InputLabel shrink sx={{ fontSize: "0.82rem" }}>Loại chi phí</InputLabel>
+                                <Select
+                                    label="Loại chi phí"
+                                    displayEmpty
+                                    value={qLoaiChiPhi}
+                                    onChange={(event) => setQLoaiChiPhi(event.target.value)}
+                                    renderValue={(selected) => selected ? EXPENSE_LABELS[selected] || selected : "Tất cả"}
+                                    sx={{
+                                        fontSize: "0.86rem",
+                                        "& .MuiSelect-select": {
+                                            py: 0.85,
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                        },
+                                    }}
+                                >
+                                    <MenuItem value="">Tất cả</MenuItem>
+                                    {Object.entries(EXPENSE_LABELS).map(([value, label]) => (
+                                        <MenuItem key={value} value={value}>{label}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
                             <Button
                                 size="small"
                                 variant="outlined"
@@ -1044,7 +1205,15 @@ export default function PhieuSec({ mode = "VND" }) {
                             <Button
                                 size="small"
                                 variant="text"
-                                onClick={() => { setQFrom(null); setQTo(null); setQMobile(""); setQTrangThai(""); }}
+                                onClick={() => {
+                                    setQFrom(null);
+                                    setQTo(null);
+                                    setQMobile("");
+                                    setQTrangThai([]);
+                                    setQLoaiChiPhi("");
+                                    setQSoTienOperator("=");
+                                    setQSoTien("");
+                                }}
                                 startIcon={<ClearIcon />}
                                 sx={{ flex: 1, fontSize: "0.76rem" }}
                             >
@@ -1200,7 +1369,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                 size="small"
                                 stickyHeader
                                 sx={{
-                                    minWidth: 2100,
+                                    minWidth: 2280,
                                     "& .MuiTableCell-root:first-of-type": { pl: 2 },
                                     "& .MuiTableCell-root:last-of-type": { pr: 1.5 },
                                 }}
@@ -1404,17 +1573,139 @@ export default function PhieuSec({ mode = "VND" }) {
                                             </Popover>
                                         </TableCell>
 
-                                        <TableCell>Loại chi phí</TableCell>
+                                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 190 }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Đơn vị người tạo</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(event) => setAnchorDonViNguoiTao(event.currentTarget)}
+                                                    aria-label="Lọc theo đơn vị người tạo"
+                                                    color={qDonViNguoiTao ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Stack>
+
+                                            <Popover
+                                                open={Boolean(anchorDonViNguoiTao)}
+                                                anchorEl={anchorDonViNguoiTao}
+                                                onClose={() => setAnchorDonViNguoiTao(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                            >
+                                                <Stack spacing={1}>
+                                                    <BufferedTextField
+                                                        label="Đơn vị người tạo"
+                                                        placeholder="Nhập tên đơn vị người tạo…"
+                                                        value={qDonViNguoiTao}
+                                                        onCommit={setQDonViNguoiTao}
+                                                        autoFocus
+                                                        size="small"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Tìm theo tên không dấu, chứa chuỗi.
+                                                    </Typography>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {!!qDonViNguoiTao && (
+                                                            <Button
+                                                                startIcon={<ClearIcon />}
+                                                                onClick={() => clearFilter("donViNguoiTao")}
+                                                                size="small"
+                                                            >
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="contained"
+                                                            size="small"
+                                                            onClick={() => setAnchorDonViNguoiTao(null)}
+                                                        >
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
+
+                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center">
+                                                <span>Loại chi phí</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(event) => setAnchorLoaiChiPhi(event.currentTarget)}
+                                                    aria-label="Lọc theo loại chi phí"
+                                                    color={qLoaiChiPhi ? "primary" : "default"}
+                                                >
+                                                    <FilterListRoundedIcon fontSize="inherit" />
+                                                </IconButton>
+                                            </Stack>
+                                            <Popover
+                                                open={Boolean(anchorLoaiChiPhi)}
+                                                anchorEl={anchorLoaiChiPhi}
+                                                onClose={() => setAnchorLoaiChiPhi(null)}
+                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                PaperProps={{ sx: { p: 1.5, width: 260 } }}
+                                            >
+                                                <Stack spacing={1.25}>
+                                                    <TextField
+                                                        select
+                                                        fullWidth
+                                                        size="small"
+                                                        label="Loại chi phí"
+                                                        value={qLoaiChiPhi}
+                                                        onChange={(event) => setQLoaiChiPhi(event.target.value)}
+                                                    >
+                                                        <MenuItem value="">Tất cả</MenuItem>
+                                                        {Object.entries(EXPENSE_LABELS).map(([value, label]) => (
+                                                            <MenuItem key={value} value={value}>{label}</MenuItem>
+                                                        ))}
+                                                    </TextField>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        {qLoaiChiPhi && (
+                                                            <Button
+                                                                startIcon={<ClearIcon />}
+                                                                onClick={() => setQLoaiChiPhi("")}
+                                                                size="small"
+                                                            >
+                                                                Xoá
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="contained"
+                                                            size="small"
+                                                            onClick={() => setAnchorLoaiChiPhi(null)}
+                                                        >
+                                                            OK
+                                                        </Button>
+                                                    </Stack>
+                                                </Stack>
+                                            </Popover>
+                                        </TableCell>
                                         <TableCell>Loại tiền</TableCell>
-                                        <TableCell align="right">Số tiền</TableCell>
+                                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                                                <span>Số tiền</span>
+                                                <AmountFilterButton
+                                                    operator={qSoTienOperator}
+                                                    amount={qSoTien}
+                                                    onApply={(operator, amount) => {
+                                                        setQSoTienOperator(operator);
+                                                        setQSoTien(amount);
+                                                    }}
+                                                    onClear={() => clearFilter("soTien")}
+                                                />
+                                            </Stack>
+                                        </TableCell>
                                         <TableCell align="right">Mã lệnh chi</TableCell>
                                         <TableCell sx={{ whiteSpace: "nowrap" }}>
                                             <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Ngày hoàn thành</span>
+                                                <span>Ngày hoàn thành (lệnh chi)</span>
                                                 <IconButton
                                                     size="small"
                                                     onClick={(e) => setAnchorCompleted(e.currentTarget)}
-                                                    aria-label="Lọc theo ngày hoàn thành"
+                                                    aria-label="Lọc theo ngày hoàn thành lệnh chi"
                                                     color={qCompletedFrom || qCompletedTo ? "primary" : "default"}
                                                 >
                                                     <FilterListRoundedIcon fontSize="inherit" />
@@ -1552,6 +1843,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                             <TableCell>{getTenNganHang(r) || "—"}</TableCell>
                                             <TableCell>{r.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.chiNhanhNganHang || "—"}</TableCell>
                                             <TableCell>{r.tenNguoiTao || "—"}</TableCell>
+                                            <TableCell>{r.tenDonViNguoiTao || "—"}</TableCell>
                                             <TableCell>{EXPENSE_LABELS[r.maLoaiChiPhi] || r.maLoaiChiPhi || "—"}</TableCell>
                                             <TableCell>{r.maLoaiTien || "VND"}</TableCell>
                                             <TableCell align="right">
@@ -1587,7 +1879,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
                                     {filteredRows.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={17}>
+                                            <TableCell colSpan={18}>
                                                 <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
                                                     Không có bản ghi phù hợp.
                                                 </Typography>
