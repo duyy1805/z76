@@ -12,6 +12,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../lib/api";
 import { useAuth } from "../store/useAuth";
+import { EXPENSE_LABELS } from "../utils/phieu-sec";
 
 const normalizeSearch = (value = "") =>
     String(value)
@@ -776,18 +777,137 @@ function BankLookup() {
     );
 }
 
+function ExpenseReviewerLookup() {
+    const { user } = useAuth();
+    const [users, setUsers] = useState([]);
+    const [assignments, setAssignments] = useState({});
+    const [savingCode, setSavingCode] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [userRows, reviewerRows] = await Promise.all([
+                api.listAssignableUsers(user?.id),
+                api.listExpenseReviewers(user?.id),
+            ]);
+            setUsers(userRows || []);
+            setAssignments(
+                (reviewerRows || []).reduce((result, row) => {
+                    if (!result[row.maLoaiChiPhi]) result[row.maLoaiChiPhi] = [];
+                    result[row.maLoaiChiPhi].push(row.userId);
+                    return result;
+                }, {})
+            );
+        } catch (error) {
+            setToast({
+                open: true,
+                msg: error?.response?.data?.message || "Không tải được cấu hình người phụ trách",
+                type: "error",
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [user?.id]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const save = async (maLoaiChiPhi) => {
+        try {
+            setSavingCode(maLoaiChiPhi);
+            await api.replaceExpenseReviewers(
+                maLoaiChiPhi,
+                assignments[maLoaiChiPhi] || [],
+                user?.id
+            );
+            setToast({ open: true, msg: "Đã lưu người phụ trách", type: "success" });
+        } catch (error) {
+            setToast({
+                open: true,
+                msg: error?.response?.data?.message || "Lưu người phụ trách thất bại",
+                type: "error",
+            });
+        } finally {
+            setSavingCode("");
+        }
+    };
+
+    return (
+        <Box>
+            <Typography variant="h5" sx={{ mb: 0.5 }}>Admin · Người phụ trách chi phí</Typography>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+                Có người phụ trách thì phiếu sẽ qua bước xem trước KTT; để trống sẽ dùng luồng hiện tại.
+            </Typography>
+            <Stack spacing={1.5}>
+                {Object.entries(EXPENSE_LABELS).map(([code, label]) => {
+                    const selectedIds = assignments[code] || [];
+                    const selectedUsers = users.filter((item) => selectedIds.includes(item.id));
+                    return (
+                        <Paper key={code} variant="outlined" sx={{ p: 2 }}>
+                            <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
+                                <Box sx={{ width: { md: 190 }, flexShrink: 0 }}>
+                                    <Typography fontWeight={700}>{label}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{code}</Typography>
+                                </Box>
+                                <Autocomplete
+                                    multiple
+                                    fullWidth
+                                    loading={loading}
+                                    options={users}
+                                    value={selectedUsers}
+                                    getOptionLabel={(option) => option.fullName || `User #${option.id}`}
+                                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                                    onChange={(_, values) => {
+                                        setAssignments((current) => ({
+                                            ...current,
+                                            [code]: values.map((item) => item.id),
+                                        }));
+                                    }}
+                                    renderInput={(params) => (
+                                        <TextField {...params} label="Người phụ trách" placeholder="Chọn tài khoản" />
+                                    )}
+                                />
+                                <Button
+                                    variant="contained"
+                                    onClick={() => save(code)}
+                                    disabled={loading || savingCode === code}
+                                    sx={{ minWidth: 100 }}
+                                >
+                                    {savingCode === code ? "Đang lưu..." : "Lưu"}
+                                </Button>
+                            </Stack>
+                        </Paper>
+                    );
+                })}
+            </Stack>
+            <Snackbar
+                open={toast.open}
+                autoHideDuration={3000}
+                onClose={() => setToast((current) => ({ ...current, open: false }))}
+            >
+                <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
+            </Snackbar>
+        </Box>
+    );
+}
+
 export default function AdminSuppliers() {
+    const { role, permissions = [] } = useAuth();
     const [tab, setTab] = useState(0);
+    const isAdmin = role === "Admin" || permissions.includes("Admin");
     return (
         <Box>
             <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 2 }}>
                 <Tab label="Đơn vị hưởng thụ" />
                 <Tab label="Loại tiền" />
                 <Tab label="Ngân hàng" />
+                {isAdmin && <Tab label="Người phụ trách chi phí" />}
             </Tabs>
             {tab === 0 && <SupplierLookup />}
             {tab === 1 && <CurrencyLookup />}
             {tab === 2 && <BankLookup />}
+            {isAdmin && tab === 3 && <ExpenseReviewerLookup />}
         </Box>
     );
 }

@@ -83,7 +83,7 @@ export default function PhieuSecActions({
                 </span>
             )}
 
-            <span>
+            <Box sx={{ visibility: phieu?.trangThai === "ChoDuyet_ThuKyKTT" ? "hidden" : "visible" }}>
                 <IconButton
                     color="error"
                     sx={actionSx}
@@ -93,7 +93,7 @@ export default function PhieuSecActions({
                 >
                     <CancelIcon fontSize="small" />
                 </IconButton>
-            </span>
+            </Box>
 
             <Box sx={{ visibility: canDelete ? "visible" : "hidden" }}>
                 <Tooltip title="Xoá phiếu">

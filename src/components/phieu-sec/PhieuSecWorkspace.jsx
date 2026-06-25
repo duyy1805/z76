@@ -218,7 +218,7 @@ const AmountFilterButton = React.memo(function AmountFilterButton({
 export default function PhieuSec({ mode = "VND" }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-    const { role, user, permissions = [] } = useAuth();
+    const { role, user, permissions = [], expenseReviewerCodes = [] } = useAuth();
     const isNgoaiTe = mode === "NgoaiTe";
 
     // dữ liệu chính
@@ -289,7 +289,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [anchorCompleted, setAnchorCompleted] = useState(null);
 
 
-    const permissionContext = { role, permissions, userId: user?.id };
+    const permissionContext = { role, permissions, expenseReviewerCodes, userId: user?.id };
     const hasPermission = (code) => hasPhieuPermission(permissionContext, code);
 
     const canDeleteAttachment =
@@ -2264,6 +2264,11 @@ export default function PhieuSec({ mode = "VND" }) {
                                     }}
                                 >
                                     <DetailField label="TBP duyệt lúc">{isoToDisplay(detail.tbpTime)}</DetailField>
+                                    <DetailField label="Người phụ trách duyệt lúc">
+                                        {detail.expenseReviewerName
+                                            ? `${detail.expenseReviewerName} · ${isoToDisplay(detail.expenseReviewerTime)}`
+                                            : isoToDisplay(detail.expenseReviewerTime)}
+                                    </DetailField>
                                     <DetailField label="KTT duyệt lúc">{isoToDisplay(detail.kttTime)}</DetailField>
                                     <DetailField label="Giám đốc duyệt lúc">{isoToDisplay(detail.gdTime)}</DetailField>
                                     {detail.lyDoTraLai && (
@@ -2343,15 +2348,17 @@ export default function PhieuSec({ mode = "VND" }) {
                             >
                                 Duyệt
                             </Button>
-                            <Button
-                                color="error"
-                                variant="outlined"
-                                startIcon={<CancelIcon />}
-                                disabled={!canReject(detail)}
-                                onClick={() => handleApprove(detail, false)}
-                            >
-                                Từ chối
-                            </Button>
+                            {detail.trangThai !== "ChoDuyet_ThuKyKTT" && (
+                                <Button
+                                    color="error"
+                                    variant="outlined"
+                                    startIcon={<CancelIcon />}
+                                    disabled={!canReject(detail)}
+                                    onClick={() => handleApprove(detail, false)}
+                                >
+                                    Từ chối
+                                </Button>
+                            )}
                             {canDeletePhieu(detail) && (
                                 <Button
                                     color="error"

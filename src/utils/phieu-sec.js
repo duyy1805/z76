@@ -1,6 +1,7 @@
 export const EXPENSE_LABELS = {
     TienDien: "Tiền điện",
     TienGiaCong: "Tiền gia công",
+    TiẽnDCB: "Tiền xây dựng cơ bản, tài sản cố định, dự án",
     Khac: "Khác",
 };
 
@@ -36,6 +37,7 @@ export const stickyStatusCellSx = {
 export const DEFAULT_STATUS_ORDER = [
     "KhoiTao",
     "ChoDuyet_TBP",
+    "ChoDuyet_ThuKyKTT",
     "ChoDuyet_KTT",
     "ChoDuyet_GD",
     "HoanThanh",
@@ -45,6 +47,7 @@ export const DEFAULT_STATUS_ORDER = [
 export const STATUS_FILTER_OPTIONS = [
     { value: "KhoiTao", label: "Nháp" },
     { value: "ChoDuyet_TBP", label: "Chờ duyệt TBP" },
+    { value: "ChoDuyet_ThuKyKTT", label: "Chờ người phụ trách" },
     { value: "ChoDuyet_KTT", label: "Chờ duyệt KTT" },
     { value: "ChoDuyet_GD", label: "Chờ duyệt Giám đốc" },
     { value: "TuChoi", label: "Từ chối" },
@@ -53,10 +56,10 @@ export const STATUS_FILTER_OPTIONS = [
 ];
 
 export const STATUS_ORDER_BY_ROLE = {
-    TBP: ["ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
-    KTT: ["ChoDuyet_KTT", "ChoDuyet_GD", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
-    GD: ["ChoDuyet_GD", "ChoDuyet_KTT", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
-    Admin: ["KhoiTao", "ChoDuyet_TBP", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"],
+    TBP: ["ChoDuyet_TBP", "ChoDuyet_ThuKyKTT", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
+    KTT: ["ChoDuyet_KTT", "ChoDuyet_ThuKyKTT", "ChoDuyet_GD", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
+    GD: ["ChoDuyet_GD", "ChoDuyet_KTT", "ChoDuyet_ThuKyKTT", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
+    Admin: ["KhoiTao", "ChoDuyet_TBP", "ChoDuyet_ThuKyKTT", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"],
 };
 
 const VN_NUMBER_WORDS = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
@@ -202,18 +205,38 @@ export function hasPhieuPermission({ role, permissions = [] }, code) {
 
 export function canApprovePhieu(phieu, auth) {
     return (phieu?.trangThai === "ChoDuyet_TBP" && hasPhieuPermission(auth, "TBP")) ||
-        (phieu?.trangThai === "ChoDuyet_KTT" && hasPhieuPermission(auth, "KTT")) ||
+        (
+            phieu?.trangThai === "ChoDuyet_ThuKyKTT" &&
+            (
+                hasPhieuPermission(auth, "Admin") ||
+                auth?.expenseReviewerCodes?.includes(phieu?.maLoaiChiPhi)
+            )
+        ) ||
+        (
+            phieu?.trangThai === "ChoDuyet_KTT" &&
+            hasPhieuPermission(auth, "KTT")
+        ) ||
         (phieu?.trangThai === "ChoDuyet_GD" && hasPhieuPermission(auth, "GD"));
 }
 
 export function canRejectPhieu(phieu, auth) {
-    return canApprovePhieu(phieu, auth) ||
+    return (
+        phieu?.trangThai !== "ChoDuyet_ThuKyKTT" &&
+        canApprovePhieu(phieu, auth)
+    ) ||
         (hasPhieuPermission(auth, "KTT") && phieu?.trangThai === "ChoDuyet_GD");
 }
 
 export function canReturnPhieu(phieu, auth) {
     const pendingLenhChi = phieu?.trangThai === "HoanThanh" && !phieu?.maLenhChi;
-    return (hasPhieuPermission(auth, "KTT") && ["ChoDuyet_KTT", "ChoDuyet_GD"].includes(phieu?.trangThai)) ||
+    const canExpenseReviewerReturn =
+        phieu?.trangThai === "ChoDuyet_ThuKyKTT" &&
+        (
+            hasPhieuPermission(auth, "Admin") ||
+            auth?.expenseReviewerCodes?.includes(phieu?.maLoaiChiPhi)
+        );
+    return canExpenseReviewerReturn ||
+        (hasPhieuPermission(auth, "KTT") && ["ChoDuyet_KTT", "ChoDuyet_GD"].includes(phieu?.trangThai)) ||
         (pendingLenhChi && (
             hasPhieuPermission(auth, "TaoLenhChi") ||
             hasPhieuPermission(auth, "KTT") ||

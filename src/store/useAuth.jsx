@@ -39,17 +39,25 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(savedAuth?.user || null);
     const [role, setRole] = useState(savedAuth?.role || "NhanVien");
     const [permissions, setPermissions] = useState(savedAuth?.permissions || []);
+    const [expenseReviewerCodes, setExpenseReviewerCodes] = useState(savedAuth?.expenseReviewerCodes || []);
 
     useEffect(() => {
         if (token) attachAuthToken(token);
     }, [token]);
 
-    const login = ({ token: nextToken, user: nextUser, role: nextRole, permissions: nextPermissions }, remember) => {
+    const login = ({
+        token: nextToken,
+        user: nextUser,
+        role: nextRole,
+        permissions: nextPermissions,
+        expenseReviewerCodes: nextExpenseReviewerCodes,
+    }, remember) => {
         const payload = {
             token: nextToken,
             user: nextUser,
             role: nextRole || "NhanVien",
             permissions: nextPermissions || [],
+            expenseReviewerCodes: nextExpenseReviewerCodes || [],
         };
 
         writeAuth(payload, remember);
@@ -57,6 +65,7 @@ export function AuthProvider({ children }) {
         setUser(payload.user);
         setRole(payload.role);
         setPermissions(payload.permissions);
+        setExpenseReviewerCodes(payload.expenseReviewerCodes);
     };
 
     const logout = () => {
@@ -65,6 +74,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         setRole("NhanVien");
         setPermissions([]);
+        setExpenseReviewerCodes([]);
     };
 
     return (
@@ -74,6 +84,7 @@ export function AuthProvider({ children }) {
                 user,
                 role,
                 permissions,
+                expenseReviewerCodes,
                 login,
                 logout,
                 setRole,

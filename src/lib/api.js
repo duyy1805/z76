@@ -34,6 +34,7 @@ export async function getRoleByUserId(userId) {
     return {
         role: data?.role || "NhanVien",
         permissions: Array.isArray(data?.permissions) ? data.permissions : [],
+        expenseReviewerCodes: Array.isArray(data?.expenseReviewerCodes) ? data.expenseReviewerCodes : [],
     };
 }
 
@@ -106,6 +107,21 @@ export const api = {
     },
     async deleteLoaiTien(maLoaiTien) {
         const { data } = await http.delete(`/loaitien/${maLoaiTien}`);
+        return data;
+    },
+    async listExpenseReviewers(requesterUserId) {
+        const { data } = await http.get("/expense-reviewers", { params: { requesterUserId } });
+        return data;
+    },
+    async listAssignableUsers(requesterUserId) {
+        const { data } = await http.get("/expense-reviewers/users", { params: { requesterUserId } });
+        return data;
+    },
+    async replaceExpenseReviewers(maLoaiChiPhi, userIds, requesterUserId) {
+        const { data } = await http.put(`/expense-reviewers/${maLoaiChiPhi}`, {
+            userIds,
+            requesterUserId,
+        });
         return data;
     },
     async listPendingLenhChi(userId, params = {}) {

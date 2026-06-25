@@ -46,9 +46,15 @@ export default function Login() {
 
             const access = userId
                 ? await getRoleByUserId(userId)
-                : { role: "NhanVien", permissions: [] };
+                : { role: "NhanVien", permissions: [], expenseReviewerCodes: [] };
 
-            login({ token, user, role: access.role, permissions: access.permissions }, remember);
+            login({
+                token,
+                user,
+                role: access.role,
+                permissions: access.permissions,
+                expenseReviewerCodes: access.expenseReviewerCodes,
+            }, remember);
             attachAuthToken(token);
             window.location.replace("/dashboard");
         } catch (exception) {
