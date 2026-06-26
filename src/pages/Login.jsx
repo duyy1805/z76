@@ -18,7 +18,7 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
-import { loginERP, attachAuthToken, getRoleByUserId } from "../lib/api";
+import { loginERP, attachAuthToken, getRoleByUserId, getHoaDonRoleByUserId } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 
 export default function Login() {
@@ -44,9 +44,18 @@ export default function Login() {
             const userId = user?.id ?? user?.userId;
             if (!userId) console.warn("Không tìm thấy userId trong userInfo:", user);
 
-            const access = userId
-                ? await getRoleByUserId(userId)
-                : { role: "NhanVien", permissions: [], expenseReviewerCodes: [] };
+            const [access, invoiceAccess] = userId
+                ? await Promise.all([
+                    getRoleByUserId(userId),
+                    getHoaDonRoleByUserId(userId).catch((error) => {
+                        console.warn("KhÃ´ng láº¥y Ä‘Æ°á»£c quyá»n hÃ³a Ä‘Æ¡n:", error);
+                        return { role: "NhanVien", permissions: [], invoiceTypeCodes: [] };
+                    }),
+                ])
+                : [
+                    { role: "NhanVien", permissions: [], expenseReviewerCodes: [] },
+                    { role: "NhanVien", permissions: [], invoiceTypeCodes: [] },
+                ];
 
             login({
                 token,
@@ -54,6 +63,9 @@ export default function Login() {
                 role: access.role,
                 permissions: access.permissions,
                 expenseReviewerCodes: access.expenseReviewerCodes,
+                invoiceRole: invoiceAccess.role,
+                invoicePermissions: invoiceAccess.permissions,
+                invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
             }, remember);
             attachAuthToken(token);
             window.location.replace("/dashboard");

@@ -40,6 +40,9 @@ export function AuthProvider({ children }) {
     const [role, setRole] = useState(savedAuth?.role || "NhanVien");
     const [permissions, setPermissions] = useState(savedAuth?.permissions || []);
     const [expenseReviewerCodes, setExpenseReviewerCodes] = useState(savedAuth?.expenseReviewerCodes || []);
+    const [invoiceRole, setInvoiceRole] = useState(savedAuth?.invoiceRole || "NhanVien");
+    const [invoicePermissions, setInvoicePermissions] = useState(savedAuth?.invoicePermissions || []);
+    const [invoiceTypeCodes, setInvoiceTypeCodes] = useState(savedAuth?.invoiceTypeCodes || []);
 
     useEffect(() => {
         if (token) attachAuthToken(token);
@@ -51,6 +54,9 @@ export function AuthProvider({ children }) {
         role: nextRole,
         permissions: nextPermissions,
         expenseReviewerCodes: nextExpenseReviewerCodes,
+        invoiceRole: nextInvoiceRole,
+        invoicePermissions: nextInvoicePermissions,
+        invoiceTypeCodes: nextInvoiceTypeCodes,
     }, remember) => {
         const payload = {
             token: nextToken,
@@ -58,6 +64,9 @@ export function AuthProvider({ children }) {
             role: nextRole || "NhanVien",
             permissions: nextPermissions || [],
             expenseReviewerCodes: nextExpenseReviewerCodes || [],
+            invoiceRole: nextInvoiceRole || "NhanVien",
+            invoicePermissions: nextInvoicePermissions || [],
+            invoiceTypeCodes: nextInvoiceTypeCodes || [],
         };
 
         writeAuth(payload, remember);
@@ -66,6 +75,9 @@ export function AuthProvider({ children }) {
         setRole(payload.role);
         setPermissions(payload.permissions);
         setExpenseReviewerCodes(payload.expenseReviewerCodes);
+        setInvoiceRole(payload.invoiceRole);
+        setInvoicePermissions(payload.invoicePermissions);
+        setInvoiceTypeCodes(payload.invoiceTypeCodes);
     };
 
     const logout = () => {
@@ -75,6 +87,9 @@ export function AuthProvider({ children }) {
         setRole("NhanVien");
         setPermissions([]);
         setExpenseReviewerCodes([]);
+        setInvoiceRole("NhanVien");
+        setInvoicePermissions([]);
+        setInvoiceTypeCodes([]);
     };
 
     return (
@@ -85,6 +100,9 @@ export function AuthProvider({ children }) {
                 role,
                 permissions,
                 expenseReviewerCodes,
+                invoiceRole,
+                invoicePermissions,
+                invoiceTypeCodes,
                 login,
                 logout,
                 setRole,

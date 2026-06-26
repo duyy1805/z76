@@ -28,6 +28,7 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import { useAuth } from "../../store/useAuth";
 
 const MINI_WIDTH = 72;
@@ -50,6 +51,7 @@ export default function Shell({ children }) {
             { text: "Dashboard", shortText: "Tổng quan", icon: <DashboardIcon />, path: "/dashboard" },
             { text: "Phiếu séc VND", shortText: "VND", icon: <LibraryBooksIcon />, path: "/phieu-vnd" },
             { text: "Phiếu séc ngoại tệ", shortText: "Ngoại tệ", icon: <LibraryBooksIcon />, path: "/phieu-ngoai-te" },
+            { text: "Hóa đơn điện tử", shortText: "HĐĐT", icon: <ReceiptLongIcon />, path: "/hoa-don-dien-tu" },
         ];
         if (canSeeAdmin) {
             items.push({ text: "Danh mục quản trị", shortText: "Admin", icon: <AdminPanelSettingsIcon />, path: "/admin" });
@@ -59,6 +61,8 @@ export default function Shell({ children }) {
 
     const bottomNavValue = menuItems.some((item) => item.path === location.pathname)
         ? location.pathname
+        : location.pathname.startsWith("/hoa-don-dien-tu")
+            ? "/hoa-don-dien-tu"
         : false;
     const fullName = user?.fullName || user?.name || "Người dùng";
     const initials = fullName
@@ -107,7 +111,7 @@ export default function Shell({ children }) {
 
             <List sx={{ flex: 1, px: 1.25, py: 2 }}>
                 {menuItems.map((item) => {
-                    const selected = location.pathname === item.path;
+                    const selected = location.pathname === item.path || (item.path === "/hoa-don-dien-tu" && location.pathname.startsWith("/hoa-don-dien-tu"));
                     return (
                         <ListItem key={item.path} disablePadding>
                             <Tooltip title={drawerCollapsed ? item.text : ""} placement="right">
@@ -182,10 +186,10 @@ export default function Shell({ children }) {
                 <Toolbar sx={{ gap: 1, minWidth: 0, minHeight: "64px !important", px: { xs: 2, md: 3 } }}>
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                         <Typography noWrap sx={{ fontWeight: 800, fontSize: { xs: "1rem", sm: "1.1rem" } }}>
-                            Quản lý phiếu séc
+                            {location.pathname.startsWith("/hoa-don-dien-tu") ? "Quản lý hóa đơn điện tử" : "Quản lý phiếu séc"}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
-                            Theo dõi, phê duyệt và quản lý lệnh chi
+                            {location.pathname.startsWith("/hoa-don-dien-tu") ? "Đăng ký, phê duyệt và theo dõi hồ sơ hóa đơn" : "Theo dõi, phê duyệt và quản lý lệnh chi"}
                         </Typography>
                     </Box>
 
@@ -295,7 +299,8 @@ export default function Shell({ children }) {
                     maxWidth: "100%",
                     p: { xs: 1.25, sm: 2, md: 2.5 },
                     pb: { xs: 10, md: 3 },
-                    overflow: { xs: "visible", md: "hidden" },
+                    overflowX: "hidden",
+                    overflowY: { xs: "visible", md: "auto" },
                     boxSizing: "border-box",
                     transition: (currentTheme) => currentTheme.transitions.create("width"),
                 }}

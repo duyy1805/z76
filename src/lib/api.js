@@ -3,12 +3,18 @@ import axios from "axios";
 
 
 const BASE = import.meta.env.VITE_API_BASE || "https://nodeapi.z76.vn/sosec";
+const HD_BASE = import.meta.env.VITE_HD_API_BASE || BASE.replace(/\/sosec\/?$/, "/hoadondientu");
 const LOGIN_URL = import.meta.env.VITE_LOGIN_URL || "https://apipccc.z76.vn/auth/loginERP";
 const API_KEY = import.meta.env.VITE_API_KEY;
 console.log("API_BASE:", BASE);
+console.log("HD_API_BASE:", HD_BASE);
 const http = axios.create({
     baseURL: BASE,
     timeout: 10000,
+});
+const httpHd = axios.create({
+    baseURL: HD_BASE,
+    timeout: 15000,
 });
 
 // Tạo instance RIÊNG cho auth để tránh bị ảnh hưởng bởi interceptor/transform của http
@@ -35,6 +41,15 @@ export async function getRoleByUserId(userId) {
         role: data?.role || "NhanVien",
         permissions: Array.isArray(data?.permissions) ? data.permissions : [],
         expenseReviewerCodes: Array.isArray(data?.expenseReviewerCodes) ? data.expenseReviewerCodes : [],
+    };
+}
+
+export async function getHoaDonRoleByUserId(userId) {
+    const { data } = await httpHd.get(`/role/${userId}`);
+    return {
+        role: data?.role || "NhanVien",
+        permissions: Array.isArray(data?.permissions) ? data.permissions : [],
+        invoiceTypeCodes: Array.isArray(data?.invoiceTypeCodes) ? data.invoiceTypeCodes : [],
     };
 }
 
@@ -235,9 +250,102 @@ export const api = {
     },
 };
 
+function cleanParams(params = {}) {
+    return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+}
+
+export const hoaDonApi = {
+    async lookup() {
+        const { data } = await httpHd.get("/lookup");
+        return data;
+    },
+    async listHoaDon(params = {}) {
+        const q = new URLSearchParams(cleanParams(params)).toString();
+        const { data } = await httpHd.get(`/hoa-don${q ? `?${q}` : ""}`);
+        return data;
+    },
+    async getHoaDon(id, params = {}) {
+        const q = new URLSearchParams(cleanParams(params)).toString();
+        const { data } = await httpHd.get(`/hoa-don/${id}${q ? `?${q}` : ""}`);
+        return data;
+    },
+    async createHoaDon(payload) {
+        const { data } = await httpHd.post("/hoa-don", payload);
+        return data;
+    },
+    async updateHoaDon(id, payload) {
+        const { data } = await httpHd.put(`/hoa-don/${id}`, payload);
+        return data;
+    },
+    async deleteHoaDon(id, user) {
+        const { data } = await httpHd.delete(`/hoa-don/${id}`, {
+            data: { requesterUserId: user?.id },
+        });
+        return data;
+    },
+    async submitHoaDon(id, user) {
+        const { data } = await httpHd.post(`/hoa-don/${id}/submit`, {
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+        });
+        return data;
+    },
+    async approveHoaDon(id, { hanhDong = "Duyet", user, ghiChu = null, tenNguoiThucHien = null }) {
+        const { data } = await httpHd.post(`/hoa-don/${id}/approve`, {
+            hanhDong,
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+            tenNguoiThucHien: tenNguoiThucHien || user?.fullName || user?.name || user?.username,
+            ghiChu,
+        });
+        return data;
+    },
+    async listNguoiMua(params = {}) {
+        const q = new URLSearchParams(cleanParams(params)).toString();
+        const { data } = await httpHd.get(`/nguoi-mua${q ? `?${q}` : ""}`);
+        return data;
+    },
+    async getNguoiMua(id) {
+        const { data } = await httpHd.get(`/nguoi-mua/${id}`);
+        return data;
+    },
+    async createNguoiMua(payload) {
+        const { data } = await httpHd.post("/nguoi-mua", payload);
+        return data;
+    },
+    async updateNguoiMua(id, payload) {
+        const { data } = await httpHd.put(`/nguoi-mua/${id}`, payload);
+        return data;
+    },
+    async createNguoiMuaDiaChi(nguoiMuaId, payload) {
+        const { data } = await httpHd.post(`/nguoi-mua/${nguoiMuaId}/dia-chi`, payload);
+        return data;
+    },
+    async createNguoiMuaLienHe(nguoiMuaId, payload) {
+        const { data } = await httpHd.post(`/nguoi-mua/${nguoiMuaId}/lien-he`, payload);
+        return data;
+    },
+    async createNguoiMuaNganHang(nguoiMuaId, payload) {
+        const { data } = await httpHd.post(`/nguoi-mua/${nguoiMuaId}/ngan-hang`, payload);
+        return data;
+    },
+    async createDotXuatFile(payload) {
+        const { data } = await httpHd.post("/dot-xuat-file", payload);
+        return data;
+    },
+    getDotXuatFileExcelUrl(dotXuatFileId, user) {
+        const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
+        return `${httpHd.defaults.baseURL}/dot-xuat-file/${dotXuatFileId}/export.xlsx${q ? `?${q}` : ""}`;
+    },
+};
+
 // Nếu muốn tự động gắn token vào http:
 export function attachAuthToken(token) {
     http.interceptors.request.use((config) => {
+        if (token) config.headers.Authorization = `Bearer ${token}`;
+        return config;
+    });
+    httpHd.interceptors.request.use((config) => {
         if (token) config.headers.Authorization = `Bearer ${token}`;
         return config;
     });

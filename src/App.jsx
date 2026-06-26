@@ -4,6 +4,9 @@ import Shell from "./components/Layout/Shell";
 import Dashboard from "./pages/Dashboard";
 import PhieuSec from "./pages/PhieuSec";
 import AdminSuppliers from "./pages/AdminSuppliers";
+import HoaDonListPage from "./pages/HoaDonListPage";
+import HoaDonFormPage from "./pages/HoaDonFormPage";
+import HoaDonDetailPage from "./pages/HoaDonDetailPage";
 
 import Login from "./pages/Login";
 
@@ -33,6 +36,10 @@ export default function App() {
         <Route path="/dashboard-ngoai-te" element={<Navigate to="/dashboard?loaiSec=NgoaiTe" replace />} />
         <Route path="/phieu-vnd" element={<PhieuSec mode="VND" />} />
         <Route path="/phieu-ngoai-te" element={<PhieuSec mode="NgoaiTe" />} />
+        <Route path="/hoa-don-dien-tu" element={<HoaDonListPage />} />
+        <Route path="/hoa-don-dien-tu/new" element={<HoaDonFormPage />} />
+        <Route path="/hoa-don-dien-tu/:id" element={<HoaDonDetailPage />} />
+        <Route path="/hoa-don-dien-tu/:id/edit" element={<HoaDonFormPage />} />
         <Route path="/admin" element={<AdminSuppliers />} />
       </Route>
 
