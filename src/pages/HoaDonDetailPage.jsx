@@ -9,6 +9,7 @@ import {
     DialogContent,
     DialogTitle,
     Divider,
+    MenuItem,
     Paper,
     Snackbar,
     Stack,
@@ -22,12 +23,21 @@ import {
     Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import SaveIcon from "@mui/icons-material/Save";
+import { NumericFormat } from "react-number-format";
 import StatusChip from "../components/StatusChip";
 import HoaDonWorkflowActions from "../components/hoa-don/HoaDonWorkflowActions";
 import SectionCard from "../components/hoa-don/SectionCard";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { fmtMoney, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
+import {
+    canApproveInvoice,
+    canProcessInvoiceExportInfo,
+    fmtMoney,
+    INVOICE_TYPE_LABELS,
+    isInvoiceExportInfoComplete,
+    TAX_MODE_LABELS,
+} from "../utils/hoa-don";
 
 const DetailField = ({ label, value }) => (
     <Box sx={{ minWidth: 0 }}>
@@ -36,13 +46,46 @@ const DetailField = ({ label, value }) => (
     </Box>
 );
 
+function NumericTextField({ value, onChange, inputProps, ...props }) {
+    return (
+        <NumericFormat
+            {...props}
+            customInput={TextField}
+            thousandSeparator=","
+            decimalSeparator="."
+            allowNegative={false}
+            value={value ?? ""}
+            onValueChange={(values) => onChange(values.value)}
+            inputProps={{ ...inputProps, inputMode: "decimal" }}
+        />
+    );
+}
+
+function initExportInfo(detail) {
+    const lines = detail?.chiTiet || [];
+    const hasExportInfo = Boolean(detail?.hinhThucThanhToan);
+    return {
+        hinhThucThanhToan: detail?.hinhThucThanhToan || "Chuyển khoản",
+        cheDoThue: detail?.cheDoThue || "MotThueSuat",
+        maLoaiTien: detail?.maLoaiTien || "VND",
+        tyGia: detail?.tyGia || 1,
+        thueSuatChung: hasExportInfo ? lines[0]?.ThueSuatGTGT ?? "" : "",
+        chiTiet: lines.map((line) => ({
+            soDong: line.SoDong,
+            thueSuatGTGT: hasExportInfo ? line.ThueSuatGTGT ?? "" : "",
+        })),
+    };
+}
+
 export default function HoaDonDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const auth = useAuth();
     const { user } = auth;
     const [detail, setDetail] = useState(null);
+    const [exportInfo, setExportInfo] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [savingExportInfo, setSavingExportInfo] = useState(false);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     const [reasonDialog, setReasonDialog] = useState({ open: false, type: "", title: "", label: "", reason: "" });
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -51,7 +94,9 @@ export default function HoaDonDetailPage() {
         if (!id || !user?.id || !user?.idDonVi) return;
         setLoading(true);
         try {
-            setDetail(await hoaDonApi.getHoaDon(id, { userId: user.id, idDonVi: user.idDonVi }));
+            const data = await hoaDonApi.getHoaDon(id, { userId: user.id, idDonVi: user.idDonVi });
+            setDetail(data);
+            setExportInfo(initExportInfo(data));
         } catch (error) {
             setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không lấy được chi tiết hóa đơn." });
         } finally {
@@ -111,6 +156,55 @@ export default function HoaDonDetailPage() {
         navigate("/hoa-don-dien-tu");
     };
 
+    const canEditExportInfo = canProcessInvoiceExportInfo(detail, auth);
+    const exportInfoComplete = isInvoiceExportInfoComplete(detail);
+    const approveDisabledReason = detail?.maTrangThai === "ChoXuLy_HoaDon" && canApproveInvoice(detail, auth) && !exportInfoComplete
+        ? "Cần lưu đủ hình thức thanh toán, chế độ thuế, thuế suất, loại tiền và tỷ giá trước khi duyệt."
+        : "";
+    const showTaxPerLine = exportInfo?.cheDoThue === "NhieuThueSuat";
+
+    const setExportField = (patch) => setExportInfo((current) => ({ ...current, ...patch }));
+    const setExportLineTax = (soDong, value) => {
+        setExportInfo((current) => ({
+            ...current,
+            chiTiet: (current?.chiTiet || []).map((line) => Number(line.soDong) === Number(soDong) ? { ...line, thueSuatGTGT: value } : line),
+        }));
+    };
+
+    const saveExportInfo = async () => {
+        if (!exportInfo?.hinhThucThanhToan) {
+            setToast({ open: true, type: "warning", msg: "Chọn hình thức thanh toán." });
+            return;
+        }
+        if (!exportInfo?.maLoaiTien || Number(exportInfo?.tyGia || 0) <= 0) {
+            setToast({ open: true, type: "warning", msg: "Nhập loại tiền và tỷ giá hợp lệ." });
+            return;
+        }
+        const chiTiet = (detail.chiTiet || []).map((line) => ({
+            soDong: line.SoDong,
+            thueSuatGTGT: showTaxPerLine
+                ? Number((exportInfo.chiTiet || []).find((item) => Number(item.soDong) === Number(line.SoDong))?.thueSuatGTGT ?? 0)
+                : Number(exportInfo.thueSuatChung ?? 0),
+        }));
+
+        setSavingExportInfo(true);
+        try {
+            await hoaDonApi.updateThongTinXuatHoaDon(detail.id, {
+                ...exportInfo,
+                tyGia: exportInfo.maLoaiTien === "VND" ? 1 : Number(exportInfo.tyGia || 1),
+                chiTiet,
+                requesterUserId: user?.id,
+                requesterIdDonVi: user?.idDonVi,
+            });
+            setToast({ open: true, type: "success", msg: "Đã lưu thông tin xuất hóa đơn." });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Lưu thông tin xuất hóa đơn thất bại." });
+        } finally {
+            setSavingExportInfo(false);
+        }
+    };
+
     if (loading) return <Typography sx={{ p: 3 }}>Đang tải chi tiết...</Typography>;
     if (!detail) return <Alert severity="warning">Không tìm thấy hóa đơn.</Alert>;
 
@@ -137,6 +231,7 @@ export default function HoaDonDetailPage() {
                         onReturn={() => openReasonDialog("return")}
                         onReject={() => openReasonDialog("reject")}
                         onDelete={() => setConfirmDeleteOpen(true)}
+                        approveDisabledReason={approveDisabledReason}
                     />
                 </Stack>
 
@@ -155,13 +250,88 @@ export default function HoaDonDetailPage() {
                     <SectionCard title="Thông tin hóa đơn">
                         <Stack spacing={1.5}>
                             <DetailField label="Ngày hóa đơn" value={detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : ""} />
-                            <DetailField label="Hình thức thanh toán" value={detail.hinhThucThanhToan} />
-                            <DetailField label="Loại tiền / Tỷ giá" value={`${detail.maLoaiTien || "VND"} / ${detail.tyGia || 1}`} />
                             <DetailField label="Ký hiệu dự kiến" value={detail.kyHieuDuKien} />
                             {detail.soHoaDon && <DetailField label="Số hóa đơn đã phát hành" value={`${detail.kyHieuHoaDon} - ${detail.soHoaDon}`} />}
                         </Stack>
                     </SectionCard>
                 </Box>
+
+                <SectionCard
+                    title="Thông tin xuất hóa đơn"
+                    subtitle={exportInfoComplete ? "Thông tin thuế, thanh toán và quy đổi đã được lưu để xuất file import." : "Người phụ trách hóa đơn cần chốt thông tin này trước khi duyệt sẵn sàng xuất."}
+                    action={canEditExportInfo && (
+                        <Button startIcon={<SaveIcon />} variant="contained" onClick={saveExportInfo} disabled={savingExportInfo}>
+                            Lưu thông tin xuất
+                        </Button>
+                    )}
+                >
+                    {canEditExportInfo ? (
+                        <Stack spacing={2}>
+                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(5, 1fr)" }, gap: 1.5 }}>
+                                <TextField select label="Hình thức thanh toán" value={exportInfo?.hinhThucThanhToan || ""} onChange={(event) => setExportField({ hinhThucThanhToan: event.target.value })}>
+                                    <MenuItem value="Chuyển khoản">Chuyển khoản</MenuItem>
+                                    <MenuItem value="Tiền mặt">Tiền mặt</MenuItem>
+                                </TextField>
+                                <TextField select label="Chế độ thuế" value={exportInfo?.cheDoThue || "MotThueSuat"} onChange={(event) => setExportField({ cheDoThue: event.target.value })}>
+                                    {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                                </TextField>
+                                {!showTaxPerLine && (
+                                    <NumericTextField label="Thuế GTGT (%)" value={exportInfo?.thueSuatChung ?? ""} onChange={(value) => setExportField({ thueSuatChung: value })} />
+                                )}
+                                <TextField select label="Loại tiền" value={exportInfo?.maLoaiTien || "VND"} onChange={(event) => {
+                                    const maLoaiTien = event.target.value;
+                                    setExportField({ maLoaiTien, tyGia: maLoaiTien === "VND" ? 1 : exportInfo?.tyGia || 1 });
+                                }}>
+                                    <MenuItem value="VND">VND</MenuItem>
+                                    <MenuItem value="USD">USD</MenuItem>
+                                    <MenuItem value="EUR">EUR</MenuItem>
+                                </TextField>
+                                <NumericTextField label="Tỷ giá" value={exportInfo?.tyGia || ""} disabled={exportInfo?.maLoaiTien === "VND"} onChange={(value) => setExportField({ tyGia: value })} />
+                            </Box>
+
+                            {showTaxPerLine && (
+                                <TableContainer component={Paper} elevation={0} sx={{ border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 2 }}>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>STT</TableCell>
+                                                <TableCell>Tên hàng hóa/Dịch vụ</TableCell>
+                                                <TableCell align="right">Thuế GTGT (%)</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {(detail.chiTiet || []).map((line) => {
+                                                const taxLine = (exportInfo?.chiTiet || []).find((item) => Number(item.soDong) === Number(line.SoDong));
+                                                return (
+                                                    <TableRow key={line.ChiTietId}>
+                                                        <TableCell>{line.SoDong}</TableCell>
+                                                        <TableCell>{line.TenHangHoaDichVu}</TableCell>
+                                                        <TableCell align="right">
+                                                            <NumericTextField
+                                                                size="small"
+                                                                value={taxLine?.thueSuatGTGT ?? ""}
+                                                                onChange={(value) => setExportLineTax(line.SoDong, value)}
+                                                                inputProps={{ style: { textAlign: "right" } }}
+                                                                sx={{ width: 140 }}
+                                                            />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            )}
+                        </Stack>
+                    ) : (
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4, 1fr)" }, gap: 1.5 }}>
+                            <DetailField label="Hình thức thanh toán" value={detail.hinhThucThanhToan} />
+                            <DetailField label="Chế độ thuế" value={TAX_MODE_LABELS[detail.cheDoThue] || detail.cheDoThue} />
+                            <DetailField label="Loại tiền / Tỷ giá" value={detail.maLoaiTien ? `${detail.maLoaiTien} / ${detail.tyGia || 1}` : ""} />
+                            <DetailField label="Trạng thái thông tin xuất" value={exportInfoComplete ? "Đã chốt" : "Chưa chốt"} />
+                        </Box>
+                    )}
+                </SectionCard>
 
                 {detail.quocPhong && (
                     <SectionCard title="Thông tin quốc phòng">

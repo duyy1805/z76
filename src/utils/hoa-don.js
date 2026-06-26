@@ -27,7 +27,7 @@ export const DEFAULT_INVOICE_FORM = {
     diaChiId: null,
     lienHeId: null,
     ngayHoaDon: new Date().toISOString().slice(0, 10),
-    hinhThucThanhToan: "Chuyển khoản",
+    hinhThucThanhToan: "",
     maLoaiTien: "VND",
     tyGia: 1,
     mauHoaDonDuKien: "",
@@ -41,7 +41,7 @@ export const DEFAULT_INVOICE_FORM = {
     nguoiLienHeSnapshot: "",
     emailSnapshot: "",
     dienThoaiSnapshot: "",
-    thueSuatChung: 8,
+    thueSuatChung: 0,
     ghiChu: "",
     chiTiet: [emptyInvoiceLine(1)],
     quocPhong: {
@@ -62,10 +62,10 @@ export function emptyInvoiceLine(soDong = 1) {
         maHang: "",
         tenHangHoaDichVu: "",
         donViTinh: "",
-        soLuong: 1,
-        donGia: 0,
+        soLuong: "",
+        donGia: "",
         tyLeChietKhau: 0,
-        thueSuatGTGT: 8,
+        thueSuatGTGT: "",
         tinhChatHHDV: "",
         ghiChu: "",
         soLuongHopDong: "",
@@ -92,7 +92,7 @@ export function toNumber(value, fallback = 0) {
 }
 
 export function calculateLine(line, tyGia = 1) {
-    const soLuong = toNumber(line.soLuong, 1);
+    const soLuong = toNumber(line.soLuong, 0);
     const donGia = toNumber(line.donGia, 0);
     const tyLeChietKhau = toNumber(line.tyLeChietKhau, 0);
     const thueSuatGTGT = toNumber(line.thueSuatGTGT, 0);
@@ -129,7 +129,7 @@ export function normalizeInvoicePayload(form, user) {
         maHang: line.maHang || "",
         tenHangHoaDichVu: line.tenHangHoaDichVu || "",
         donViTinh: line.donViTinh || "",
-        soLuong: toNumber(line.soLuong, 1),
+        soLuong: toNumber(line.soLuong, 0),
         donGia: toNumber(line.donGia, 0),
         tyLeChietKhau: toNumber(line.tyLeChietKhau, 0),
         thueSuatGTGT: isOneTax ? tax : toNumber(line.thueSuatGTGT, 0),
@@ -139,7 +139,7 @@ export function normalizeInvoicePayload(form, user) {
 
     return {
         ...form,
-        hinhThucThanhToan: form.hinhThucThanhToan || "Chuyển khoản",
+        hinhThucThanhToan: form.hinhThucThanhToan || "",
         requesterUserId: user?.id,
         requesterIdDonVi: user?.idDonVi,
         tyGia: form.maLoaiTien === "VND" ? 1 : toNumber(form.tyGia, 1),
@@ -166,6 +166,10 @@ function valueOrNull(value) {
     return value === "" || value === null || value === undefined ? null : Number(value);
 }
 
+function zeroToBlank(value) {
+    return value === null || value === undefined || Number(value) === 0 ? "" : value;
+}
+
 export function invoiceToForm(detail) {
     if (!detail) return { ...DEFAULT_INVOICE_FORM, chiTiet: [emptyInvoiceLine(1)] };
     const chiTiet = (detail.chiTiet || []).map((line, index) => {
@@ -175,10 +179,10 @@ export function invoiceToForm(detail) {
             maHang: line.MaHang || "",
             tenHangHoaDichVu: line.TenHangHoaDichVu || "",
             donViTinh: line.DonViTinh || "",
-            soLuong: line.SoLuong ?? 1,
-            donGia: line.DonGia ?? 0,
+            soLuong: zeroToBlank(line.SoLuong),
+            donGia: zeroToBlank(line.DonGia),
             tyLeChietKhau: line.TyLeChietKhau ?? 0,
-            thueSuatGTGT: line.ThueSuatGTGT ?? 0,
+            thueSuatGTGT: line.ThueSuatGTGT ?? "",
             tinhChatHHDV: line.TinhChatHHDV || "",
             ghiChu: line.GhiChu || "",
             soLuongHopDong: qp.SoLuongHopDong ?? "",
@@ -196,7 +200,7 @@ export function invoiceToForm(detail) {
         cheDoThue: detail.cheDoThue || "MotThueSuat",
         nguoiMuaId: detail.nguoiMuaId || null,
         ngayHoaDon: detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : "",
-        hinhThucThanhToan: detail.hinhThucThanhToan || "Chuyển khoản",
+        hinhThucThanhToan: detail.hinhThucThanhToan || "",
         maLoaiTien: detail.maLoaiTien || "VND",
         tyGia: detail.tyGia || 1,
         mauHoaDonDuKien: detail.mauHoaDonDuKien || "",
@@ -208,7 +212,7 @@ export function invoiceToForm(detail) {
         emailSnapshot: detail.email || "",
         dienThoaiSnapshot: detail.dienThoai || "",
         ghiChu: detail.ghiChu || "",
-        thueSuatChung: chiTiet[0]?.thueSuatGTGT ?? 8,
+        thueSuatChung: chiTiet[0]?.thueSuatGTGT ?? 0,
         chiTiet: chiTiet.length ? chiTiet : [emptyInvoiceLine(1)],
         quocPhong: {
             ...DEFAULT_INVOICE_FORM.quocPhong,
@@ -246,6 +250,21 @@ export function canApproveInvoice(invoice, auth) {
         return hasInvoicePermission(auth, "HD_XuatHoaDon") || (auth.invoiceTypeCodes || []).includes(invoice.maLoaiHoaDon);
     }
     return false;
+}
+
+export function canProcessInvoiceExportInfo(invoice, auth) {
+    return invoice?.maTrangThai === "ChoXuLy_HoaDon" && canApproveInvoice(invoice, auth);
+}
+
+export function isInvoiceExportInfoComplete(invoice) {
+    if (!invoice) return false;
+    if (!invoice.hinhThucThanhToan) return false;
+    if (!invoice.cheDoThue) return false;
+    if (!invoice.maLoaiTien) return false;
+    if (toNumber(invoice.tyGia, 0) <= 0) return false;
+    const lines = invoice.chiTiet || [];
+    if (!lines.length) return false;
+    return lines.every((line) => line.ThueSuatGTGT !== null && line.ThueSuatGTGT !== undefined && Number(line.ThueSuatGTGT) >= 0);
 }
 
 export function hasInvoicePermission(auth, code) {

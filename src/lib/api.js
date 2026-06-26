@@ -300,6 +300,10 @@ export const hoaDonApi = {
         });
         return data;
     },
+    async updateThongTinXuatHoaDon(id, payload) {
+        const { data } = await httpHd.put(`/hoa-don/${id}/thong-tin-xuat`, payload);
+        return data;
+    },
     async listNguoiMua(params = {}) {
         const q = new URLSearchParams(cleanParams(params)).toString();
         const { data } = await httpHd.get(`/nguoi-mua${q ? `?${q}` : ""}`);

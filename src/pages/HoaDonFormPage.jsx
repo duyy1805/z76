@@ -4,8 +4,6 @@ import {
     Alert,
     Box,
     Button,
-    Checkbox,
-    FormControlLabel,
     MenuItem,
     Snackbar,
     Stack,
@@ -24,7 +22,6 @@ import { useAuth } from "../store/useAuth";
 import {
     DEFAULT_INVOICE_FORM,
     INVOICE_TYPE_LABELS,
-    TAX_MODE_LABELS,
     invoiceToForm,
     normalizeInvoicePayload,
 } from "../utils/hoa-don";
@@ -126,24 +123,14 @@ export default function HoaDonFormPage() {
                     </Stack>
                 </Stack>
 
-                <SectionCard title="Thông tin hóa đơn" subtitle="Chọn loại nghiệp vụ, chế độ thuế và thông tin hiển thị trên phần mềm xuất hóa đơn.">
+                <SectionCard title="Thông tin hóa đơn" subtitle="Nhân viên đăng ký loại nghiệp vụ, ngày hóa đơn dự kiến và thông tin nhận diện hồ sơ. Thuế, thanh toán và tỷ giá do phụ trách hóa đơn chốt ở bước xử lý.">
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr 1fr" }, gap: 1.5 }}>
-                        <TextField select label="Loại hóa đơn" value={form.maLoaiHoaDon} onChange={(e) => setField({ maLoaiHoaDon: e.target.value, cheDoThue: e.target.value === "TrongNuoc" ? form.cheDoThue : "MotThueSuat" })}>
+                        <TextField select label="Loại hóa đơn" value={form.maLoaiHoaDon} onChange={(e) => setField({ maLoaiHoaDon: e.target.value })}>
                             {Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
-                        <TextField select label="Chế độ thuế" value={form.cheDoThue} onChange={(e) => setField({ cheDoThue: e.target.value })} disabled={form.maLoaiHoaDon !== "TrongNuoc"}>
-                            {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
-                        </TextField>
                         <TextField type="date" label="Ngày hóa đơn" value={form.ngayHoaDon || ""} onChange={(e) => setField({ ngayHoaDon: e.target.value })} InputLabelProps={{ shrink: true }} />
-                        <TextField select label="Hình thức thanh toán" value={form.hinhThucThanhToan || "Chuyển khoản"} onChange={(e) => setField({ hinhThucThanhToan: e.target.value })}>
-                            <MenuItem value="Chuyển khoản">Chuyển khoản</MenuItem>
-                            <MenuItem value="Tiền mặt">Tiền mặt</MenuItem>
-                        </TextField>
                         <TextField label="Ký hiệu dự kiến" value={form.kyHieuDuKien || ""} onChange={(e) => setField({ kyHieuDuKien: e.target.value })} placeholder={kyHieuSuggestion} />
                         <TextField label="Mẫu hóa đơn dự kiến" value={form.mauHoaDonDuKien || ""} onChange={(e) => setField({ mauHoaDonDuKien: e.target.value })} />
-                        <TextField label="Loại tiền" value={form.maLoaiTien || "VND"} onChange={(e) => setField({ maLoaiTien: e.target.value.toUpperCase(), tyGia: e.target.value.toUpperCase() === "VND" ? 1 : form.tyGia })} />
-                        <TextField type="number" label="Tỷ giá" value={form.tyGia || 1} onChange={(e) => setField({ tyGia: e.target.value })} disabled={form.maLoaiTien === "VND"} inputProps={{ min: 0, step: "0.000001" }} />
-                        <FormControlLabel control={<Checkbox checked={!!form.coBangKe} onChange={(e) => setField({ coBangKe: e.target.checked })} />} label="Lập kèm bảng kê" />
                     </Box>
                 </SectionCard>
 
@@ -167,9 +154,6 @@ export default function HoaDonFormPage() {
                 <SectionCard
                     title="Hàng hóa / Dịch vụ"
                     subtitle="Tên hàng nhập trực tiếp theo từng hóa đơn, không chuẩn hóa theo danh mục."
-                    action={form.cheDoThue === "MotThueSuat" && (
-                        <TextField size="small" type="number" label="Thuế GTGT (%)" value={form.thueSuatChung} onChange={(e) => setField({ thueSuatChung: e.target.value })} sx={{ width: 150 }} />
-                    )}
                 >
                     <Stack spacing={2}>
                         <HoaDonItemGrid

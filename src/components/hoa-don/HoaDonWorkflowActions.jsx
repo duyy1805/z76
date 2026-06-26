@@ -24,10 +24,12 @@ export default function HoaDonWorkflowActions({
     onReturn,
     onReject,
     onDelete,
+    approveDisabledReason = "",
 }) {
     const canEdit = canEditInvoice(invoice, auth);
     const canSubmit = canSubmitInvoice(invoice, auth);
     const canApprove = canApproveInvoice(invoice, auth);
+    const approveDisabled = !canApprove || Boolean(approveDisabledReason);
     const canDelete = canDeleteInvoice(invoice, auth);
     const isDraft = invoice?.maTrangThai === "KhoiTao";
     const isApprovalState = ["ChoDuyet_TBP", "ChoXuLy_HoaDon"].includes(invoice?.maTrangThai);
@@ -51,8 +53,8 @@ export default function HoaDonWorkflowActions({
             )}
             {isApprovalState && (
                 <>
-                    <ButtonWithReason disabled={!canApprove} reason="Bạn không có quyền duyệt bước hiện tại của hóa đơn này.">
-                        <Button startIcon={<CheckCircleIcon />} color="success" variant="contained" disabled={!canApprove} onClick={onApprove}>
+                    <ButtonWithReason disabled={approveDisabled} reason={approveDisabledReason || "Bạn không có quyền duyệt bước hiện tại của hóa đơn này."}>
+                        <Button startIcon={<CheckCircleIcon />} color="success" variant="contained" disabled={approveDisabled} onClick={onApprove}>
                             Duyệt
                         </Button>
                     </ButtonWithReason>

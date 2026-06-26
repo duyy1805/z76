@@ -8,6 +8,7 @@ import {
     IconButton,
     MenuItem,
     Paper,
+    Popover,
     Snackbar,
     Stack,
     Table,
@@ -20,7 +21,9 @@ import {
     Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import ClearIcon from "@mui/icons-material/Clear";
 import DownloadIcon from "@mui/icons-material/Download";
+import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
@@ -28,6 +31,58 @@ import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import { canEditInvoice, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
+
+function normalizeSearch(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .toLowerCase()
+        .trim();
+}
+
+function HeaderFilter({ label, active, width = 280, children, onClear }) {
+    const [anchorEl, setAnchorEl] = useState(null);
+
+    return (
+        <>
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ whiteSpace: "nowrap" }}>
+                <span>{label}</span>
+                <IconButton
+                    size="small"
+                    color={active ? "primary" : "default"}
+                    onClick={(event) => setAnchorEl(event.currentTarget)}
+                    aria-label={`Lọc ${label}`}
+                >
+                    <FilterListRoundedIcon fontSize="inherit" />
+                </IconButton>
+            </Stack>
+            <Popover
+                open={Boolean(anchorEl)}
+                anchorEl={anchorEl}
+                onClose={() => setAnchorEl(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                PaperProps={{ sx: { p: 1.5, width } }}
+            >
+                <Stack spacing={1.25}>
+                    {children}
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        {active && (
+                            <Button startIcon={<ClearIcon />} size="small" onClick={onClear}>
+                                Xóa
+                            </Button>
+                        )}
+                        <Button variant="contained" size="small" onClick={() => setAnchorEl(null)}>
+                            OK
+                        </Button>
+                    </Stack>
+                </Stack>
+            </Popover>
+        </>
+    );
+}
 
 export default function HoaDonListPage() {
     const navigate = useNavigate();
@@ -38,6 +93,7 @@ export default function HoaDonListPage() {
     const [exporting, setExporting] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
     const [filters, setFilters] = useState({ tukhoa: "", maTrangThai: "", maLoaiHoaDon: "", dateFrom: "", dateTo: "" });
+    const [tableFilters, setTableFilters] = useState({ maDangKy: "", nguoiMua: "", nguoiTao: "", amountFrom: "", amountTo: "" });
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
 
     const params = useMemo(() => ({
@@ -63,8 +119,29 @@ export default function HoaDonListPage() {
     }, [load]);
 
     const setFilter = (patch) => setFilters((current) => ({ ...current, ...patch }));
+    const setTableFilter = (patch) => setTableFilters((current) => ({ ...current, ...patch }));
 
-    const exportableRows = rows.filter((row) => row.maTrangThai === "SanSangXuat");
+    const filteredRows = useMemo(() => {
+        const qMa = normalizeSearch(tableFilters.maDangKy);
+        const qNguoiMua = normalizeSearch(tableFilters.nguoiMua);
+        const qNguoiTao = normalizeSearch(tableFilters.nguoiTao);
+        const amountFrom = Number(tableFilters.amountFrom);
+        const amountTo = Number(tableFilters.amountTo);
+        const hasAmountFrom = tableFilters.amountFrom !== "" && Number.isFinite(amountFrom);
+        const hasAmountTo = tableFilters.amountTo !== "" && Number.isFinite(amountTo);
+
+        return rows.filter((row) => {
+            const okMa = !qMa || normalizeSearch(row.maDangKy).includes(qMa);
+            const okNguoiMua = !qNguoiMua || normalizeSearch([row.tenNguoiMua, row.maSoThue].filter(Boolean).join(" ")).includes(qNguoiMua);
+            const okNguoiTao = !qNguoiTao || normalizeSearch([row.tenNguoiDangKy, row.nguoiDangKyId].filter(Boolean).join(" ")).includes(qNguoiTao);
+            const amount = Number(row.tongTienThanhToan || 0);
+            const okAmountFrom = !hasAmountFrom || amount >= amountFrom;
+            const okAmountTo = !hasAmountTo || amount <= amountTo;
+            return okMa && okNguoiMua && okNguoiTao && okAmountFrom && okAmountTo;
+        });
+    }, [rows, tableFilters]);
+
+    const exportableRows = filteredRows.filter((row) => row.maTrangThai === "SanSangXuat");
     const exportableIds = exportableRows.map((row) => row.id);
     const selectedExportableIds = selectedIds.filter((id) => exportableIds.includes(id));
     const allExportableSelected = exportableIds.length > 0 && selectedExportableIds.length === exportableIds.length;
@@ -183,18 +260,89 @@ export default function HoaDonListPage() {
                                     onChange={toggleAllExportable}
                                 />
                             </TableCell>
-                            <TableCell>Mã ĐK</TableCell>
+                            <TableCell sx={{ minWidth: 150 }}>
+                                <HeaderFilter
+                                    label="Mã ĐK"
+                                    active={Boolean(tableFilters.maDangKy)}
+                                    onClear={() => setTableFilter({ maDangKy: "" })}
+                                >
+                                    <TextField
+                                        autoFocus
+                                        size="small"
+                                        label="Mã đăng ký"
+                                        placeholder="VD: HD-2026..."
+                                        value={tableFilters.maDangKy}
+                                        onChange={(event) => setTableFilter({ maDangKy: event.target.value })}
+                                    />
+                                </HeaderFilter>
+                            </TableCell>
                             <TableCell>Loại</TableCell>
-                            <TableCell>Người mua</TableCell>
+                            <TableCell sx={{ minWidth: 260 }}>
+                                <HeaderFilter
+                                    label="Người mua"
+                                    active={Boolean(tableFilters.nguoiMua)}
+                                    width={320}
+                                    onClear={() => setTableFilter({ nguoiMua: "" })}
+                                >
+                                    <TextField
+                                        autoFocus
+                                        size="small"
+                                        label="Tên người mua / MST"
+                                        placeholder="Nhập tên, mã số thuế..."
+                                        value={tableFilters.nguoiMua}
+                                        onChange={(event) => setTableFilter({ nguoiMua: event.target.value })}
+                                    />
+                                    <Typography variant="caption" color="text.secondary">
+                                        Tìm không dấu, theo tên người mua hoặc mã số thuế.
+                                    </Typography>
+                                </HeaderFilter>
+                            </TableCell>
                             <TableCell>Ngày HĐ</TableCell>
-                            <TableCell align="right">Thanh toán</TableCell>
+                            <TableCell align="right" sx={{ minWidth: 190 }}>
+                                <HeaderFilter
+                                    label="Thanh toán"
+                                    active={Boolean(tableFilters.amountFrom || tableFilters.amountTo)}
+                                    width={300}
+                                    onClear={() => setTableFilter({ amountFrom: "", amountTo: "" })}
+                                >
+                                    <TextField
+                                        size="small"
+                                        type="number"
+                                        label="Từ số tiền"
+                                        value={tableFilters.amountFrom}
+                                        onChange={(event) => setTableFilter({ amountFrom: event.target.value })}
+                                    />
+                                    <TextField
+                                        size="small"
+                                        type="number"
+                                        label="Đến số tiền"
+                                        value={tableFilters.amountTo}
+                                        onChange={(event) => setTableFilter({ amountTo: event.target.value })}
+                                    />
+                                </HeaderFilter>
+                            </TableCell>
                             <TableCell>Trạng thái</TableCell>
-                            <TableCell>Người tạo</TableCell>
+                            <TableCell sx={{ minWidth: 180 }}>
+                                <HeaderFilter
+                                    label="Người tạo"
+                                    active={Boolean(tableFilters.nguoiTao)}
+                                    onClear={() => setTableFilter({ nguoiTao: "" })}
+                                >
+                                    <TextField
+                                        autoFocus
+                                        size="small"
+                                        label="Người tạo"
+                                        placeholder="Tên hoặc ID người tạo..."
+                                        value={tableFilters.nguoiTao}
+                                        onChange={(event) => setTableFilter({ nguoiTao: event.target.value })}
+                                    />
+                                </HeaderFilter>
+                            </TableCell>
                             <TableCell align="right">Thao tác</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {rows.map((row) => (
+                        {filteredRows.map((row) => (
                             <TableRow key={row.id} hover>
                                 <TableCell padding="checkbox">
                                     <Checkbox
@@ -222,7 +370,7 @@ export default function HoaDonListPage() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {!rows.length && (
+                        {!filteredRows.length && (
                             <TableRow>
                                 <TableCell colSpan={9} align="center" sx={{ py: 6, color: "text.secondary" }}>
                                     {loading ? "Đang tải..." : "Chưa có hóa đơn phù hợp."}

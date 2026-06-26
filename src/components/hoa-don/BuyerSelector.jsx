@@ -132,6 +132,15 @@ export default function BuyerSelector({ form, setForm, user, disabled = false, s
         setToast?.({ open: true, type: "success", msg: "Đã tạo và chọn người mua." });
     };
 
+    const buyerOptionLabel = (option) => {
+        if (!option) return "";
+        return [
+            option.TenPhapLy,
+            option.MaSoThue ? `MST: ${option.MaSoThue}` : "",
+            option.MaNguoiMua ? `Mã KH: ${option.MaNguoiMua}` : "",
+        ].filter(Boolean).join(" • ");
+    };
+
     return (
         <Stack spacing={2}>
             <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} alignItems={{ xs: "stretch", md: "flex-start" }}>
@@ -139,19 +148,28 @@ export default function BuyerSelector({ form, setForm, user, disabled = false, s
                     sx={{ flex: 1 }}
                     disabled={disabled}
                     options={buyers}
+                    slotProps={{ paper: { sx: { minWidth: 720 } } }}
                     loading={loading}
                     value={selected}
                     onInputChange={(_, value, reason) => {
                         if (reason === "input") loadBuyers(value);
                     }}
                     onChange={(_, value) => applyBuyer(value)}
-                    getOptionLabel={(option) => option?.TenPhapLy || ""}
+                    getOptionLabel={buyerOptionLabel}
                     isOptionEqualToValue={(option, value) => Number(option?.NguoiMuaId) === Number(value?.NguoiMuaId)}
                     renderOption={(props, option) => (
-                        <Box component="li" {...props} key={option.NguoiMuaId} sx={{ display: "block !important" }}>
-                            <Typography>{option.TenPhapLy}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                MST: {option.MaSoThue || "—"} · Địa chỉ: {option.DiaChiMacDinh || "—"}
+                        <Box component="li" {...props} key={option.NguoiMuaId} sx={{ display: "block !important", py: 1.25 }}>
+                            <Typography sx={{ fontWeight: 750 }}>{option.TenPhapLy}</Typography>
+                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 0.5, mt: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">Mã KH: {option.MaNguoiMua || "—"}</Typography>
+                                <Typography variant="caption" color="text.secondary">MST/CCCD: {option.MaSoThue || option.SoGiayTo || "—"}</Typography>
+                                <Typography variant="caption" color="text.secondary">Mã đơn vị: {option.MaDonVi || "—"}</Typography>
+                                <Typography variant="caption" color="text.secondary">Liên hệ: {option.NguoiLienHeMacDinh || "—"}</Typography>
+                                <Typography variant="caption" color="text.secondary">Email: {option.EmailMacDinh || "—"}</Typography>
+                                <Typography variant="caption" color="text.secondary">Điện thoại: {option.DienThoaiMacDinh || "—"}</Typography>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                                Địa chỉ: {option.DiaChiMacDinh || "—"}
                             </Typography>
                         </Box>
                     )}
