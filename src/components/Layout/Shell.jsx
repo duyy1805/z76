@@ -51,7 +51,7 @@ export default function Shell({ children }) {
             { text: "Dashboard", shortText: "Tổng quan", icon: <DashboardIcon />, path: "/dashboard" },
             { text: "Phiếu séc VND", shortText: "VND", icon: <LibraryBooksIcon />, path: "/phieu-vnd" },
             { text: "Phiếu séc ngoại tệ", shortText: "Ngoại tệ", icon: <LibraryBooksIcon />, path: "/phieu-ngoai-te" },
-            { text: "Hóa đơn điện tử", shortText: "HĐĐT", icon: <ReceiptLongIcon />, path: "/hoa-don-dien-tu" },
+            // { text: "Hóa đơn điện tử", shortText: "HĐĐT", icon: <ReceiptLongIcon />, path: "/hoa-don-dien-tu" },
         ];
         if (canSeeAdmin) {
             items.push({ text: "Danh mục quản trị", shortText: "Admin", icon: <AdminPanelSettingsIcon />, path: "/admin" });
@@ -63,7 +63,7 @@ export default function Shell({ children }) {
         ? location.pathname
         : location.pathname.startsWith("/hoa-don-dien-tu")
             ? "/hoa-don-dien-tu"
-        : false;
+            : false;
     const fullName = user?.fullName || user?.name || "Người dùng";
     const initials = fullName
         .trim()

@@ -1,6 +1,6 @@
 export const EXPENSE_LABELS = {
     TienDien: "Tiền điện",
-    TienGiaCong: "Tiền gia công",
+    TienGiaCong: "Tiền DV SXBT",
     TienXDCB: "Tiền xây dựng cơ bản, tài sản cố định, dự án",
     Khac: "Khác",
 };

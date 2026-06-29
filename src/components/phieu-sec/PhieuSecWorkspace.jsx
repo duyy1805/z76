@@ -885,7 +885,7 @@ export default function PhieuSec({ mode = "VND" }) {
             return [
                 index + 1,
                 "116000002441",
-                Math.round(Number(row.soTien || 0)),
+                isNgoaiTe ? Number(row.soTien || 0) : Math.round(Number(row.soTien || 0)),
                 row.soTaiKhoanHuongThu || donVi?.stk || "",
                 getTenChuyenKhoan(row) || "",
                 maNganHang,
@@ -936,7 +936,7 @@ export default function PhieuSec({ mode = "VND" }) {
         });
         rows.forEach((_, rowIndex) => {
             const amountCell = sheet[XLSX.utils.encode_cell({ r: rowIndex + emptyRows.length + 1, c: 2 })];
-            if (amountCell) amountCell.z = "#,##0";
+            if (amountCell) amountCell.z = isNgoaiTe ? "#,##0.00" : "#,##0";
         });
 
         const workbook = XLSX.utils.book_new();
