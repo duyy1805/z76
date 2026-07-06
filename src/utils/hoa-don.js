@@ -256,6 +256,15 @@ export function canProcessInvoiceExportInfo(invoice, auth) {
     return invoice?.maTrangThai === "ChoXuLy_HoaDon" && canApproveInvoice(invoice, auth);
 }
 
+export function canConfirmInvoiceExported(invoice, auth) {
+    return invoice?.maTrangThai === "SanSangXuat" &&
+        (
+            hasInvoicePermission(auth, "HD_Admin") ||
+            hasInvoicePermission(auth, "HD_XuatHoaDon") ||
+            (auth?.invoiceTypeCodes || []).includes(invoice.maLoaiHoaDon)
+        );
+}
+
 export function isInvoiceExportInfoComplete(invoice) {
     if (!invoice) return false;
     if (!invoice.hinhThucThanhToan) return false;

@@ -5,6 +5,10 @@ import {
     Box,
     Button,
     Checkbox,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     IconButton,
     MenuItem,
     Paper,
@@ -22,6 +26,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ClearIcon from "@mui/icons-material/Clear";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DownloadIcon from "@mui/icons-material/Download";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -30,7 +35,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canEditInvoice, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canEditInvoice, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
 
 function normalizeSearch(value) {
     return String(value || "")
@@ -40,6 +45,12 @@ function normalizeSearch(value) {
         .replace(/Đ/g, "D")
         .toLowerCase()
         .trim();
+}
+
+function todayDateInputValue() {
+    const date = new Date();
+    const timezoneOffsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
 }
 
 function HeaderFilter({ label, active, width = 280, children, onClear }) {
@@ -91,6 +102,9 @@ export default function HoaDonListPage() {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
+    const [confirmingExported, setConfirmingExported] = useState(false);
+    const [confirmExportOpen, setConfirmExportOpen] = useState(false);
+    const [confirmExportInfo, setConfirmExportInfo] = useState({});
     const [selectedIds, setSelectedIds] = useState([]);
     const [filters, setFilters] = useState({ tukhoa: "", maTrangThai: "", maLoaiHoaDon: "", dateFrom: "", dateTo: "" });
     const [tableFilters, setTableFilters] = useState({ maDangKy: "", nguoiMua: "", nguoiTao: "", amountFrom: "", amountTo: "" });
@@ -141,9 +155,10 @@ export default function HoaDonListPage() {
         });
     }, [rows, tableFilters]);
 
-    const exportableRows = filteredRows.filter((row) => row.maTrangThai === "SanSangXuat");
+    const exportableRows = filteredRows.filter((row) => canConfirmInvoiceExported(row, auth));
     const exportableIds = exportableRows.map((row) => row.id);
     const selectedExportableIds = selectedIds.filter((id) => exportableIds.includes(id));
+    const selectedExportableRows = exportableRows.filter((row) => selectedExportableIds.includes(row.id));
     const allExportableSelected = exportableIds.length > 0 && selectedExportableIds.length === exportableIds.length;
     const someExportableSelected = selectedExportableIds.length > 0 && !allExportableSelected;
 
@@ -189,6 +204,67 @@ export default function HoaDonListPage() {
         }
     };
 
+    const openConfirmExportDialog = () => {
+        const today = todayDateInputValue();
+        setConfirmExportInfo(Object.fromEntries(selectedExportableRows.map((row) => [
+            row.id,
+            {
+                soHoaDon: row.soHoaDon || "",
+                kyHieuHoaDon: row.kyHieuHoaDon || row.kyHieuDuKien || "",
+                ngayPhatHanh: row.ngayPhatHanh ? String(row.ngayPhatHanh).slice(0, 10) : today,
+            },
+        ])));
+        setConfirmExportOpen(true);
+    };
+
+    const setConfirmExportField = (hoaDonId, patch) => {
+        setConfirmExportInfo((current) => ({
+            ...current,
+            [hoaDonId]: {
+                ...(current[hoaDonId] || {}),
+                ...patch,
+            },
+        }));
+    };
+
+    const confirmSelectedExported = async () => {
+        if (!selectedExportableIds.length) {
+            setToast({ open: true, type: "warning", msg: "Chọn ít nhất một hóa đơn ở trạng thái Sẵn sàng xuất." });
+            return;
+        }
+        const missingInfo = selectedExportableRows.some((row) => {
+            const info = confirmExportInfo[row.id] || {};
+            return !String(info.soHoaDon || "").trim() ||
+                !String(info.kyHieuHoaDon || "").trim() ||
+                !String(info.ngayPhatHanh || "").trim();
+        });
+        if (missingInfo) {
+            setToast({ open: true, type: "warning", msg: "Nhập đủ số hóa đơn, ký hiệu và ngày phát hành cho các hóa đơn đã chọn." });
+            return;
+        }
+
+        setConfirmingExported(true);
+        try {
+            await Promise.all(selectedExportableRows.map((row) => {
+                const info = confirmExportInfo[row.id] || {};
+                return hoaDonApi.confirmHoaDonExported(row.id, {
+                    soHoaDon: String(info.soHoaDon || "").trim(),
+                    kyHieuHoaDon: String(info.kyHieuHoaDon || "").trim(),
+                    ngayPhatHanh: info.ngayPhatHanh,
+                }, user);
+            }));
+            setSelectedIds((current) => current.filter((id) => !selectedExportableIds.includes(id)));
+            setConfirmExportOpen(false);
+            setConfirmExportInfo({});
+            setToast({ open: true, type: "success", msg: `Đã xác nhận ${selectedExportableIds.length} hóa đơn đã xuất.` });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Xác nhận đã xuất thất bại." });
+        } finally {
+            setConfirmingExported(false);
+        }
+    };
+
     return (
         <Box
             sx={{
@@ -207,7 +283,7 @@ export default function HoaDonListPage() {
                         Đăng ký, trình duyệt và theo dõi hồ sơ hóa đơn thanh toán.
                     </Typography>
                 </Box>
-                <Stack direction="row" spacing={1}>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <Button
                         startIcon={<DownloadIcon />}
                         variant="outlined"
@@ -215,6 +291,15 @@ export default function HoaDonListPage() {
                         disabled={exporting || !selectedExportableIds.length}
                     >
                         Xuất file import ({selectedExportableIds.length})
+                    </Button>
+                    <Button
+                        startIcon={<CheckCircleIcon />}
+                        color="success"
+                        variant="contained"
+                        onClick={openConfirmExportDialog}
+                        disabled={confirmingExported || !selectedExportableIds.length}
+                    >
+                        Xác nhận đã xuất ({selectedExportableIds.length})
                     </Button>
                     <Button startIcon={<RefreshIcon />} variant="outlined" onClick={load} disabled={loading}>Tải lại</Button>
                     <Button startIcon={<AddIcon />} variant="contained" onClick={() => navigate("/hoa-don-dien-tu/new")}>Tạo hóa đơn</Button>
@@ -348,7 +433,7 @@ export default function HoaDonListPage() {
                                     <Checkbox
                                         size="small"
                                         checked={selectedIds.includes(row.id)}
-                                        disabled={row.maTrangThai !== "SanSangXuat"}
+                                        disabled={!canConfirmInvoiceExported(row, auth)}
                                         onChange={() => toggleRow(row.id)}
                                     />
                                 </TableCell>
@@ -384,6 +469,84 @@ export default function HoaDonListPage() {
             <Snackbar open={toast.open} autoHideDuration={3200} onClose={() => setToast({ ...toast, open: false })}>
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
             </Snackbar>
+
+            <Dialog open={confirmExportOpen} onClose={() => setConfirmExportOpen(false)} maxWidth="lg" fullWidth>
+                <DialogTitle>Xác nhận hóa đơn đã xuất?</DialogTitle>
+                <DialogContent>
+                    <Typography color="text.secondary">
+                        {selectedExportableRows.length
+                            ? `Sẽ chuyển ${selectedExportableRows.length} hóa đơn đã chọn từ trạng thái Sẵn sàng xuất sang Đã xuất.`
+                            : "Chọn ít nhất một hóa đơn sẵn sàng xuất để xác nhận."}
+                    </Typography>
+                    {!!selectedExportableRows.length && (
+                        <Stack spacing={1.5} sx={{ mt: 2, maxHeight: 420, overflow: "auto", pr: 0.5 }}>
+                            {selectedExportableRows.map((row) => {
+                                const info = confirmExportInfo[row.id] || {};
+                                return (
+                                    <Box
+                                        key={row.id}
+                                        sx={{
+                                            display: "grid",
+                                            gridTemplateColumns: { xs: "1fr", md: "minmax(260px, 1.4fr) minmax(170px, .8fr) minmax(190px, .8fr) minmax(190px, .8fr)" },
+                                            gap: 1.25,
+                                            alignItems: "start",
+                                            p: 1.25,
+                                            border: (theme) => `1px solid ${theme.palette.divider}`,
+                                            borderRadius: 2,
+                                        }}
+                                    >
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={{ fontWeight: 700 }}>{row.maDangKy}</Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
+                                                {row.tenNguoiMua || "—"}
+                                            </Typography>
+                                        </Box>
+                                        <TextField
+                                            size="small"
+                                            label="Số hóa đơn"
+                                            value={info.soHoaDon || ""}
+                                            onChange={(event) => setConfirmExportField(row.id, { soHoaDon: event.target.value })}
+                                            required
+                                        />
+                                        <TextField
+                                            size="small"
+                                            label="Ký hiệu"
+                                            value={info.kyHieuHoaDon || ""}
+                                            onChange={(event) => setConfirmExportField(row.id, { kyHieuHoaDon: event.target.value })}
+                                            required
+                                        />
+                                        <TextField
+                                            size="small"
+                                            type="date"
+                                            label="Ngày phát hành"
+                                            value={info.ngayPhatHanh || ""}
+                                            onChange={(event) => setConfirmExportField(row.id, { ngayPhatHanh: event.target.value })}
+                                            InputLabelProps={{ shrink: true }}
+                                            required
+                                        />
+                                    </Box>
+                                );
+                            })}
+                        </Stack>
+                    )}
+                    {!!selectedExportableRows.length && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
+                            Thông tin này sẽ được lưu vào phát hành hóa đơn và chuyển trạng thái sang Đã xuất.
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmExportOpen(false)} disabled={confirmingExported}>Đóng</Button>
+                    <Button
+                        color="success"
+                        variant="contained"
+                        onClick={confirmSelectedExported}
+                        disabled={confirmingExported || !selectedExportableRows.length}
+                    >
+                        Xác nhận đã xuất
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

@@ -10,11 +10,11 @@ console.log("API_BASE:", BASE);
 console.log("HD_API_BASE:", HD_BASE);
 const http = axios.create({
     baseURL: BASE,
-    timeout: 10000,
+    timeout: 30000,
 });
 const httpHd = axios.create({
     baseURL: HD_BASE,
-    timeout: 15000,
+    timeout: 30000,
 });
 
 // Tạo instance RIÊNG cho auth để tránh bị ảnh hưởng bởi interceptor/transform của http
@@ -297,6 +297,14 @@ export const hoaDonApi = {
             requesterIdDonVi: user?.idDonVi,
             tenNguoiThucHien: tenNguoiThucHien || user?.fullName || user?.name || user?.username,
             ghiChu,
+        });
+        return data;
+    },
+    async confirmHoaDonExported(id, payload, user) {
+        const { data } = await httpHd.post(`/hoa-don/${id}/xac-nhan-da-xuat`, {
+            ...payload,
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
         });
         return data;
     },

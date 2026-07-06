@@ -13,6 +13,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
 import SendIcon from "@mui/icons-material/Send";
+import { NumericFormat } from "react-number-format";
 import BuyerSelector from "../components/hoa-don/BuyerSelector";
 import HoaDonItemGrid from "../components/hoa-don/HoaDonItemGrid";
 import HoaDonTotals from "../components/hoa-don/HoaDonTotals";
@@ -22,9 +23,25 @@ import { useAuth } from "../store/useAuth";
 import {
     DEFAULT_INVOICE_FORM,
     INVOICE_TYPE_LABELS,
+    TAX_MODE_LABELS,
     invoiceToForm,
     normalizeInvoicePayload,
 } from "../utils/hoa-don";
+
+function NumericTextField({ value, onChange, inputProps, ...props }) {
+    return (
+        <NumericFormat
+            {...props}
+            customInput={TextField}
+            thousandSeparator=","
+            decimalSeparator="."
+            allowNegative={false}
+            value={value ?? ""}
+            onValueChange={(values) => onChange(values.value)}
+            inputProps={{ ...inputProps, inputMode: "decimal" }}
+        />
+    );
+}
 
 function cloneDefaultForm() {
     return {
@@ -109,7 +126,7 @@ export default function HoaDonFormPage() {
     }
 
     return (
-        <Box sx={{ height: "100%", overflow: { md: "auto" }, pr: { md: 0.5 } }}>
+        <Box sx={{ pr: { md: 0.5 } }}>
             <Stack spacing={2.25}>
                 <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1.5}>
                     <Box>
@@ -123,12 +140,18 @@ export default function HoaDonFormPage() {
                     </Stack>
                 </Stack>
 
-                <SectionCard title="Thông tin hóa đơn" subtitle="Nhân viên đăng ký loại nghiệp vụ, ngày hóa đơn dự kiến và thông tin nhận diện hồ sơ. Thuế, thanh toán và tỷ giá do phụ trách hóa đơn chốt ở bước xử lý.">
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr 1fr" }, gap: 1.5 }}>
+                <SectionCard title="Thông tin hóa đơn" subtitle="Nhân viên đăng ký loại nghiệp vụ, ngày hóa đơn dự kiến, thông tin thuế và thông tin nhận diện hồ sơ. Người phụ trách hóa đơn có thể kiểm tra, điều chỉnh trước khi xuất.">
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 1.5 }}>
                         <TextField select label="Loại hóa đơn" value={form.maLoaiHoaDon} onChange={(e) => setField({ maLoaiHoaDon: e.target.value })}>
                             {Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
                         <TextField type="date" label="Ngày hóa đơn" value={form.ngayHoaDon || ""} onChange={(e) => setField({ ngayHoaDon: e.target.value })} InputLabelProps={{ shrink: true }} />
+                        <TextField select label="Chế độ thuế" value={form.cheDoThue} onChange={(e) => setField({ cheDoThue: e.target.value })}>
+                            {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                        </TextField>
+                        {form.cheDoThue === "MotThueSuat" && (
+                            <NumericTextField label="Thuế GTGT (%)" value={form.thueSuatChung} onChange={(value) => setField({ thueSuatChung: value })} />
+                        )}
                         <TextField label="Ký hiệu dự kiến" value={form.kyHieuDuKien || ""} onChange={(e) => setField({ kyHieuDuKien: e.target.value })} placeholder={kyHieuSuggestion} />
                         <TextField label="Mẫu hóa đơn dự kiến" value={form.mauHoaDonDuKien || ""} onChange={(e) => setField({ mauHoaDonDuKien: e.target.value })} />
                     </Box>
