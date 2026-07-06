@@ -9,7 +9,7 @@ export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND" }) {
                 {label}
             </Typography>
             <Typography sx={{ fontWeight: strong ? 850 : 650 }}>
-                {fmtMoney(value)} {currency}
+                {fmtMoney(value, 0, currency)} {currency}
             </Typography>
         </Stack>
     );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     Alert,
@@ -28,7 +28,7 @@ import { NumericFormat } from "react-number-format";
 import StatusChip from "../components/StatusChip";
 import HoaDonWorkflowActions from "../components/hoa-don/HoaDonWorkflowActions";
 import SectionCard from "../components/hoa-don/SectionCard";
-import { hoaDonApi } from "../lib/api";
+import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import {
     canApproveInvoice,
@@ -61,6 +61,28 @@ function NumericTextField({ value, onChange, inputProps, ...props }) {
     );
 }
 
+function formatQuantity(value, fraction = 2) {
+    const n = Number(value || 0);
+    return n.toLocaleString("en-US", {
+        minimumFractionDigits: fraction,
+        maximumFractionDigits: fraction || 4,
+    });
+}
+
+function buildCurrencyOptions(currencies = [], selectedCurrency = "VND") {
+    const byCode = new Map();
+    byCode.set("VND", { MaLoaiTien: "VND", TenLoaiTien: "Việt Nam đồng" });
+    currencies.forEach((item) => {
+        const code = String(item?.MaLoaiTien || "").trim();
+        if (code) byCode.set(code, item);
+    });
+    const selectedCode = String(selectedCurrency || "").trim();
+    if (selectedCode && !byCode.has(selectedCode)) {
+        byCode.set(selectedCode, { MaLoaiTien: selectedCode, TenLoaiTien: selectedCode });
+    }
+    return Array.from(byCode.values());
+}
+
 function initExportInfo(detail) {
     const lines = detail?.chiTiet || [];
     const hasExportInfo = Boolean(detail?.hinhThucThanhToan);
@@ -84,6 +106,7 @@ export default function HoaDonDetailPage() {
     const { user } = auth;
     const [detail, setDetail] = useState(null);
     const [exportInfo, setExportInfo] = useState(null);
+    const [currencies, setCurrencies] = useState([]);
     const [loading, setLoading] = useState(true);
     const [savingExportInfo, setSavingExportInfo] = useState(false);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
@@ -103,6 +126,12 @@ export default function HoaDonDetailPage() {
             setLoading(false);
         }
     }, [id, user?.id, user?.idDonVi]);
+
+    useEffect(() => {
+        api.listLoaiTien({ tontai: 1 })
+            .then((rows) => setCurrencies(rows || []))
+            .catch(() => setCurrencies([]));
+    }, []);
 
     useEffect(() => {
         load();
@@ -162,6 +191,7 @@ export default function HoaDonDetailPage() {
         ? "Cần lưu đủ hình thức thanh toán, chế độ thuế, thuế suất, loại tiền và tỷ giá trước khi duyệt."
         : "";
     const showTaxPerLine = exportInfo?.cheDoThue === "NhieuThueSuat";
+    const currencyOptions = useMemo(() => buildCurrencyOptions(currencies, exportInfo?.maLoaiTien), [currencies, exportInfo?.maLoaiTien]);
 
     const setExportField = (patch) => setExportInfo((current) => ({ ...current, ...patch }));
     const setExportLineTax = (soDong, value) => {
@@ -282,9 +312,11 @@ export default function HoaDonDetailPage() {
                                     const maLoaiTien = event.target.value;
                                     setExportField({ maLoaiTien, tyGia: maLoaiTien === "VND" ? 1 : exportInfo?.tyGia || 1 });
                                 }}>
-                                    <MenuItem value="VND">VND</MenuItem>
-                                    <MenuItem value="USD">USD</MenuItem>
-                                    <MenuItem value="EUR">EUR</MenuItem>
+                                    {currencyOptions.map((item) => (
+                                        <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>
+                                            {item.MaLoaiTien} - {item.TenLoaiTien}
+                                        </MenuItem>
+                                    ))}
                                 </TextField>
                                 <NumericTextField label="Tỷ giá" value={exportInfo?.tyGia || ""} disabled={exportInfo?.maLoaiTien === "VND"} onChange={(value) => setExportField({ tyGia: value })} />
                             </Box>
@@ -369,20 +401,20 @@ export default function HoaDonDetailPage() {
                                         <TableCell>{line.MaHang || "—"}</TableCell>
                                         <TableCell>{line.TenHangHoaDichVu}</TableCell>
                                         <TableCell>{line.DonViTinh || "—"}</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.SoLuong, 2)}</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.DonGia)}</TableCell>
+                                        <TableCell align="right">{formatQuantity(line.SoLuong, 2)}</TableCell>
+                                        <TableCell align="right">{fmtMoney(line.DonGia, 0, detail.maLoaiTien)}</TableCell>
                                         <TableCell align="right">{line.ThueSuatGTGT}%</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.ThanhTien)}</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.TienThueGTGT)}</TableCell>
+                                        <TableCell align="right">{fmtMoney(line.ThanhTien, 0, detail.maLoaiTien)}</TableCell>
+                                        <TableCell align="right">{fmtMoney(line.TienThueGTGT, 0, detail.maLoaiTien)}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
                     <Stack alignItems="flex-end" spacing={1} sx={{ mt: 2 }}>
-                        <Typography>Tổng tiền hàng: <b>{fmtMoney(detail.tongTienHang)} {detail.maLoaiTien}</b></Typography>
-                        <Typography>Tiền thuế GTGT: <b>{fmtMoney(detail.tongTienThue)} {detail.maLoaiTien}</b></Typography>
-                        <Typography variant="h6">Tổng thanh toán: {fmtMoney(detail.tongTienThanhToan)} {detail.maLoaiTien}</Typography>
+                        <Typography>Tổng tiền hàng: <b>{fmtMoney(detail.tongTienHang, 0, detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
+                        <Typography>Tiền thuế GTGT: <b>{fmtMoney(detail.tongTienThue, 0, detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
+                        <Typography variant="h6">Tổng thanh toán: {fmtMoney(detail.tongTienThanhToan, 0, detail.maLoaiTien)} {detail.maLoaiTien}</Typography>
                     </Stack>
                 </SectionCard>
 

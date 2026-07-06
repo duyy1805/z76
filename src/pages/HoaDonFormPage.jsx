@@ -18,7 +18,7 @@ import BuyerSelector from "../components/hoa-don/BuyerSelector";
 import HoaDonItemGrid from "../components/hoa-don/HoaDonItemGrid";
 import HoaDonTotals from "../components/hoa-don/HoaDonTotals";
 import SectionCard from "../components/hoa-don/SectionCard";
-import { hoaDonApi } from "../lib/api";
+import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import {
     DEFAULT_INVOICE_FORM,
@@ -51,15 +51,36 @@ function cloneDefaultForm() {
     };
 }
 
+function buildCurrencyOptions(currencies = [], selectedCurrency = "VND") {
+    const byCode = new Map();
+    byCode.set("VND", { MaLoaiTien: "VND", TenLoaiTien: "Việt Nam đồng" });
+    currencies.forEach((item) => {
+        const code = String(item?.MaLoaiTien || "").trim();
+        if (code) byCode.set(code, item);
+    });
+    const selectedCode = String(selectedCurrency || "").trim();
+    if (selectedCode && !byCode.has(selectedCode)) {
+        byCode.set(selectedCode, { MaLoaiTien: selectedCode, TenLoaiTien: selectedCode });
+    }
+    return Array.from(byCode.values());
+}
+
 export default function HoaDonFormPage() {
     const { id } = useParams();
     const isEdit = Boolean(id);
     const navigate = useNavigate();
     const { user } = useAuth();
     const [form, setForm] = useState(cloneDefaultForm);
+    const [currencies, setCurrencies] = useState([]);
     const [loading, setLoading] = useState(Boolean(id));
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+
+    useEffect(() => {
+        api.listLoaiTien({ tontai: 1 })
+            .then((rows) => setCurrencies(rows || []))
+            .catch(() => setCurrencies([]));
+    }, []);
 
     useEffect(() => {
         if (!id || !user?.id || !user?.idDonVi) return;
@@ -80,7 +101,16 @@ export default function HoaDonFormPage() {
         if (!isEdit) setForm((current) => ({ ...current, kyHieuDuKien: kyHieuSuggestion }));
     }, [kyHieuSuggestion, isEdit]);
 
+    const currencyOptions = useMemo(() => buildCurrencyOptions(currencies, form.maLoaiTien), [currencies, form.maLoaiTien]);
+
     const setField = (patch) => setForm((current) => ({ ...current, ...patch }));
+    const setCurrency = (maLoaiTien) => {
+        setForm((current) => ({
+            ...current,
+            maLoaiTien,
+            tyGia: maLoaiTien === "VND" ? 1 : current.tyGia || 1,
+        }));
+    };
     const setQuocPhong = (patch) => setForm((current) => ({ ...current, quocPhong: { ...current.quocPhong, ...patch } }));
 
     const validate = () => {
@@ -88,6 +118,8 @@ export default function HoaDonFormPage() {
         if (!form.diaChiSnapshot?.trim()) return "Nhập địa chỉ người mua.";
         if (!form.ngayHoaDon) return "Nhập ngày hóa đơn.";
         if (!form.chiTiet?.length || form.chiTiet.some((line) => !line.tenHangHoaDichVu?.trim())) return "Mỗi dòng hàng phải có tên hàng hóa/dịch vụ.";
+        if (!form.maLoaiTien) return "Chọn loại tiền.";
+        if (form.maLoaiTien !== "VND" && Number(form.tyGia || 0) <= 0) return "Nhập tỷ giá hợp lệ.";
         if (form.maLoaiHoaDon === "QuocPhong" && (!form.quocPhong?.quyetDinhGiaoNhiemVu || !form.quocPhong?.soHopDong)) {
             return "Hóa đơn quốc phòng cần quyết định giao nhiệm vụ và số hợp đồng.";
         }
@@ -149,6 +181,16 @@ export default function HoaDonFormPage() {
                         <TextField select label="Chế độ thuế" value={form.cheDoThue} onChange={(e) => setField({ cheDoThue: e.target.value })}>
                             {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
+                        <TextField select label="Loại tiền" value={form.maLoaiTien || "VND"} onChange={(e) => setCurrency(e.target.value)}>
+                            {currencyOptions.map((item) => (
+                                <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>
+                                    {item.MaLoaiTien} - {item.TenLoaiTien}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        {form.maLoaiTien !== "VND" && (
+                            <NumericTextField label="Tỷ giá" value={form.tyGia || ""} onChange={(value) => setField({ tyGia: value })} />
+                        )}
                         {form.cheDoThue === "MotThueSuat" && (
                             <NumericTextField label="Thuế GTGT (%)" value={form.thueSuatChung} onChange={(value) => setField({ thueSuatChung: value })} />
                         )}
@@ -186,6 +228,7 @@ export default function HoaDonFormPage() {
                             cheDoThue={form.cheDoThue}
                             thueSuatChung={form.thueSuatChung}
                             tyGia={form.tyGia}
+                            currency={form.maLoaiTien}
                         />
                         <HoaDonTotals lines={form.chiTiet.map((line) => ({ ...line, thueSuatGTGT: form.cheDoThue === "MotThueSuat" ? form.thueSuatChung : line.thueSuatGTGT }))} tyGia={form.tyGia} currency={form.maLoaiTien} />
                     </Stack>

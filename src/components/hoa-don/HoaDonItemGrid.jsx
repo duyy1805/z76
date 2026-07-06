@@ -16,13 +16,14 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { NumericFormat } from "react-number-format";
 import { calculateLine, emptyInvoiceLine, fmtMoney } from "../../utils/hoa-don";
 
-function NumericTextField({ value, onChange, inputProps, ...props }) {
+function NumericTextField({ value, onChange, inputProps, isMoney = false, currency = "VND", ...props }) {
+    const useVietnameseMoneyFormat = isMoney && String(currency || "VND").toUpperCase() === "VND";
     return (
         <NumericFormat
             {...props}
             customInput={TextField}
-            thousandSeparator=","
-            decimalSeparator="."
+            thousandSeparator={useVietnameseMoneyFormat ? "." : ","}
+            decimalSeparator={useVietnameseMoneyFormat ? "," : "."}
             allowNegative={false}
             value={value ?? ""}
             onValueChange={(values) => onChange(values.value)}
@@ -42,6 +43,7 @@ export default function HoaDonItemGrid({
     cheDoThue,
     thueSuatChung,
     tyGia,
+    currency = "VND",
     readOnly = false,
 }) {
     const showTaxPerLine = cheDoThue === "NhieuThueSuat";
@@ -130,16 +132,16 @@ export default function HoaDonItemGrid({
                                         <TableCell sx={unitCellSx}><TextField {...inputProps} value={line.donViTinh || ""} onChange={(e) => updateLine(index, { donViTinh: e.target.value })} /></TableCell>
 
                                         <TableCell sx={quantityCellSx}><NumericTextField {...inputProps} value={line.soLuongHopDong ?? ""} onChange={(value) => updateLine(index, { soLuongHopDong: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                        <TableCell sx={priceCellSx}><NumericTextField {...inputProps} value={line.donGiaHopDong ?? ""} onChange={(value) => updateLine(index, { donGiaHopDong: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                        <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calcAmount(line.soLuongHopDong, line.donGiaHopDong))}</Typography></TableCell>
+                                        <TableCell sx={priceCellSx}><NumericTextField {...inputProps} isMoney currency={currency} value={line.donGiaHopDong ?? ""} onChange={(value) => updateLine(index, { donGiaHopDong: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
+                                        <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calcAmount(line.soLuongHopDong, line.donGiaHopDong), 0, currency)}</Typography></TableCell>
 
                                         <TableCell sx={quantityCellSx}><NumericTextField {...inputProps} value={soLuongThucHien} onChange={(value) => updateLine(index, { soLuongThucHien: value, soLuong: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                        <TableCell sx={priceCellSx}><NumericTextField {...inputProps} value={donGiaThucHien} onChange={(value) => updateLine(index, { donGiaThucHien: value, donGia: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                        <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calcAmount(soLuongThucHien, donGiaThucHien))}</Typography></TableCell>
+                                        <TableCell sx={priceCellSx}><NumericTextField {...inputProps} isMoney currency={currency} value={donGiaThucHien} onChange={(value) => updateLine(index, { donGiaThucHien: value, donGia: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
+                                        <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calcAmount(soLuongThucHien, donGiaThucHien), 0, currency)}</Typography></TableCell>
 
                                         <TableCell sx={quantityCellSx}><NumericTextField {...inputProps} value={line.soLuongLuyKe ?? ""} onChange={(value) => updateLine(index, { soLuongLuyKe: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                        <TableCell sx={priceCellSx}><NumericTextField {...inputProps} value={line.donGiaLuyKe ?? ""} onChange={(value) => updateLine(index, { donGiaLuyKe: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                        <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calcAmount(line.soLuongLuyKe, line.donGiaLuyKe))}</Typography></TableCell>
+                                        <TableCell sx={priceCellSx}><NumericTextField {...inputProps} isMoney currency={currency} value={line.donGiaLuyKe ?? ""} onChange={(value) => updateLine(index, { donGiaLuyKe: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
+                                        <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calcAmount(line.soLuongLuyKe, line.donGiaLuyKe), 0, currency)}</Typography></TableCell>
 
                                         {!readOnly && (
                                             <TableCell align="center">
@@ -160,8 +162,8 @@ export default function HoaDonItemGrid({
                                     </TableCell>
                                     <TableCell sx={unitCellSx}><TextField {...inputProps} value={line.donViTinh || ""} onChange={(e) => updateLine(index, { donViTinh: e.target.value })} /></TableCell>
                                     <TableCell sx={quantityCellSx}><NumericTextField {...inputProps} value={line.soLuong ?? ""} onChange={(value) => updateLine(index, { soLuong: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                    <TableCell sx={priceCellSx}><NumericTextField {...inputProps} value={line.donGia ?? ""} onChange={(value) => updateLine(index, { donGia: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
-                                    <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calc.thanhTien)}</Typography></TableCell>
+                                    <TableCell sx={priceCellSx}><NumericTextField {...inputProps} isMoney currency={currency} value={line.donGia ?? ""} onChange={(value) => updateLine(index, { donGia: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
+                                    <TableCell sx={moneyCellSx} align="right"><Typography sx={{ fontWeight: 700 }}>{fmtMoney(calc.thanhTien, 0, currency)}</Typography></TableCell>
                                     {showTaxPerLine && (
                                         <TableCell><NumericTextField {...inputProps} value={line.thueSuatGTGT ?? ""} onChange={(value) => updateLine(index, { thueSuatGTGT: value })} inputProps={{ style: { textAlign: "right" } }} /></TableCell>
                                     )}
@@ -169,7 +171,7 @@ export default function HoaDonItemGrid({
                                         <>
                                             {["soLuongHopDong", "donGiaHopDong", "soLuongThucHien", "donGiaThucHien", "soLuongLuyKe", "donGiaLuyKe"].map((field) => (
                                                 <TableCell key={field}>
-                                                    <NumericTextField {...inputProps} value={line[field] ?? ""} onChange={(value) => updateLine(index, { [field]: value })} inputProps={{ style: { textAlign: "right" } }} />
+                                                    <NumericTextField {...inputProps} isMoney={field.includes("donGia")} currency={currency} value={line[field] ?? ""} onChange={(value) => updateLine(index, { [field]: value })} inputProps={{ style: { textAlign: "right" } }} />
                                                 </TableCell>
                                             ))}
                                         </>

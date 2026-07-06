@@ -77,9 +77,10 @@ export function emptyInvoiceLine(soDong = 1) {
     };
 }
 
-export function fmtMoney(value, fraction = 0) {
+export function fmtMoney(value, fraction = 0, currency = "VND") {
     const n = Number(value || 0);
-    return n.toLocaleString("en-US", {
+    const locale = String(currency || "VND").toUpperCase() === "VND" ? "vi-VN" : "en-US";
+    return n.toLocaleString(locale, {
         minimumFractionDigits: fraction,
         maximumFractionDigits: fraction || 4,
     });
