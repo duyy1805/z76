@@ -38,6 +38,7 @@ import {
     isInvoiceExportInfoComplete,
     TAX_MODE_LABELS,
 } from "../utils/hoa-don";
+import { amountToVietnameseText } from "../utils/phieu-sec";
 
 const DetailField = ({ label, value }) => (
     <Box sx={{ minWidth: 0 }}>
@@ -192,6 +193,7 @@ export default function HoaDonDetailPage() {
         : "";
     const showTaxPerLine = exportInfo?.cheDoThue === "NhieuThueSuat";
     const currencyOptions = useMemo(() => buildCurrencyOptions(currencies, exportInfo?.maLoaiTien), [currencies, exportInfo?.maLoaiTien]);
+    const totalPaymentText = amountToVietnameseText(detail?.tongTienThanhToan, detail?.maLoaiTien || "VND");
 
     const setExportField = (patch) => setExportInfo((current) => ({ ...current, ...patch }));
     const setExportLineTax = (soDong, value) => {
@@ -415,6 +417,11 @@ export default function HoaDonDetailPage() {
                         <Typography>Tổng tiền hàng: <b>{fmtMoney(detail.tongTienHang, 0, detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
                         <Typography>Tiền thuế GTGT: <b>{fmtMoney(detail.tongTienThue, 0, detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
                         <Typography variant="h6">Tổng thanh toán: {fmtMoney(detail.tongTienThanhToan, 0, detail.maLoaiTien)} {detail.maLoaiTien}</Typography>
+                        {totalPaymentText && (
+                            <Typography variant="body2" color="text.secondary" sx={{ textAlign: "right", maxWidth: 520 }}>
+                                Bằng chữ: {totalPaymentText}
+                            </Typography>
+                        )}
                     </Stack>
                 </SectionCard>
 
