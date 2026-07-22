@@ -66,8 +66,9 @@ async function getPhieuById(id, params = {}) {
 }
 
 export const api = {
-    async listDonVi() {
-        const { data } = await http.get("/donvi");
+    async listDonVi(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        const { data } = await http.get(`/donvi${q ? `?${q}` : ""}`);
         return data; // [{ id, name, stk, TonTai }]
     },
     async createDonVi({ name, stk, maNganHang, chiNhanhNganHang, tenChuyenKhoan }) {

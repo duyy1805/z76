@@ -35,7 +35,19 @@ export default function PhieuSecFormDialog({
     onClose,
     onSubmit,
 }) {
-    const selectedDonVi = donvis.find((item) => isSameId(item.id, form.donViId));
+    const selectedActiveDonVi = donvis.find((item) => isSameId(item.id, form.donViId));
+    const inactiveSelectedDonVi = editingPhieu && form.donViId && !selectedActiveDonVi
+        ? {
+            id: form.donViId,
+            name: editingPhieu.tenDonVi || `ID: ${form.donViId}`,
+            tenChuyenKhoan: editingPhieu.tenChuyenKhoanHuongThu || editingPhieu.tenDonVi || "",
+            stk: editingPhieu.soTaiKhoanHuongThu || "",
+            maNganHang: editingPhieu.maNganHangHuongThu || "",
+            tenNganHang: editingPhieu.tenNganHangHuongThu || "",
+            chiNhanhNganHang: editingPhieu.chiNhanhNganHangHuongThu || "",
+        }
+        : null;
+    const selectedDonVi = selectedActiveDonVi || inactiveSelectedDonVi;
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
@@ -123,7 +135,7 @@ export default function PhieuSecFormDialog({
                         {!editingPhieu && <Box />}
                         <Typography
                             variant="caption"
-                            color="text.secondary"
+                            color={inactiveSelectedDonVi ? "error.main" : "text.secondary"}
                             sx={{
                                 gridColumn: { xs: "1", sm: "1 / -1" },
                                 px: 1.75,
@@ -131,7 +143,9 @@ export default function PhieuSecFormDialog({
                                 overflowWrap: "anywhere",
                             }}
                         >
-                            {selectedDonVi
+                            {inactiveSelectedDonVi
+                                ? "Đơn vị này đã ngưng sử dụng hoặc không tồn tại. Vui lòng chọn đơn vị đang dùng trước khi lưu."
+                                : selectedDonVi
                                 ? `Tên CK: ${selectedDonVi.tenChuyenKhoan || "—"} · STK: ${selectedDonVi.stk || "—"} · Mã NH: ${selectedDonVi.maNganHang || "—"} · Tên NH: ${selectedDonVi.tenNganHang || "—"} · CN: ${selectedDonVi.chiNhanhNganHang || "—"}`
                                 : "Nhập tên, tên chuyển khoản, số tài khoản, mã ngân hàng hoặc chi nhánh để tìm."}
                         </Typography>

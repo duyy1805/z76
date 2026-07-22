@@ -72,6 +72,7 @@ const DEBUG_SOSEC = import.meta.env.VITE_DEBUG_SOSEC === "1";
 const logSoSec = (...args) => {
     if (DEBUG_SOSEC) console.log("[SoSec][PhieuSec]", ...args);
 };
+const INACTIVE_DON_VI_MESSAGE = "Đơn vị hưởng thụ đã ngưng sử dụng hoặc không tồn tại";
 const DetailField = ({ label, children, sx }) => (
     <Box sx={{ minWidth: 0, minHeight: 56, ...sx }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
@@ -245,7 +246,7 @@ export default function PhieuSec({ mode = "VND" }) {
     // form tạo
     const [form, setForm] = useState({
         noiDung: "",
-        donViId: 1,
+        donViId: null,
         soTien: "",
         nguoiDangKyId: user?.id || null,
         ghiChu: "",
@@ -407,7 +408,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const resetForm = () => {
         setForm({
             noiDung: "",
-            donViId: donvis[0]?.id || 1,
+            donViId: donvis[0]?.id || null,
             soTien: "",
             nguoiDangKyId: user?.id || null,
             ghiChu: "",
@@ -442,6 +443,8 @@ export default function PhieuSec({ mode = "VND" }) {
         try {
             const noiDungError = validatePaymentContent(form.noiDung);
             if (noiDungError) throw new Error(noiDungError);
+            if (!form.donViId) throw new Error(INACTIVE_DON_VI_MESSAGE);
+            if (!donvis.some((item) => isSameId(item.id, form.donViId))) throw new Error(INACTIVE_DON_VI_MESSAGE);
             if (!form.soTien || Number(form.soTien) <= 0) throw new Error("Số tiền > 0");
             if (isNgoaiTe && !form.maLoaiTien) throw new Error("Chọn loại tiền ngoại tệ");
 

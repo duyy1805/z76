@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
+const isActiveDonVi = (item) => item?.TonTai !== false && item?.TonTai !== 0;
+const hasDonViId = (list, id) => list.some((item) => String(item.id) === String(id));
+
 export default function usePhieuSecData({
     mode,
     user,
@@ -43,20 +46,24 @@ export default function usePhieuSecData({
         });
 
         const [donViRows, currencyRows, bankRows] = await Promise.all([
-            api.listDonVi(),
+            api.listDonVi({ tontai: 1 }),
             api.listLoaiTien({ tontai: 1 }),
             api.listNganHang({ tontai: 1 }),
         ]);
+        const activeDonViRows = (donViRows || []).filter(isActiveDonVi);
 
-        log("load:listDonVi result", { count: donViRows?.length ?? 0 });
+        log("load:listDonVi result", { count: activeDonViRows.length });
         setRows(phieuRows);
-        setDonvis(donViRows);
+        setDonvis(activeDonViRows);
         setCurrencies(currencyRows || []);
         setBanks(bankRows || []);
-        setForm((current) => ({
-            ...current,
-            donViId: current.donViId || donViRows?.[0]?.id || 1,
-        }));
+        setForm((current) => {
+            const hasCurrentActiveDonVi = current.donViId && hasDonViId(activeDonViRows, current.donViId);
+            return {
+                ...current,
+                donViId: hasCurrentActiveDonVi ? current.donViId : activeDonViRows?.[0]?.id || null,
+            };
+        });
     };
 
     const loadPendingLenhChi = async () => {
