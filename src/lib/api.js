@@ -4,8 +4,7 @@ import axios from "axios";
 
 const BASE = import.meta.env.VITE_API_BASE || "https://nodeapi.z76.vn/sosec";
 const HD_BASE = import.meta.env.VITE_HD_API_BASE || BASE.replace(/\/sosec\/?$/, "/hoadondientu");
-const LOGIN_URL = import.meta.env.VITE_LOGIN_URL || "https://apipccc.z76.vn/auth/loginERP";
-const API_KEY = import.meta.env.VITE_API_KEY;
+const AUTH_BASE = import.meta.env.VITE_AUTH_BASE || BASE.replace(/\/sosec\/?$/, "/auth");
 console.log("API_BASE:", BASE);
 console.log("HD_API_BASE:", HD_BASE);
 const http = axios.create({
@@ -19,20 +18,34 @@ const httpHd = axios.create({
 
 // Tạo instance RIÊNG cho auth để tránh bị ảnh hưởng bởi interceptor/transform của http
 const httpAuth = axios.create({
-    baseURL: new URL(LOGIN_URL).origin,   // "https://apipccc.z76.vn"
-    timeout: 10000,
+    baseURL: AUTH_BASE,
+    timeout: 30000,
     headers: {
         "Content-Type": "application/json",
-        "ApiKey": API_KEY,
     },
     // Ép serialize JSON đúng chuẩn, tránh bị cấu hình global nào đó đổi sang form
-    transformRequest: [(data) => JSON.stringify(data)],
+    withCredentials: true,
 });
 
 export async function loginERP({ username, password }) {
-    const path = new URL(LOGIN_URL).pathname; // "/auth/loginERP"
-    const res = await httpAuth.post(path, { username, password }); // body JSON chuẩn
+    const path = "/login";
+    const res = await httpAuth.post(path, { username, password, authFlow: "erp-otp" });
     return res.data;
+}
+
+export async function verifyLoginOtp({ challengeId, otp, trustDevice }) {
+    const { data } = await httpAuth.post("/otp/verify", { challengeId, otp, trustDevice });
+    return data;
+}
+
+export async function resendLoginOtp(challengeId) {
+    const { data } = await httpAuth.post("/otp/resend", { challengeId });
+    return data;
+}
+
+export async function logoutTrustedDevice() {
+    const { data } = await httpAuth.post("/otp/logout");
+    return data;
 }
 
 export async function getRoleByUserId(userId) {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Alert,
     Box,
@@ -18,7 +18,14 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
-import { loginERP, attachAuthToken, getRoleByUserId, getHoaDonRoleByUserId } from "../lib/api";
+import {
+    loginERP,
+    verifyLoginOtp,
+    resendLoginOtp,
+    attachAuthToken,
+    getRoleByUserId,
+    getHoaDonRoleByUserId,
+} from "../lib/api";
 import { useAuth } from "../store/useAuth";
 
 export default function Login() {
@@ -29,6 +36,16 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [otpChallenge, setOtpChallenge] = useState(null);
+    const [otp, setOtp] = useState("");
+    const [trustDevice, setTrustDevice] = useState(true);
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        if (!otpChallenge) return undefined;
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [otpChallenge]);
 
     const onSubmit = async (event) => {
         event.preventDefault();
@@ -37,6 +54,17 @@ export default function Login() {
 
         try {
             const data = await loginERP({ username, password });
+            if (data?.status === "otp_required") {
+                const resendAfter = Number(data.resendAfter || 60);
+                setOtpChallenge({
+                    ...data,
+                    resendAt: Date.now() + resendAfter * 1000,
+                    expiresAt: Date.now() + Number(data.expiresIn || 300) * 1000,
+                });
+                setOtp("");
+                setNow(Date.now());
+                return;
+            }
             const token = data?.accessToken;
             const user = data?.userInfo || { username };
             if (!token) throw new Error("Không nhận được accessToken từ hệ thống.");
@@ -70,17 +98,95 @@ export default function Login() {
             attachAuthToken(token);
             window.location.replace("/dashboard");
         } catch (exception) {
-            setError(
-                exception?.response?.data?.message ||
-                exception?.message ||
-                "Đăng nhập thất bại"
-            );
+            const requestId = exception?.response?.data?.requestId || exception?.response?.headers?.["x-auth-request-id"];
+            const message = exception?.response?.data?.message || exception?.message || "Đăng nhập thất bại";
+            console.error("[AUTH] login_failed", {
+                requestId,
+                status: exception?.response?.status,
+                message,
+            });
+            setError(requestId ? `${message} (Mã tra cứu: ${requestId})` : message);
         } finally {
             setLoading(false);
         }
     };
 
+    const onOtpSubmit = async (event) => {
+        event.preventDefault();
+        setError("");
+        setLoading(true);
+
+        try {
+            const data = await verifyLoginOtp({
+                challengeId: otpChallenge.challengeId,
+                otp,
+                trustDevice,
+            });
+            const token = data?.accessToken;
+            const user = data?.userInfo || { username };
+            if (!token) throw new Error("Không nhận được accessToken từ hệ thống.");
+
+            const userId = user?.id ?? user?.userId;
+            const [access, invoiceAccess] = userId
+                ? await Promise.all([
+                    getRoleByUserId(userId),
+                    getHoaDonRoleByUserId(userId).catch(() => ({ role: "NhanVien", permissions: [], invoiceTypeCodes: [] })),
+                ])
+                : [
+                    { role: "NhanVien", permissions: [], expenseReviewerCodes: [] },
+                    { role: "NhanVien", permissions: [], invoiceTypeCodes: [] },
+                ];
+
+            login({
+                token,
+                user,
+                role: access.role,
+                permissions: access.permissions,
+                expenseReviewerCodes: access.expenseReviewerCodes,
+                invoiceRole: invoiceAccess.role,
+                invoicePermissions: invoiceAccess.permissions,
+                invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
+            }, remember);
+            attachAuthToken(token);
+            window.location.replace("/dashboard");
+        } catch (exception) {
+            setError(exception?.response?.data?.message || exception?.message || "Mã OTP không hợp lệ");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onResendOtp = async () => {
+        setError("");
+        setLoading(true);
+        try {
+            const data = await resendLoginOtp(otpChallenge.challengeId);
+            const resendAfter = Number(data.resendAfter || 60);
+            setOtpChallenge((current) => ({
+                ...current,
+                ...data,
+                resendAt: Date.now() + resendAfter * 1000,
+                expiresAt: Date.now() + Number(data.expiresIn || 300) * 1000,
+            }));
+            setOtp("");
+            setNow(Date.now());
+        } catch (exception) {
+            setError(exception?.response?.data?.message || "Chưa thể gửi lại mã OTP");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const resetOtp = () => {
+        setOtpChallenge(null);
+        setOtp("");
+        setPassword("");
+        setError("");
+    };
+
     const canSubmit = username.trim().length > 0 && password.length > 0;
+    const resendSeconds = otpChallenge ? Math.max(0, Math.ceil((otpChallenge.resendAt - now) / 1000)) : 0;
+    const expiresSeconds = otpChallenge ? Math.max(0, Math.ceil((otpChallenge.expiresAt - now) / 1000)) : 0;
 
     return (
         <Box
@@ -186,7 +292,7 @@ export default function Login() {
             >
                 <Paper
                     component="form"
-                    onSubmit={onSubmit}
+                    onSubmit={otpChallenge ? onOtpSubmit : onSubmit}
                     elevation={0}
                     sx={{
                         width: 440,
@@ -213,10 +319,12 @@ export default function Login() {
 
                         <Box>
                             <Typography variant="h5" sx={{ fontWeight: 850, fontSize: { xs: "1.5rem", sm: "1.75rem" } }}>
-                                Chào mừng trở lại
+                                {otpChallenge ? "Xác minh đăng nhập" : "Chào mừng trở lại"}
                             </Typography>
                             <Typography color="text.secondary" sx={{ mt: 0.75, fontSize: "0.9rem" }}>
-                                Đăng nhập bằng tài khoản ERP để tiếp tục.
+                                {otpChallenge
+                                    ? `Mã OTP đã được gửi tới ${otpChallenge.maskedEmail}.`
+                                    : "Đăng nhập bằng tài khoản ERP để tiếp tục."}
                             </Typography>
                         </Box>
 
@@ -226,7 +334,7 @@ export default function Login() {
                             </Alert>
                         )}
 
-                        <TextField
+                        {!otpChallenge && <TextField
                             label="Tên đăng nhập"
                             value={username}
                             onChange={(event) => setUsername(event.target.value)}
@@ -240,9 +348,9 @@ export default function Login() {
                                     </InputAdornment>
                                 ),
                             }}
-                        />
+                        />}
 
-                        <TextField
+                        {!otpChallenge && <TextField
                             label="Mật khẩu"
                             type={showPassword ? "text" : "password"}
                             value={password}
@@ -268,9 +376,9 @@ export default function Login() {
                                     </InputAdornment>
                                 ),
                             }}
-                        />
+                        />}
 
-                        <FormControlLabel
+                        {!otpChallenge && <FormControlLabel
                             sx={{ alignSelf: "flex-start", mt: -0.5 }}
                             control={
                                 <Checkbox
@@ -279,7 +387,49 @@ export default function Login() {
                                 />
                             }
                             label={<Typography variant="body2">Ghi nhớ đăng nhập</Typography>}
-                        />
+                        />}
+
+                        {otpChallenge && (
+                            <>
+                                <TextField
+                                    label="Mã OTP"
+                                    value={otp}
+                                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                                    fullWidth
+                                    autoFocus
+                                    autoComplete="one-time-code"
+                                    inputProps={{ inputMode: "numeric", maxLength: 6, style: { fontSize: 22, letterSpacing: 8, textAlign: "center" } }}
+                                />
+                                <Typography variant="caption" color={expiresSeconds > 0 ? "text.secondary" : "error"} textAlign="center">
+                                    {expiresSeconds > 0
+                                        ? `Mã hết hạn sau ${Math.floor(expiresSeconds / 60)}:${String(expiresSeconds % 60).padStart(2, "0")}`
+                                        : "Mã OTP đã hết hạn. Hãy gửi lại mã mới."}
+                                </Typography>
+                                <FormControlLabel
+                                    sx={{ alignSelf: "flex-start", mt: -0.5 }}
+                                    control={
+                                        <Checkbox
+                                            checked={trustDevice}
+                                            onChange={(event) => setTrustDevice(event.target.checked)}
+                                        />
+                                    }
+                                    label={<Typography variant="body2">Tin cậy thiết bị này trong 7 ngày</Typography>}
+                                />
+                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                    <Button type="button" variant="text" onClick={resetOtp} disabled={loading}>
+                                        Quay lại
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="text"
+                                        onClick={onResendOtp}
+                                        disabled={loading || resendSeconds > 0}
+                                    >
+                                        {resendSeconds > 0 ? `Gửi lại sau ${resendSeconds}s` : "Gửi lại mã"}
+                                    </Button>
+                                </Stack>
+                            </>
+                        )}
 
                         <Button
                             type="submit"
@@ -287,10 +437,12 @@ export default function Login() {
                             size="large"
                             fullWidth
                             sx={{ minHeight: 48, fontSize: "0.95rem" }}
-                            disabled={loading || !canSubmit}
+                            disabled={loading || (otpChallenge ? otp.length !== 6 || expiresSeconds === 0 : !canSubmit)}
                             startIcon={loading ? <CircularProgress size={19} color="inherit" /> : null}
                         >
-                            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+                            {loading
+                                ? (otpChallenge ? "Đang xác minh..." : "Đang đăng nhập...")
+                                : (otpChallenge ? "Xác minh OTP" : "Đăng nhập")}
                         </Button>
 
                         <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ pt: 0.5 }}>
