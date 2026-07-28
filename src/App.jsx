@@ -22,12 +22,26 @@ function RequireAuth() {
   return <Shell><Outlet /></Shell>;
 }
 
+function GuestOnlyRoute() {
+  const { token } = useAuth();
+  const location = useLocation();
+
+  if (!token) return <Login />;
+
+  const requestedLocation = location.state?.from;
+  const requestedPath = requestedLocation?.pathname && requestedLocation.pathname !== "/login"
+    ? `${requestedLocation.pathname}${requestedLocation.search || ""}${requestedLocation.hash || ""}`
+    : "/dashboard";
+
+  return <Navigate to={requestedPath} replace />;
+}
+
 
 export default function App() {
   return (
     <Routes>
       {/* LOGIN CHO MỖI HỆ */}
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<GuestOnlyRoute />} />
 
       {/* =========== HỆ SỔ SÉC (layout Shell) =========== */}
       <Route element={<RequireAuth />}>

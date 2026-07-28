@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody, Typography,
     Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip,
@@ -13,6 +13,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { api } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import { EXPENSE_LABELS } from "../utils/phieu-sec";
+import DonViDialog from "../components/phieu-sec/DonViDialog";
 
 const normalizeSearch = (value = "") =>
     String(value)
@@ -158,6 +159,102 @@ const BankTransferNameGuide = () => {
     );
 };
 
+function CatalogEditDialog({
+    open,
+    isMobile,
+    editing,
+    entityLabel,
+    initialCode,
+    initialName,
+    onClose,
+    onSave,
+}) {
+    const [draft, setDraft] = useState({ code: initialCode, name: initialName });
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" fullScreen={isMobile}>
+            <DialogTitle>{editing ? "Sửa" : "Thêm"} {entityLabel}</DialogTitle>
+            <DialogContent>
+                <TextField
+                    label={`Mã ${entityLabel}`}
+                    value={draft.code}
+                    onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
+                    disabled={editing}
+                    fullWidth
+                    sx={{ mt: 1 }}
+                />
+                <TextField
+                    label={`Tên ${entityLabel}`}
+                    value={draft.name}
+                    onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                    fullWidth
+                    sx={{ mt: 2 }}
+                />
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Đóng</Button>
+                <Button variant="contained" onClick={() => onSave(draft)}>Lưu</Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+const SupplierDesktopRows = memo(function SupplierDesktopRows({ rows, onEdit, onRemove }) {
+    return rows.map((row, index) => (
+        <TableRow key={row.id} hover>
+            <TableCell>{index + 1}</TableCell>
+            <TableCell>
+                <Typography sx={{ fontWeight: 700 }}>{row.name}</Typography>
+                <Typography variant="caption" color="error.main">
+                    CK: {row.tenChuyenKhoan || "Chưa nhập tên chuyển khoản"}
+                </Typography>
+            </TableCell>
+            <TableCell>
+                <Typography sx={{ color: row.tenChuyenKhoan ? "text.primary" : "error.main", fontWeight: row.tenChuyenKhoan ? 500 : 700 }}>
+                    {row.tenChuyenKhoan || "Chưa nhập"}
+                </Typography>
+            </TableCell>
+            <TableCell>{row.stk || "—"}</TableCell>
+            <TableCell>{row.maNganHang ? `${row.maNganHang}${row.tenNganHang ? ` - ${row.tenNganHang}` : ""}` : "—"}</TableCell>
+            <TableCell>{row.chiNhanhNganHang || "—"}</TableCell>
+            <TableCell>
+                <Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngưng"} color={row.TonTai ? "success" : "default"} />
+            </TableCell>
+            <TableCell align="right">
+                <IconButton onClick={() => onEdit(row)} aria-label="Sửa"><EditIcon /></IconButton>
+                <IconButton color="error" onClick={() => onRemove(row)} aria-label="Xoá"><DeleteIcon /></IconButton>
+            </TableCell>
+        </TableRow>
+    ));
+});
+
+const SupplierMobileRows = memo(function SupplierMobileRows({ rows, onEdit, onRemove }) {
+    return rows.map((row) => (
+        <Paper key={row.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2.5 }}>
+            <Stack spacing={0.75}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 800, fontSize: "0.95rem" }} noWrap>{row.name}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>CK: {row.tenChuyenKhoan || "—"}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>{row.stk || "—"}</Typography>
+                    </Box>
+                    <Chip size="small" label={row.TonTai ? "Đang dùng" : "Ngưng"} color={row.TonTai ? "success" : "default"} />
+                </Stack>
+                <Typography variant="body2" color="text.secondary" noWrap>
+                    {row.maNganHang ? `${row.maNganHang}${row.tenNganHang ? ` - ${row.tenNganHang}` : ""}` : "—"}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                    Chi nhánh: {row.chiNhanhNganHang || "—"}
+                </Typography>
+                <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                    <IconButton size="small" onClick={() => onEdit(row)} aria-label="Sửa"><EditIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" color="error" onClick={() => onRemove(row)} aria-label="Xoá"><DeleteIcon fontSize="small" /></IconButton>
+                </Stack>
+            </Stack>
+        </Paper>
+    ));
+});
+
 function SupplierLookup() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -170,12 +267,9 @@ function SupplierLookup() {
 
     // Dialog thêm/sửa
     const [openEditDlg, setOpenEditDlg] = useState(false);
-    const [editingId, setEditingId] = useState(null); // null = thêm mới
-    const [name, setName] = useState("");
-    const [tenChuyenKhoan, setTenChuyenKhoan] = useState("");
-    const [stk, setStk] = useState("");
-    const [maNH, setMaNH] = useState("");
-    const [chiNhanhNH, setChiNhanhNH] = useState("");
+    const [editingSupplier, setEditingSupplier] = useState(null);
+    const [dialogSession, setDialogSession] = useState(0);
+    const [saving, setSaving] = useState(false);
 
     // Dialog xác nhận xoá
     const [confirming, setConfirming] = useState(null);
@@ -205,39 +299,32 @@ function SupplierLookup() {
     useEffect(() => { load(); }, [load]);
 
     const openAdd = () => {
-        setEditingId(null);
-        setName("");
-        setTenChuyenKhoan("");
-        setStk("");
-        setMaNH("");
-        setChiNhanhNH("");
+        setEditingSupplier(null);
+        setDialogSession((current) => current + 1);
         setOpenEditDlg(true);
     };
 
-    const openEdit = (r) => {
-        setEditingId(r.id);
-        setName(r.name || "");
-        setTenChuyenKhoan(r.tenChuyenKhoan || "");
-        setStk(r.stk || "");
-        setMaNH(r.maNganHang || "");
-        setChiNhanhNH(r.chiNhanhNganHang || "");
+    const openEdit = useCallback((r) => {
+        setEditingSupplier(r);
+        setDialogSession((current) => current + 1);
         setOpenEditDlg(true);
-    };
+    }, []);
 
-    const save = async () => {
-        const n = name.trim();
-        const s = stk?.trim() || null;
-        const m = maNH?.trim() || null;
-        const branch = chiNhanhNH?.trim() || null;
-        const transferName = tenChuyenKhoan?.trim() || null;
+    const save = async (draft) => {
+        const n = draft.name.trim();
+        const s = draft.accountNumber?.trim() || null;
+        const m = draft.bankCode?.trim() || null;
+        const branch = draft.branch?.trim() || null;
+        const transferName = draft.transferName?.trim() || null;
         const bankExists = banks.some((bank) => bank.MaNganHang === m);
         if (!n || !transferName || !s || !m || !bankExists) {
             showToast("Nhập đủ tên đơn vị, tên chuyển khoản, số tài khoản và chọn ngân hàng từ danh mục", "error");
             return;
         }
         try {
-            if (editingId) {
-                await api.updateDonVi(editingId, {
+            setSaving(true);
+            if (editingSupplier) {
+                await api.updateDonVi(editingSupplier.id, {
                     name: n,
                     stk: s,
                     maNganHang: m,
@@ -256,29 +343,35 @@ function SupplierLookup() {
         } catch (err) {
             const msg = err?.response?.data?.message || "Lưu đơn vị thất bại";
             showToast(msg, "error");
+        } finally {
+            setSaving(false);
         }
     };
 
-    const askRemove = (r) => setConfirming(r);
+    const askRemove = useCallback((r) => setConfirming(r), []);
 
+    const deferredQuery = useDeferredValue(query);
+    const indexedRows = useMemo(() => rows.map((row) => ({
+        row,
+        searchText: normalizeSearch([
+            row.name,
+            row.tenChuyenKhoan,
+            row.stk,
+            row.maNganHang,
+            row.tenNganHang,
+            row.chiNhanhNganHang,
+        ].filter(Boolean).join(" ")),
+    })), [rows]);
     const filteredRows = useMemo(() => {
-        const q = normalizeSearch(query.trim());
-        return rows.filter((row) => {
+        const q = normalizeSearch(deferredQuery.trim());
+        return indexedRows.filter(({ row, searchText }) => {
             const okStatus =
                 statusFilter === "all" ||
                 (statusFilter === "active" && row.TonTai) ||
                 (statusFilter === "inactive" && !row.TonTai);
-            const searchable = normalizeSearch([
-                row.name,
-                row.tenChuyenKhoan,
-                row.stk,
-                row.maNganHang,
-                row.tenNganHang,
-                row.chiNhanhNganHang,
-            ].filter(Boolean).join(" "));
-            return okStatus && (!q || searchable.includes(q));
-        });
-    }, [rows, query, statusFilter]);
+            return okStatus && (!q || searchText.includes(q));
+        }).map(({ row }) => row);
+    }, [indexedRows, deferredQuery, statusFilter]);
 
     const confirmRemove = async () => {
         if (!confirming) return;
@@ -325,7 +418,8 @@ function SupplierLookup() {
                 </TextField>
             </Stack>
 
-            <Paper sx={{ mt: 1, display: { xs: "none", md: "block" }, overflowX: "auto" }}>
+            {!isMobile ? (
+            <Paper sx={{ mt: 1, overflowX: "auto" }}>
                 <Table size="small" sx={{ minWidth: 1120 }}>
                     <TableHead>
                         <TableRow>
@@ -359,41 +453,14 @@ function SupplierLookup() {
                             </TableRow>
                         )}
 
-                        {!loading && filteredRows.map((r, idx) => (
-                            <TableRow key={r.id} hover>
-                                <TableCell>{idx + 1}</TableCell>
-                                <TableCell>
-                                    <Typography sx={{ fontWeight: 700 }}>{r.name}</Typography>
-                                    <Typography variant="caption" color="error.main">
-                                        CK: {r.tenChuyenKhoan || "Chưa nhập tên chuyển khoản"}
-                                    </Typography>
-                                </TableCell>
-                                <TableCell>
-                                    <Typography sx={{ color: r.tenChuyenKhoan ? "text.primary" : "error.main", fontWeight: r.tenChuyenKhoan ? 500 : 700 }}>
-                                        {r.tenChuyenKhoan || "Chưa nhập"}
-                                    </Typography>
-                                </TableCell>
-                                <TableCell>{r.stk || "—"}</TableCell>
-                                <TableCell>{r.maNganHang ? `${r.maNganHang}${r.tenNganHang ? ` - ${r.tenNganHang}` : ""}` : "—"}</TableCell>
-                                <TableCell>{r.chiNhanhNganHang || "—"}</TableCell>
-                                <TableCell>
-                                    <Chip
-                                        size="small"
-                                        label={r.TonTai ? "Đang dùng" : "Ngưng"}
-                                        color={r.TonTai ? "success" : "default"}
-                                    />
-                                </TableCell>
-                                <TableCell align="right">
-                                    <IconButton onClick={() => openEdit(r)} aria-label="Sửa"><EditIcon /></IconButton>
-                                    <IconButton color="error" onClick={() => askRemove(r)} aria-label="Xoá"><DeleteIcon /></IconButton>
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                        {!loading && (
+                            <SupplierDesktopRows rows={filteredRows} onEdit={openEdit} onRemove={askRemove} />
+                        )}
                     </TableBody>
                 </Table>
             </Paper>
-
-            <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
+            ) : (
+            <Stack spacing={1} sx={{ mt: 1 }}>
                 {loading && (
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                         <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
@@ -405,103 +472,30 @@ function SupplierLookup() {
                 {!loading && filteredRows.length === 0 && (
                     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>Không có dữ liệu</Paper>
                 )}
-                {!loading && filteredRows.map((r) => (
-                    <Paper key={r.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2.5 }}>
-                        <Stack spacing={0.75}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                                <Box sx={{ minWidth: 0 }}>
-                                    <Typography sx={{ fontWeight: 800, fontSize: "0.95rem" }} noWrap>{r.name}</Typography>
-                                    <Typography variant="caption" color="text.secondary" noWrap>CK: {r.tenChuyenKhoan || "—"}</Typography>
-                                    <Typography variant="caption" color="text.secondary" noWrap>{r.stk || "—"}</Typography>
-                                </Box>
-                                <Chip size="small" label={r.TonTai ? "Đang dùng" : "Ngưng"} color={r.TonTai ? "success" : "default"} />
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary" noWrap>
-                                {r.maNganHang ? `${r.maNganHang}${r.tenNganHang ? ` - ${r.tenNganHang}` : ""}` : "—"}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" noWrap>
-                                Chi nhánh: {r.chiNhanhNganHang || "—"}
-                            </Typography>
-                            <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                                <IconButton size="small" onClick={() => openEdit(r)} aria-label="Sửa"><EditIcon fontSize="small" /></IconButton>
-                                <IconButton size="small" color="error" onClick={() => askRemove(r)} aria-label="Xoá"><DeleteIcon fontSize="small" /></IconButton>
-                            </Stack>
-                        </Stack>
-                    </Paper>
-                ))}
+                {!loading && (
+                    <SupplierMobileRows rows={filteredRows} onEdit={openEdit} onRemove={askRemove} />
+                )}
             </Stack>
+            )}
 
             {/* Dialog thêm/sửa */}
-            <Dialog open={openEditDlg} onClose={() => setOpenEditDlg(false)} maxWidth="lg" fullWidth fullScreen={isMobile}>
-                <DialogTitle>{editingId ? "Sửa đơn vị" : "Thêm đơn vị"}</DialogTitle>
-                <DialogContent>
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} mt={1} alignItems="flex-start">
-                        <Stack spacing={2} sx={{ flex: 1, width: "100%", minWidth: 0 }}>
-                            <TextField
-                                autoFocus
-                                label="Tên đơn vị (VD: Phòng Kế toán)"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                fullWidth
-                            />
-                            <TextField
-                                label="Tên chuyển khoản"
-                                value={tenChuyenKhoan}
-                                onChange={(e) => setTenChuyenKhoan(e.target.value)}
-                                fullWidth
-                                required
-                                placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
-                                helperText="Xem hướng dẫn lấy tên chuyển khoản ở bên phải."
-                                FormHelperTextProps={{ sx: { color: "text.secondary" } }}
-                            />
-                            <TextField
-                                label="Số tài khoản (STK)"
-                                value={stk}
-                                onChange={(e) => setStk(e.target.value)}
-                                fullWidth
-                                required
-                                placeholder="VD: 123456789"
-                            />
-                            <Autocomplete
-                                options={banks}
-                                value={banks.find((bank) => bank.MaNganHang === maNH) || null}
-                                onChange={(_, value) => setMaNH(value?.MaNganHang || "")}
-                                getOptionLabel={(option) => option ? `${option.MaNganHang} - ${option.TenNganHang}` : ""}
-                                isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label="Ngân hàng"
-                                        required
-                                        placeholder="Chọn mã ngân hàng"
-                                    />
-                                )}
-                                fullWidth
-                            />
-                            <TextField
-                                label="Chi nhánh ngân hàng (không bắt buộc)"
-                                value={chiNhanhNH}
-                                onChange={(e) => setChiNhanhNH(e.target.value)}
-                                fullWidth
-                                placeholder="VD: Chi nhánh Hà Nội"
-                            />
-                        </Stack>
-                        <Box sx={{ width: { xs: "100%", md: 360 }, flexShrink: 0 }}>
-                            <BankTransferNameGuide />
-                        </Box>
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenEditDlg(false)}>Đóng</Button>
-                    <Button
-                        variant="contained"
-                        onClick={save}
-                        disabled={!name.trim() || !tenChuyenKhoan.trim() || !stk.trim() || !banks.some((bank) => bank.MaNganHang === maNH)}
-                    >
-                        Lưu
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <DonViDialog
+                key={`admin-don-vi-${dialogSession}`}
+                open={openEditDlg}
+                isMobile={isMobile}
+                mode={editingSupplier ? "edit" : "create"}
+                initialFields={{
+                    name: editingSupplier?.name || "",
+                    transferName: editingSupplier?.tenChuyenKhoan || "",
+                    accountNumber: editingSupplier?.stk || "",
+                    bankCode: editingSupplier?.maNganHang || "",
+                    branch: editingSupplier?.chiNhanhNganHang || "",
+                }}
+                banks={banks}
+                saving={saving}
+                onClose={() => setOpenEditDlg(false)}
+                onSave={save}
+            />
 
             {/* Dialog xác nhận xoá */}
             <Dialog open={!!confirming} onClose={() => setConfirming(null)} fullScreen={isMobile}>
@@ -540,20 +534,19 @@ function CurrencyLookup() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [code, setCode] = useState("");
-    const [name, setName] = useState("");
+    const [dialogSession, setDialogSession] = useState(0);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     const showToast = (msg, type = "success") => setToast({ open: true, msg, type });
     const load = useCallback(async () => setRows(await api.listLoaiTien()), []);
     useEffect(() => { load(); }, [load]);
 
-    const openAdd = () => { setEditing(null); setCode(""); setName(""); setOpen(true); };
-    const openEdit = (row) => { setEditing(row); setCode(row.MaLoaiTien); setName(row.TenLoaiTien); setOpen(true); };
-    const save = async () => {
+    const openAdd = () => { setEditing(null); setDialogSession((current) => current + 1); setOpen(true); };
+    const openEdit = (row) => { setEditing(row); setDialogSession((current) => current + 1); setOpen(true); };
+    const save = async (draft) => {
         try {
-            if (!code.trim() || !name.trim()) return showToast("Nhập đủ mã và tên loại tiền", "error");
-            if (editing) await api.updateLoaiTien(editing.MaLoaiTien, { tenLoaiTien: name.trim(), tonTai: editing.TonTai });
-            else await api.createLoaiTien({ maLoaiTien: code.trim(), tenLoaiTien: name.trim() });
+            if (!draft.code.trim() || !draft.name.trim()) return showToast("Nhập đủ mã và tên loại tiền", "error");
+            if (editing) await api.updateLoaiTien(editing.MaLoaiTien, { tenLoaiTien: draft.name.trim(), tonTai: editing.TonTai });
+            else await api.createLoaiTien({ maLoaiTien: draft.code.trim(), tenLoaiTien: draft.name.trim() });
             setOpen(false);
             await load();
             showToast("Đã lưu loại tiền");
@@ -574,8 +567,9 @@ function CurrencyLookup() {
         await api.updateLoaiTien(row.MaLoaiTien, { tenLoaiTien: row.TenLoaiTien, tonTai: true });
         await load();
     };
+    const deferredQuery = useDeferredValue(query);
     const filteredRows = useMemo(() => {
-        const q = normalizeSearch(query.trim());
+        const q = normalizeSearch(deferredQuery.trim());
         return rows.filter((row) => {
             const okStatus =
                 statusFilter === "all" ||
@@ -584,7 +578,7 @@ function CurrencyLookup() {
             const searchable = normalizeSearch([row.MaLoaiTien, row.TenLoaiTien].filter(Boolean).join(" "));
             return okStatus && (!q || searchable.includes(q));
         });
-    }, [rows, query, statusFilter]);
+    }, [rows, deferredQuery, statusFilter]);
 
     return (
         <Box>
@@ -633,14 +627,17 @@ function CurrencyLookup() {
                     </TableBody>
                 </Table>
             </Paper>
-            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
-                <DialogTitle>{editing ? "Sửa loại tiền" : "Thêm loại tiền"}</DialogTitle>
-                <DialogContent>
-                    <TextField label="Mã loại tiền" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} disabled={!!editing} fullWidth sx={{ mt: 1 }} />
-                    <TextField label="Tên loại tiền" value={name} onChange={(e) => setName(e.target.value)} fullWidth sx={{ mt: 2 }} />
-                </DialogContent>
-                <DialogActions><Button onClick={() => setOpen(false)}>Đóng</Button><Button variant="contained" onClick={save}>Lưu</Button></DialogActions>
-            </Dialog>
+            <CatalogEditDialog
+                key={`currency-${dialogSession}`}
+                open={open}
+                isMobile={isMobile}
+                editing={!!editing}
+                entityLabel="loại tiền"
+                initialCode={editing?.MaLoaiTien || ""}
+                initialName={editing?.TenLoaiTien || ""}
+                onClose={() => setOpen(false)}
+                onSave={save}
+            />
             <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast((t) => ({ ...t, open: false }))}>
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
             </Snackbar>
@@ -656,25 +653,23 @@ function BankLookup() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [code, setCode] = useState("");
-    const [name, setName] = useState("");
+    const [dialogSession, setDialogSession] = useState(0);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     const showToast = (msg, type = "success") => setToast({ open: true, msg, type });
     const load = useCallback(async () => setRows(await api.listNganHang()), []);
     useEffect(() => { load(); }, [load]);
 
-    const openAdd = () => { setEditing(null); setCode(""); setName(""); setOpen(true); };
+    const openAdd = () => { setEditing(null); setDialogSession((current) => current + 1); setOpen(true); };
     const openEdit = (row) => {
         setEditing(row);
-        setCode(row.MaNganHang);
-        setName(row.TenNganHang);
+        setDialogSession((current) => current + 1);
         setOpen(true);
     };
-    const save = async () => {
+    const save = async (draft) => {
         try {
-            if (!code.trim() || !name.trim()) return showToast("Nhập đủ mã và tên ngân hàng", "error");
-            if (editing) await api.updateNganHang(editing.MaNganHang, { tenNganHang: name.trim(), tonTai: editing.TonTai });
-            else await api.createNganHang({ maNganHang: code.trim(), tenNganHang: name.trim() });
+            if (!draft.code.trim() || !draft.name.trim()) return showToast("Nhập đủ mã và tên ngân hàng", "error");
+            if (editing) await api.updateNganHang(editing.MaNganHang, { tenNganHang: draft.name.trim(), tonTai: editing.TonTai });
+            else await api.createNganHang({ maNganHang: draft.code.trim(), tenNganHang: draft.name.trim() });
             setOpen(false);
             await load();
             showToast("Đã lưu ngân hàng");
@@ -695,8 +690,9 @@ function BankLookup() {
         await api.updateNganHang(row.MaNganHang, { tenNganHang: row.TenNganHang, tonTai: true });
         await load();
     };
+    const deferredQuery = useDeferredValue(query);
     const filteredRows = useMemo(() => {
-        const q = normalizeSearch(query.trim());
+        const q = normalizeSearch(deferredQuery.trim());
         return rows.filter((row) => {
             const okStatus =
                 statusFilter === "all" ||
@@ -705,7 +701,7 @@ function BankLookup() {
             const searchable = normalizeSearch([row.MaNganHang, row.TenNganHang].filter(Boolean).join(" "));
             return okStatus && (!q || searchable.includes(q));
         });
-    }, [rows, query, statusFilter]);
+    }, [rows, deferredQuery, statusFilter]);
 
     return (
         <Box>
@@ -762,14 +758,17 @@ function BankLookup() {
                     </TableBody>
                 </Table>
             </Paper>
-            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm" fullScreen={isMobile}>
-                <DialogTitle>{editing ? "Sửa ngân hàng" : "Thêm ngân hàng"}</DialogTitle>
-                <DialogContent>
-                    <TextField label="Mã ngân hàng" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} disabled={!!editing} fullWidth sx={{ mt: 1 }} />
-                    <TextField label="Tên ngân hàng" value={name} onChange={(e) => setName(e.target.value)} fullWidth sx={{ mt: 2 }} />
-                </DialogContent>
-                <DialogActions><Button onClick={() => setOpen(false)}>Đóng</Button><Button variant="contained" onClick={save}>Lưu</Button></DialogActions>
-            </Dialog>
+            <CatalogEditDialog
+                key={`bank-${dialogSession}`}
+                open={open}
+                isMobile={isMobile}
+                editing={!!editing}
+                entityLabel="ngân hàng"
+                initialCode={editing?.MaNganHang || ""}
+                initialName={editing?.TenNganHang || ""}
+                onClose={() => setOpen(false)}
+                onSave={save}
+            />
             <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast((t) => ({ ...t, open: false }))}>
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
             </Snackbar>

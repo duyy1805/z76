@@ -1,3 +1,4 @@
+import { memo, useState } from "react";
 import {
     Autocomplete,
     Box,
@@ -9,21 +10,23 @@ import {
     Stack,
     TextField,
 } from "@mui/material";
-import { BufferedTextField } from "./fields/PaymentFields";
 import BankTransferGuide from "./fields/BankTransferGuide";
 
-export default function DonViDialog({
+const DonViDialog = memo(function DonViDialog({
     open,
     isMobile,
     mode,
-    fields,
+    initialFields,
     banks,
     saving,
-    onFieldChange,
     onClose,
     onSave,
 }) {
     const isEdit = mode === "edit";
+    const [draft, setDraft] = useState(initialFields);
+    const setField = (field, value) => {
+        setDraft((current) => current[field] === value ? current : { ...current, [field]: value });
+    };
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth fullScreen={isMobile}>
@@ -31,43 +34,43 @@ export default function DonViDialog({
             <DialogContent>
                 <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} mt={1} alignItems="flex-start">
                     <Stack spacing={2} sx={{ flex: 1, width: "100%", minWidth: 0 }}>
-                        <BufferedTextField
+                        <TextField
                             autoFocus
                             label="Tên đơn vị hưởng thụ (tên hoá đơn)"
-                            value={fields.name}
-                            onCommit={(value) => onFieldChange("name", value)}
+                            value={draft.name}
+                            onChange={(event) => setField("name", event.target.value)}
                             fullWidth
                             required
                         />
-                        <BufferedTextField
+                        <TextField
                             label="Tên chuyển khoản - IPay"
-                            value={fields.transferName}
-                            onCommit={(value) => onFieldChange("transferName", value)}
+                            value={draft.transferName}
+                            onChange={(event) => setField("transferName", event.target.value)}
                             fullWidth
                             required
                             placeholder="Tên dùng ở cột Beneficiary Name khi chuyển tiền"
                             helperText="Xem hướng dẫn lấy tên chuyển khoản ở bên phải."
                         />
-                        <BufferedTextField
+                        <TextField
                             label="Số tài khoản (STK)"
-                            value={fields.accountNumber}
-                            onCommit={(value) => onFieldChange("accountNumber", value)}
+                            value={draft.accountNumber}
+                            onChange={(event) => setField("accountNumber", event.target.value)}
                             fullWidth
                             required
                         />
                         <Autocomplete
                             options={banks}
-                            value={banks.find((bank) => bank.MaNganHang === fields.bankCode) || null}
-                            onChange={(_, value) => onFieldChange("bankCode", value?.MaNganHang || "")}
+                            value={banks.find((bank) => bank.MaNganHang === draft.bankCode) || null}
+                            onChange={(_, value) => setField("bankCode", value?.MaNganHang || "")}
                             getOptionLabel={(option) => option ? `${option.MaNganHang} - ${option.TenNganHang}` : ""}
                             isOptionEqualToValue={(option, value) => option.MaNganHang === value.MaNganHang}
                             renderInput={(params) => <TextField {...params} label="Ngân hàng" required placeholder="Chọn mã ngân hàng" />}
                             fullWidth
                         />
-                        <BufferedTextField
+                        <TextField
                             label="Chi nhánh ngân hàng (không bắt buộc)"
-                            value={fields.branch}
-                            onCommit={(value) => onFieldChange("branch", value)}
+                            value={draft.branch}
+                            onChange={(event) => setField("branch", event.target.value)}
                             fullWidth
                         />
                     </Stack>
@@ -80,13 +83,13 @@ export default function DonViDialog({
                 <Button onClick={onClose}>Đóng</Button>
                 <Button
                     variant="contained"
-                    onClick={onSave}
+                    onClick={() => onSave(draft)}
                     disabled={
                         saving ||
-                        !fields.name.trim() ||
-                        !fields.transferName.trim() ||
-                        !fields.accountNumber.trim() ||
-                        !banks.some((bank) => bank.MaNganHang === fields.bankCode)
+                        !draft.name.trim() ||
+                        !draft.transferName.trim() ||
+                        !draft.accountNumber.trim() ||
+                        !banks.some((bank) => bank.MaNganHang === draft.bankCode)
                     }
                 >
                     {saving ? "Đang lưu..." : (isEdit ? "Cập nhật" : "Lưu")}
@@ -94,4 +97,6 @@ export default function DonViDialog({
             </DialogActions>
         </Dialog>
     );
-}
+});
+
+export default DonViDialog;

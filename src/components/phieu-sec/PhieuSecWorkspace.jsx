@@ -32,7 +32,7 @@ import { NumericFormat } from "react-number-format";
 
 import { api } from "../../lib/api";
 import { useAuth } from "../../store/useAuth";
-import { BufferedTextField, PaymentAmountField, PaymentContentField } from "./fields/PaymentFields";
+import { BufferedTextField } from "./fields/PaymentFields";
 import BankTransferGuide from "./fields/BankTransferGuide";
 import PhieuSecActions from "./PhieuSecActions";
 import WorkflowDialogs from "./WorkflowDialogs";
@@ -73,6 +73,8 @@ const logSoSec = (...args) => {
     if (DEBUG_SOSEC) console.log("[SoSec][PhieuSec]", ...args);
 };
 const INACTIVE_DON_VI_MESSAGE = "Đơn vị hưởng thụ đã ngưng sử dụng hoặc không tồn tại";
+const getDefaultDateFrom = () => dayjs().subtract(14, "day").startOf("day");
+const getDefaultDateTo = () => dayjs().endOf("day");
 const DetailField = ({ label, children, sx }) => (
     <Box sx={{ minWidth: 0, minHeight: 56, ...sx }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
@@ -237,28 +239,18 @@ export default function PhieuSec({ mode = "VND" }) {
     const [openAddDv, setOpenAddDv] = useState(false);
     const [dvDialogMode, setDvDialogMode] = useState("create");
     const [editingDonViId, setEditingDonViId] = useState(null);
-    const [dvName, setDvName] = useState("");
-    const [dvTenChuyenKhoan, setDvTenChuyenKhoan] = useState("");
-    const [dvStk, setDvStk] = useState("");
-    const [dvMaNH, setDvMaNH] = useState("");
-    const [dvChiNhanhNH, setDvChiNhanhNH] = useState("");
+    const [donViDialogSession, setDonViDialogSession] = useState(0);
+    const [donViInitialFields, setDonViInitialFields] = useState({
+        name: "",
+        transferName: "",
+        accountNumber: "",
+        bankCode: "",
+        branch: "",
+    });
     const [savingDv, setSavingDv] = useState(false);
     // form tạo
-    const [form, setForm] = useState({
-        noiDung: "",
-        donViId: null,
-        soTien: "",
-        nguoiDangKyId: user?.id || null,
-        ghiChu: "",
-        maLoaiChiPhi: "Khac",
-        maLoaiTien: isNgoaiTe ? "" : "VND",
-    });
-    const handleNoiDungCommit = useCallback((value) => {
-        setForm((current) => current.noiDung === value ? current : { ...current, noiDung: value });
-    }, []);
-    const handleSoTienCommit = useCallback((value) => {
-        setForm((current) => current.soTien === value ? current : { ...current, soTien: value });
-    }, []);
+    const [formDialogSession, setFormDialogSession] = useState(0);
+    const [selectedDonViId, setSelectedDonViId] = useState(null);
 
     // nhập lệnh chi
     const [newLenhChi, setNewLenhChi] = useState("");
@@ -270,8 +262,8 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qDonVi, setQDonVi] = useState(""); // text input cho đơn vị
     const [qNguoiTao, setQNguoiTao] = useState("");
     const [qDonViNguoiTao, setQDonViNguoiTao] = useState("");
-    const [qFrom, setQFrom] = useState(null); // dayjs | null
-    const [qTo, setQTo] = useState(null);     // dayjs | null
+    const [qFrom, setQFrom] = useState(getDefaultDateFrom);
+    const [qTo, setQTo] = useState(getDefaultDateTo);
     const [qCompletedFrom, setQCompletedFrom] = useState(null);
     const [qCompletedTo, setQCompletedTo] = useState(null);
     const [qTrangThai, setQTrangThai] = useState([]);
@@ -341,7 +333,8 @@ export default function PhieuSec({ mode = "VND" }) {
         role,
         activeTab,
         canManageLenhChi,
-        setForm,
+        dateFrom: qFrom?.format("YYYY-MM-DD") || getDefaultDateFrom().format("YYYY-MM-DD"),
+        dateTo: qTo?.format("YYYY-MM-DD") || getDefaultDateTo().format("YYYY-MM-DD"),
         log: logSoSec,
     });
 
@@ -404,61 +397,58 @@ export default function PhieuSec({ mode = "VND" }) {
     const getDonViByPhieu = useCallback((p) => donvis.find((d) => isSameId(d.id, p?.donViId)), [donvis]);
     const getTenNganHang = useCallback((p) => p?.tenNganHangHuongThu || getDonViByPhieu(p)?.tenNganHang || null, [getDonViByPhieu]);
     const getTenChuyenKhoan = useCallback((p) => p?.tenChuyenKhoanHuongThu || getDonViByPhieu(p)?.tenChuyenKhoan || p?.tenDonVi || getDonViByPhieu(p)?.name || null, [getDonViByPhieu]);
+    const initialForm = useMemo(() => ({
+        noiDung: editingPhieu?.noiDung || "",
+        donViId: editingPhieu?.donViId || donvis[0]?.id || null,
+        soTien: editingPhieu ? Number(editingPhieu.soTien || 0) : "",
+        nguoiDangKyId: editingPhieu?.nguoiDangKyId || user?.id || null,
+        ghiChu: editingPhieu?.ghiChu || "",
+        maLoaiChiPhi: editingPhieu?.maLoaiChiPhi || "Khac",
+        maLoaiTien: editingPhieu?.maLoaiTien || (isNgoaiTe ? "" : "VND"),
+    }), [editingPhieu, donvis, user?.id, isNgoaiTe]);
 
-    const resetForm = () => {
-        setForm({
-            noiDung: "",
-            donViId: donvis[0]?.id || null,
-            soTien: "",
-            nguoiDangKyId: user?.id || null,
-            ghiChu: "",
-            maLoaiChiPhi: "Khac",
-            maLoaiTien: isNgoaiTe ? "" : "VND",
-        });
+    const closeFormDialog = useCallback(() => {
+        setOpenCreate(false);
         setEditingPhieu(null);
-    };
+        setSelectedDonViId(null);
+    }, []);
 
-    const openCreateDialog = () => {
-        resetForm();
+    const openCreateDialog = useCallback(() => {
+        setEditingPhieu(null);
+        setSelectedDonViId(null);
+        setFormDialogSession((current) => current + 1);
         setOpenCreate(true);
-    };
+    }, []);
 
     const openEditDialog = (phieu, e) => {
         e?.stopPropagation();
         if (!canEdit(phieu)) return;
         setEditingPhieu(phieu);
-        setForm({
-            noiDung: phieu.noiDung || "",
-            donViId: phieu.donViId || null,
-            soTien: Number(phieu.soTien || 0),
-            nguoiDangKyId: phieu.nguoiDangKyId || null,
-            ghiChu: phieu.ghiChu || "",
-            maLoaiChiPhi: phieu.maLoaiChiPhi || "Khac",
-            maLoaiTien: phieu.maLoaiTien || (isNgoaiTe ? "" : "VND"),
-        });
+        setSelectedDonViId(null);
+        setFormDialogSession((current) => current + 1);
         setOpenCreate(true);
     };
 
-    const submitCreate = async () => {
+    const submitCreate = async (formDraft) => {
         try {
-            const noiDungError = validatePaymentContent(form.noiDung);
+            const noiDungError = validatePaymentContent(formDraft.noiDung);
             if (noiDungError) throw new Error(noiDungError);
-            if (!form.donViId) throw new Error(INACTIVE_DON_VI_MESSAGE);
-            if (!donvis.some((item) => isSameId(item.id, form.donViId))) throw new Error(INACTIVE_DON_VI_MESSAGE);
-            if (!form.soTien || Number(form.soTien) <= 0) throw new Error("Số tiền > 0");
-            if (isNgoaiTe && !form.maLoaiTien) throw new Error("Chọn loại tiền ngoại tệ");
+            if (!formDraft.donViId) throw new Error(INACTIVE_DON_VI_MESSAGE);
+            if (!donvis.some((item) => isSameId(item.id, formDraft.donViId))) throw new Error(INACTIVE_DON_VI_MESSAGE);
+            if (!formDraft.soTien || Number(formDraft.soTien) <= 0) throw new Error("Số tiền > 0");
+            if (isNgoaiTe && !formDraft.maLoaiTien) throw new Error("Chọn loại tiền ngoại tệ");
 
             const payload = {
                 ngay: new Date().toISOString().slice(0, 10),
-                noiDung: form.noiDung.trim(),
-                donViId: form.donViId,
-                soTien: Number(form.soTien),
+                noiDung: formDraft.noiDung.trim(),
+                donViId: formDraft.donViId,
+                soTien: Number(formDraft.soTien),
                 nguoiDangKyId: user?.id,
                 idDonVi: user?.idDonVi,
-                ghiChu: form.ghiChu,
+                ghiChu: formDraft.ghiChu,
                 loaiSec: mode,
-                maLoaiChiPhi: isNgoaiTe ? "Khac" : form.maLoaiChiPhi,
-                maLoaiTien: isNgoaiTe ? form.maLoaiTien : "VND",
+                maLoaiChiPhi: isNgoaiTe ? "Khac" : formDraft.maLoaiChiPhi,
+                maLoaiTien: isNgoaiTe ? formDraft.maLoaiTien : "VND",
             };
 
             logSoSec("create:payload", payload, { role, user });
@@ -469,8 +459,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 logSoSec("create:result", created);
             }
 
-            setOpenCreate(false);
-            resetForm();
+            closeFormDialog();
             await load();
             setToast({ open: true, msg: editingPhieu ? "Đã cập nhật phiếu nháp" : "Đã lưu nháp", type: "success" });
         } catch (e) {
@@ -481,37 +470,43 @@ export default function PhieuSec({ mode = "VND" }) {
     const openAddDonVi = () => {
         setDvDialogMode("create");
         setEditingDonViId(null);
-        setDvName("");
-        setDvTenChuyenKhoan("");
-        setDvStk("");
-        setDvMaNH("");
-        setDvChiNhanhNH("");
+        setDonViInitialFields({
+            name: "",
+            transferName: "",
+            accountNumber: "",
+            bankCode: "",
+            branch: "",
+        });
+        setDonViDialogSession((current) => current + 1);
         setOpenAddDv(true);
     };
 
-    const openEditDonVi = () => {
-        if (!editingPhieu || !canEdit(editingPhieu) || !form.donViId) return;
-        const selected = donvis.find((item) => isSameId(item.id, form.donViId));
+    const openEditDonVi = (donViId) => {
+        if (!editingPhieu || !canEdit(editingPhieu) || !donViId) return;
+        const selected = donvis.find((item) => isSameId(item.id, donViId));
         if (!selected) {
             setToast({ open: true, msg: "Không tìm thấy đơn vị hưởng thụ để sửa", type: "error" });
             return;
         }
         setDvDialogMode("edit");
         setEditingDonViId(selected.id);
-        setDvName(selected.name || "");
-        setDvTenChuyenKhoan(selected.tenChuyenKhoan || "");
-        setDvStk(selected.stk || "");
-        setDvMaNH(selected.maNganHang || "");
-        setDvChiNhanhNH(selected.chiNhanhNganHang || "");
+        setDonViInitialFields({
+            name: selected.name || "",
+            transferName: selected.tenChuyenKhoan || "",
+            accountNumber: selected.stk || "",
+            bankCode: selected.maNganHang || "",
+            branch: selected.chiNhanhNganHang || "",
+        });
+        setDonViDialogSession((current) => current + 1);
         setOpenAddDv(true);
     };
 
-    const saveDonVi = async () => {
-        const n = dvName.trim();
-        const transferName = dvTenChuyenKhoan.trim() || null;
-        const s = dvStk?.trim();
-        const m = dvMaNH?.trim();
-        const branch = dvChiNhanhNH?.trim() || null;
+    const saveDonVi = async (draft) => {
+        const n = draft.name.trim();
+        const transferName = draft.transferName.trim() || null;
+        const s = draft.accountNumber?.trim();
+        const m = draft.bankCode?.trim();
+        const branch = draft.branch?.trim() || null;
         const selectedBank = banks.find((bank) => bank.MaNganHang === m);
         if (!n || !transferName || !s || !m || !selectedBank) {
             setToast({ open: true, msg: "Nhập đủ tên đơn vị, tên chuyển khoản, số tài khoản và mã ngân hàng", type: "error" });
@@ -554,7 +549,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     maNganHangHuongThu: m,
                     chiNhanhNganHangHuongThu: branch,
                 } : current);
-                setForm((f) => ({ ...f, donViId: editingDonViId }));
+                setSelectedDonViId(editingDonViId);
                 setToast({ open: true, msg: "Đã cập nhật đơn vị", type: "success" });
                 await load();
             } else {
@@ -565,7 +560,7 @@ export default function PhieuSec({ mode = "VND" }) {
                     const next = [...(list || []), createdWithBank];
                     return next.sort((a, b) => String(a.name).localeCompare(String(b.name), "vi"));
                 });
-                setForm((f) => ({ ...f, donViId: created.id }));
+                setSelectedDonViId(created.id);
                 setOpenAddDv(false);
                 setToast({ open: true, msg: "Đã thêm đơn vị", type: "success" });
             }
@@ -1024,12 +1019,14 @@ export default function PhieuSec({ mode = "VND" }) {
                             />
                         </LocalizationProvider>
 
-                        <Tooltip title="Xoá bộ lọc ngày">
+                        <Tooltip title="Về 14 ngày gần nhất">
                             <span>
                                 <IconButton
-                                    onClick={() => { setQFrom(null); setQTo(null); }}
-                                    disabled={!qFrom && !qTo}
-                                    aria-label="Xoá bộ lọc ngày"
+                                    onClick={() => {
+                                        setQFrom(getDefaultDateFrom());
+                                        setQTo(getDefaultDateTo());
+                                    }}
+                                    aria-label="Về 14 ngày gần nhất"
                                     sx={{
                                         width: 38,
                                         height: 38,
@@ -1209,8 +1206,8 @@ export default function PhieuSec({ mode = "VND" }) {
                                 size="small"
                                 variant="text"
                                 onClick={() => {
-                                    setQFrom(null);
-                                    setQTo(null);
+                                    setQFrom(getDefaultDateFrom());
+                                    setQTo(getDefaultDateTo());
                                     setQMobile("");
                                     setQTrangThai([]);
                                     setQLoaiChiPhi("");
@@ -1335,618 +1332,620 @@ export default function PhieuSec({ mode = "VND" }) {
 
             {!filteredRows ? null : (
                 <>
-                    <Box
-                        sx={{
-                            display: { xs: "none", md: "block" },
-                            flex: 1,
-                            minHeight: 0,
-                            overflow: "hidden",
-                        }}
-                    >
-                        <TableContainer
-                            component={Paper}
+                    {!isMobile ? (
+                        <Box
                             sx={{
-                                maxWidth: "100%",
-                                height: "100%",
-                                maxHeight: "none",
-                                overflow: "auto",
-                                border: (theme) => `1px solid ${theme.palette.divider}`,
-                                borderRadius: 1.25,
-                                boxShadow: "0 1px 3px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.04)",
-                                "& .MuiTableCell-head": {
-                                    py: 1.4,
-                                    whiteSpace: "nowrap",
-                                    borderBottom: "1px solid #D0D5DD",
-                                },
-                                "& .MuiTableCell-body": {
-                                    py: 1.15,
-                                    fontSize: "0.83rem",
-                                    lineHeight: 1.45,
-                                },
-                                "& .MuiTableRow-root:hover .MuiTableCell-body": {
-                                    bgcolor: "#F7FAFF",
-                                },
+                                flex: 1,
+                                minHeight: 0,
+                                overflow: "hidden",
                             }}
                         >
-                            <Table
-                                size="small"
-                                stickyHeader
+                            <TableContainer
+                                component={Paper}
                                 sx={{
-                                    minWidth: 2280,
-                                    "& .MuiTableCell-root:first-of-type": { pl: 2 },
-                                    "& .MuiTableCell-root:last-of-type": { pr: 1.5 },
+                                    maxWidth: "100%",
+                                    height: "100%",
+                                    maxHeight: "none",
+                                    overflow: "auto",
+                                    border: (theme) => `1px solid ${theme.palette.divider}`,
+                                    borderRadius: 1.25,
+                                    boxShadow: "0 1px 3px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.04)",
+                                    "& .MuiTableCell-head": {
+                                        py: 1.4,
+                                        whiteSpace: "nowrap",
+                                        borderBottom: "1px solid #D0D5DD",
+                                    },
+                                    "& .MuiTableCell-body": {
+                                        py: 1.15,
+                                        fontSize: "0.83rem",
+                                        lineHeight: 1.45,
+                                    },
+                                    "& .MuiTableRow-root:hover .MuiTableCell-body": {
+                                        bgcolor: "#F7FAFF",
+                                    },
                                 }}
                             >
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>STT</TableCell>
+                                <Table
+                                    size="small"
+                                    stickyHeader
+                                    sx={{
+                                        minWidth: 2280,
+                                        "& .MuiTableCell-root:first-of-type": { pl: 2 },
+                                        "& .MuiTableCell-root:last-of-type": { pr: 1.5 },
+                                    }}
+                                >
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>STT</TableCell>
 
-                                        {/* Mã sổ séc + filter icon */}
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Mã sổ séc</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => setAnchorMa(e.currentTarget)}
-                                                    aria-label="Lọc theo Mã sổ séc"
-                                                    color={qMa ? "primary" : "default"}
-                                                >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-
-                                            <Popover
-                                                open={Boolean(anchorMa)}
-                                                anchorEl={anchorMa}
-                                                onClose={() => setAnchorMa(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 280 } }}
-                                            >
-                                                <Stack spacing={1}>
-                                                    <BufferedTextField
-                                                        label="Mã sổ séc"
-                                                        placeholder="VD: SS-1024 hoặc ABC123"
-                                                        value={qMa}
-                                                        onCommit={setQMa}
-                                                        autoFocus
+                                            {/* Mã sổ séc + filter icon */}
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Mã sổ séc</span>
+                                                    <IconButton
                                                         size="small"
-                                                    />
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {!!qMa && (
-                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("ma")} size="small">
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button variant="contained" size="small" onClick={() => setAnchorMa(null)}>
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
-                                                </Stack>
-                                            </Popover>
-                                        </TableCell>
-
-                                        {/* Ngày */}
-                                        <TableCell>Ngày</TableCell>
-
-                                        {/* Nội dung + filter icon */}
-                                        <TableCell sx={{ minWidth: 240 }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Nội dung</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => setAnchorNoiDung(e.currentTarget)}
-                                                    aria-label="Lọc theo Nội dung"
-                                                    color={qNoiDung ? "primary" : "default"}
-                                                >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-
-                                            <Popover
-                                                open={Boolean(anchorNoiDung)}
-                                                anchorEl={anchorNoiDung}
-                                                onClose={() => setAnchorNoiDung(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 360 } }}
-                                            >
-                                                <Stack spacing={1}>
-                                                    <BufferedTextField
-                                                        label="Nội dung"
-                                                        placeholder="Nhập từ khoá…"
-                                                        value={qNoiDung}
-                                                        onCommit={setQNoiDung}
-                                                        autoFocus
-                                                        size="small"
-                                                    />
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Tìm không dấu, chứa chuỗi.
-                                                    </Typography>
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {!!qNoiDung && (
-                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nd")} size="small">
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button variant="contained" size="small" onClick={() => setAnchorNoiDung(null)}>
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
-                                                </Stack>
-                                            </Popover>
-                                        </TableCell>
-
-                                        {/* Đơn vị (TextField filter) */}
-                                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 240 }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Đơn vị</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => setAnchorDonVi(e.currentTarget)}
-                                                    aria-label="Lọc theo Đơn vị"
-                                                    color={qDonVi ? "primary" : "default"}
-                                                >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-
-                                            <Popover
-                                                open={Boolean(anchorDonVi)}
-                                                anchorEl={anchorDonVi}
-                                                onClose={() => setAnchorDonVi(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                            >
-                                                <Stack spacing={1}>
-                                                    <BufferedTextField
-                                                        label="Tên đơn vị"
-                                                        placeholder="Nhập từ khoá đơn vị…"
-                                                        value={qDonVi}
-                                                        onCommit={setQDonVi}
-                                                        autoFocus
-                                                        size="small"
-                                                    />
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Tìm theo tên, STK, mã ngân hàng hoặc chi nhánh.
-                                                    </Typography>
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {!!qDonVi && (
-                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("dv")} size="small">
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button variant="contained" size="small" onClick={() => setAnchorDonVi(null)}>
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
-                                                </Stack>
-                                            </Popover>
-                                        </TableCell>
-
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>Số tài khoản</TableCell>
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>Mã ngân hàng</TableCell>
-                                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>Tên ngân hàng</TableCell>
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>Chi nhánh ngân hàng</TableCell>
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Người tạo</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => setAnchorNguoiTao(e.currentTarget)}
-                                                    aria-label="Lọc theo Người tạo"
-                                                    color={qNguoiTao ? "primary" : "default"}
-                                                >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-
-                                            <Popover
-                                                open={Boolean(anchorNguoiTao)}
-                                                anchorEl={anchorNguoiTao}
-                                                onClose={() => setAnchorNguoiTao(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                            >
-                                                <Stack spacing={1}>
-                                                    <BufferedTextField
-                                                        label="Tên người tạo"
-                                                        placeholder="Nhập tên người tạo…"
-                                                        value={qNguoiTao}
-                                                        onCommit={setQNguoiTao}
-                                                        autoFocus
-                                                        size="small"
-                                                    />
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Tìm theo tên không dấu, chứa chuỗi.
-                                                    </Typography>
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {!!qNguoiTao && (
-                                                            <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nguoiTao")} size="small">
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button variant="contained" size="small" onClick={() => setAnchorNguoiTao(null)}>
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
-                                                </Stack>
-                                            </Popover>
-                                        </TableCell>
-
-                                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 190 }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Đơn vị người tạo</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(event) => setAnchorDonViNguoiTao(event.currentTarget)}
-                                                    aria-label="Lọc theo đơn vị người tạo"
-                                                    color={qDonViNguoiTao ? "primary" : "default"}
-                                                >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-
-                                            <Popover
-                                                open={Boolean(anchorDonViNguoiTao)}
-                                                anchorEl={anchorDonViNguoiTao}
-                                                onClose={() => setAnchorDonViNguoiTao(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                            >
-                                                <Stack spacing={1}>
-                                                    <BufferedTextField
-                                                        label="Đơn vị người tạo"
-                                                        placeholder="Nhập tên đơn vị người tạo…"
-                                                        value={qDonViNguoiTao}
-                                                        onCommit={setQDonViNguoiTao}
-                                                        autoFocus
-                                                        size="small"
-                                                    />
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Tìm theo tên không dấu, chứa chuỗi.
-                                                    </Typography>
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {!!qDonViNguoiTao && (
-                                                            <Button
-                                                                startIcon={<ClearIcon />}
-                                                                onClick={() => clearFilter("donViNguoiTao")}
-                                                                size="small"
-                                                            >
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button
-                                                            variant="contained"
-                                                            size="small"
-                                                            onClick={() => setAnchorDonViNguoiTao(null)}
-                                                        >
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
-                                                </Stack>
-                                            </Popover>
-                                        </TableCell>
-
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Loại chi phí</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(event) => setAnchorLoaiChiPhi(event.currentTarget)}
-                                                    aria-label="Lọc theo loại chi phí"
-                                                    color={qLoaiChiPhi ? "primary" : "default"}
-                                                >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-                                            <Popover
-                                                open={Boolean(anchorLoaiChiPhi)}
-                                                anchorEl={anchorLoaiChiPhi}
-                                                onClose={() => setAnchorLoaiChiPhi(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 260 } }}
-                                            >
-                                                <Stack spacing={1.25}>
-                                                    <TextField
-                                                        select
-                                                        fullWidth
-                                                        size="small"
-                                                        label="Loại chi phí"
-                                                        value={qLoaiChiPhi}
-                                                        onChange={(event) => setQLoaiChiPhi(event.target.value)}
+                                                        onClick={(e) => setAnchorMa(e.currentTarget)}
+                                                        aria-label="Lọc theo Mã sổ séc"
+                                                        color={qMa ? "primary" : "default"}
                                                     >
-                                                        <MenuItem value="">Tất cả</MenuItem>
-                                                        {Object.entries(EXPENSE_LABELS).map(([value, label]) => (
-                                                            <MenuItem key={value} value={value}>{label}</MenuItem>
-                                                        ))}
-                                                    </TextField>
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {qLoaiChiPhi && (
-                                                            <Button
-                                                                startIcon={<ClearIcon />}
-                                                                onClick={() => setQLoaiChiPhi("")}
-                                                                size="small"
-                                                            >
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button
-                                                            variant="contained"
-                                                            size="small"
-                                                            onClick={() => setAnchorLoaiChiPhi(null)}
-                                                        >
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
                                                 </Stack>
-                                            </Popover>
-                                        </TableCell>
-                                        <TableCell>Loại tiền</TableCell>
-                                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
-                                                <span>Số tiền</span>
-                                                <AmountFilterButton
-                                                    operator={qSoTienOperator}
-                                                    amount={qSoTien}
-                                                    onApply={(operator, amount) => {
-                                                        setQSoTienOperator(operator);
-                                                        setQSoTien(amount);
-                                                    }}
-                                                    onClear={() => clearFilter("soTien")}
-                                                />
-                                            </Stack>
-                                        </TableCell>
-                                        <TableCell align="right">Mã lệnh chi</TableCell>
-                                        <TableCell sx={{ whiteSpace: "nowrap" }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Ngày hoàn thành (lệnh chi)</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => setAnchorCompleted(e.currentTarget)}
-                                                    aria-label="Lọc theo ngày hoàn thành lệnh chi"
-                                                    color={qCompletedFrom || qCompletedTo ? "primary" : "default"}
+
+                                                <Popover
+                                                    open={Boolean(anchorMa)}
+                                                    anchorEl={anchorMa}
+                                                    onClose={() => setAnchorMa(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 280 } }}
                                                 >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
-                                            </Stack>
-                                            <Popover
-                                                open={Boolean(anchorCompleted)}
-                                                anchorEl={anchorCompleted}
-                                                onClose={() => setAnchorCompleted(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 300 } }}
-                                            >
-                                                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                                                    <Stack spacing={1.25}>
-                                                        <DatePicker
-                                                            label="Từ ngày"
-                                                            value={qCompletedFrom}
-                                                            onChange={setQCompletedFrom}
-                                                            slotProps={{ textField: { size: "small" } }}
-                                                        />
-                                                        <DatePicker
-                                                            label="Đến ngày"
-                                                            value={qCompletedTo}
-                                                            onChange={setQCompletedTo}
-                                                            slotProps={{ textField: { size: "small" } }}
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Mã sổ séc"
+                                                            placeholder="VD: SS-1024 hoặc ABC123"
+                                                            value={qMa}
+                                                            onCommit={setQMa}
+                                                            autoFocus
+                                                            size="small"
                                                         />
                                                         <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                            {(qCompletedFrom || qCompletedTo) && (
-                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("completed")} size="small">
-                                                                    Xóa
+                                                            {!!qMa && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("ma")} size="small">
+                                                                    Xoá
                                                                 </Button>
                                                             )}
-                                                            <Button variant="contained" size="small" onClick={() => setAnchorCompleted(null)}>
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorMa(null)}>
                                                                 OK
                                                             </Button>
                                                         </Stack>
                                                     </Stack>
-                                                </LocalizationProvider>
-                                            </Popover>
-                                        </TableCell>
-                                        <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
-                                            <Stack direction="row" spacing={0.5} alignItems="center">
-                                                <span>Trạng thái</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => setAnchorTrangThai(e.currentTarget)}
-                                                    aria-label="Lọc theo Trạng thái"
-                                                    color={qTrangThai.length > 0 ? "primary" : "default"}
+                                                </Popover>
+                                            </TableCell>
+
+                                            {/* Ngày */}
+                                            <TableCell>Ngày</TableCell>
+
+                                            {/* Nội dung + filter icon */}
+                                            <TableCell sx={{ minWidth: 240 }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Nội dung</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorNoiDung(e.currentTarget)}
+                                                        aria-label="Lọc theo Nội dung"
+                                                        color={qNoiDung ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+
+                                                <Popover
+                                                    open={Boolean(anchorNoiDung)}
+                                                    anchorEl={anchorNoiDung}
+                                                    onClose={() => setAnchorNoiDung(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 360 } }}
                                                 >
-                                                    <FilterListRoundedIcon fontSize="inherit" />
-                                                </IconButton>
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Nội dung"
+                                                            placeholder="Nhập từ khoá…"
+                                                            value={qNoiDung}
+                                                            onCommit={setQNoiDung}
+                                                            autoFocus
+                                                            size="small"
+                                                        />
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Tìm không dấu, chứa chuỗi.
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {!!qNoiDung && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nd")} size="small">
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorNoiDung(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+
+                                            {/* Đơn vị (TextField filter) */}
+                                            <TableCell sx={{ whiteSpace: "nowrap", minWidth: 240 }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Đơn vị</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorDonVi(e.currentTarget)}
+                                                        aria-label="Lọc theo Đơn vị"
+                                                        color={qDonVi ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+
+                                                <Popover
+                                                    open={Boolean(anchorDonVi)}
+                                                    anchorEl={anchorDonVi}
+                                                    onClose={() => setAnchorDonVi(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Tên đơn vị"
+                                                            placeholder="Nhập từ khoá đơn vị…"
+                                                            value={qDonVi}
+                                                            onCommit={setQDonVi}
+                                                            autoFocus
+                                                            size="small"
+                                                        />
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Tìm theo tên, STK, mã ngân hàng hoặc chi nhánh.
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {!!qDonVi && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("dv")} size="small">
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorDonVi(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>Số tài khoản</TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>Mã ngân hàng</TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>Tên ngân hàng</TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>Chi nhánh ngân hàng</TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Người tạo</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorNguoiTao(e.currentTarget)}
+                                                        aria-label="Lọc theo Người tạo"
+                                                        color={qNguoiTao ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+
+                                                <Popover
+                                                    open={Boolean(anchorNguoiTao)}
+                                                    anchorEl={anchorNguoiTao}
+                                                    onClose={() => setAnchorNguoiTao(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Tên người tạo"
+                                                            placeholder="Nhập tên người tạo…"
+                                                            value={qNguoiTao}
+                                                            onCommit={setQNguoiTao}
+                                                            autoFocus
+                                                            size="small"
+                                                        />
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Tìm theo tên không dấu, chứa chuỗi.
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {!!qNguoiTao && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nguoiTao")} size="small">
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorNguoiTao(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+
+                                            <TableCell sx={{ whiteSpace: "nowrap", minWidth: 190 }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Đơn vị người tạo</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(event) => setAnchorDonViNguoiTao(event.currentTarget)}
+                                                        aria-label="Lọc theo đơn vị người tạo"
+                                                        color={qDonViNguoiTao ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+
+                                                <Popover
+                                                    open={Boolean(anchorDonViNguoiTao)}
+                                                    anchorEl={anchorDonViNguoiTao}
+                                                    onClose={() => setAnchorDonViNguoiTao(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Đơn vị người tạo"
+                                                            placeholder="Nhập tên đơn vị người tạo…"
+                                                            value={qDonViNguoiTao}
+                                                            onCommit={setQDonViNguoiTao}
+                                                            autoFocus
+                                                            size="small"
+                                                        />
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Tìm theo tên không dấu, chứa chuỗi.
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {!!qDonViNguoiTao && (
+                                                                <Button
+                                                                    startIcon={<ClearIcon />}
+                                                                    onClick={() => clearFilter("donViNguoiTao")}
+                                                                    size="small"
+                                                                >
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                variant="contained"
+                                                                size="small"
+                                                                onClick={() => setAnchorDonViNguoiTao(null)}
+                                                            >
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Loại chi phí</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(event) => setAnchorLoaiChiPhi(event.currentTarget)}
+                                                        aria-label="Lọc theo loại chi phí"
+                                                        color={qLoaiChiPhi ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+                                                <Popover
+                                                    open={Boolean(anchorLoaiChiPhi)}
+                                                    anchorEl={anchorLoaiChiPhi}
+                                                    onClose={() => setAnchorLoaiChiPhi(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 260 } }}
+                                                >
+                                                    <Stack spacing={1.25}>
+                                                        <TextField
+                                                            select
+                                                            fullWidth
+                                                            size="small"
+                                                            label="Loại chi phí"
+                                                            value={qLoaiChiPhi}
+                                                            onChange={(event) => setQLoaiChiPhi(event.target.value)}
+                                                        >
+                                                            <MenuItem value="">Tất cả</MenuItem>
+                                                            {Object.entries(EXPENSE_LABELS).map(([value, label]) => (
+                                                                <MenuItem key={value} value={value}>{label}</MenuItem>
+                                                            ))}
+                                                        </TextField>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {qLoaiChiPhi && (
+                                                                <Button
+                                                                    startIcon={<ClearIcon />}
+                                                                    onClick={() => setQLoaiChiPhi("")}
+                                                                    size="small"
+                                                                >
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                variant="contained"
+                                                                size="small"
+                                                                onClick={() => setAnchorLoaiChiPhi(null)}
+                                                            >
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+                                            <TableCell>Loại tiền</TableCell>
+                                            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+                                                    <span>Số tiền</span>
+                                                    <AmountFilterButton
+                                                        operator={qSoTienOperator}
+                                                        amount={qSoTien}
+                                                        onApply={(operator, amount) => {
+                                                            setQSoTienOperator(operator);
+                                                            setQSoTien(amount);
+                                                        }}
+                                                        onClear={() => clearFilter("soTien")}
+                                                    />
+                                                </Stack>
+                                            </TableCell>
+                                            <TableCell align="right">Mã lệnh chi</TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Ngày hoàn thành (lệnh chi)</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorCompleted(e.currentTarget)}
+                                                        aria-label="Lọc theo ngày hoàn thành lệnh chi"
+                                                        color={qCompletedFrom || qCompletedTo ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+                                                <Popover
+                                                    open={Boolean(anchorCompleted)}
+                                                    anchorEl={anchorCompleted}
+                                                    onClose={() => setAnchorCompleted(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                                        <Stack spacing={1.25}>
+                                                            <DatePicker
+                                                                label="Từ ngày"
+                                                                value={qCompletedFrom}
+                                                                onChange={setQCompletedFrom}
+                                                                slotProps={{ textField: { size: "small" } }}
+                                                            />
+                                                            <DatePicker
+                                                                label="Đến ngày"
+                                                                value={qCompletedTo}
+                                                                onChange={setQCompletedTo}
+                                                                slotProps={{ textField: { size: "small" } }}
+                                                            />
+                                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                                {(qCompletedFrom || qCompletedTo) && (
+                                                                    <Button startIcon={<ClearIcon />} onClick={() => clearFilter("completed")} size="small">
+                                                                        Xóa
+                                                                    </Button>
+                                                                )}
+                                                                <Button variant="contained" size="small" onClick={() => setAnchorCompleted(null)}>
+                                                                    OK
+                                                                </Button>
+                                                            </Stack>
+                                                        </Stack>
+                                                    </LocalizationProvider>
+                                                </Popover>
+                                            </TableCell>
+                                            <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Trạng thái</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorTrangThai(e.currentTarget)}
+                                                        aria-label="Lọc theo Trạng thái"
+                                                        color={qTrangThai.length > 0 ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+
+                                                <Popover
+                                                    open={Boolean(anchorTrangThai)}
+                                                    anchorEl={anchorTrangThai}
+                                                    onClose={() => setAnchorTrangThai(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 240 } }}
+                                                >
+                                                    <Stack spacing={1}>
+                                                        <FormControl size="small" fullWidth>
+                                                            <InputLabel shrink>Chọn trạng thái</InputLabel>
+                                                            <Select
+                                                                multiple
+                                                                displayEmpty
+                                                                label="Chọn trạng thái"
+                                                                value={qTrangThai}
+                                                                onChange={handleStatusFilterChange}
+                                                                renderValue={(selected) =>
+                                                                    selected.length
+                                                                        ? selected.map(getStatusFilterLabel).join(", ")
+                                                                        : "Tất cả"
+                                                                }
+                                                                sx={{
+                                                                    "& .MuiSelect-select": {
+                                                                        whiteSpace: "nowrap",
+                                                                        overflow: "hidden",
+                                                                        textOverflow: "ellipsis",
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <MenuItem value="__all__">
+                                                                    <Checkbox checked={qTrangThai.length === 0} />
+                                                                    <ListItemText primary="Tất cả" />
+                                                                </MenuItem>
+                                                                {STATUS_FILTER_OPTIONS.map((option) => (
+                                                                    <MenuItem key={option.value} value={option.value}>
+                                                                        <Checkbox checked={qTrangThai.includes(option.value)} />
+                                                                        <ListItemText primary={option.label} />
+                                                                    </MenuItem>
+                                                                ))}
+                                                            </Select>
+                                                        </FormControl>
+
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {qTrangThai.length > 0 && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => setQTrangThai([])} size="small">
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorTrangThai(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+                                            <TableCell sx={{ ...stickyActionCellSx, zIndex: 4 }}>Thao tác</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+
+                                    <TableBody>
+                                        {filteredRows.map((r, i) => (
+                                            <TableRow
+                                                key={r.id}
+                                                hover
+                                                sx={{ cursor: "pointer" }}
+                                                onClick={() => {
+                                                    if (hasSelectedText()) return;
+                                                    openDetailDialog(r);
+                                                }}
+                                            >
+                                                <TableCell>{i + 1}</TableCell>
+                                                <TableCell>{r.maSoSec || `SS-${r.id}`}</TableCell>
+                                                <TableCell>{isoToDisplay(r.ngay).split(" ")[0]}</TableCell>
+                                                <TableCell>
+                                                    <Tooltip title={r.ghiChu || ""}><span>{r.noiDung}</span></Tooltip>
+                                                </TableCell>
+                                                <TableCell>{donvis.find((d) => d.id === r.donViId)?.name || r.donViId}</TableCell>
+                                                <TableCell>{r.soTaiKhoanHuongThu || donvis.find((d) => d.id === r.donViId)?.stk || "—"}</TableCell>
+                                                <TableCell>{r.maNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.maNganHang || "—"}</TableCell>
+                                                <TableCell>{getTenNganHang(r) || "—"}</TableCell>
+                                                <TableCell>{r.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.chiNhanhNganHang || "—"}</TableCell>
+                                                <TableCell>{r.tenNguoiTao || "—"}</TableCell>
+                                                <TableCell>{r.tenDonViNguoiTao || "—"}</TableCell>
+                                                <TableCell>{EXPENSE_LABELS[r.maLoaiChiPhi] || r.maLoaiChiPhi || "—"}</TableCell>
+                                                <TableCell>{r.maLoaiTien || "VND"}</TableCell>
+                                                <TableCell align="right">
+                                                    <Tooltip title={amountToVietnameseText(r.soTien, r.maLoaiTien || "VND") || ""} arrow placement="top">
+                                                        <Typography component="span" sx={{ cursor: "help" }}>
+                                                            {fmtMoney(r.soTien)}
+                                                        </Typography>
+                                                    </Tooltip>
+                                                </TableCell>
+                                                <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
+                                                <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
+                                                <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
+                                                <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
+                                                    <PhieuSecActions
+                                                        phieu={r}
+                                                        canEdit={canEdit(r)}
+                                                        canReturn={canReturn(r)}
+                                                        canSubmit={canSubmitPhieu(r)}
+                                                        canApprove={canApprove(r)}
+                                                        canReject={canReject(r)}
+                                                        canDelete={canDeletePhieu(r)}
+                                                        submitting={submitPhieuId === r.id}
+                                                        onEdit={openEditDialog}
+                                                        onReturn={openReturnDialog}
+                                                        onSubmit={handleSubmitPhieu}
+                                                        onApprove={(phieu, event) => handleApprove(phieu, true, event)}
+                                                        onReject={(phieu, event) => handleApprove(phieu, false, event)}
+                                                        onDelete={openDeletePhieuDialog}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+
+                                        {filteredRows.length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={18}>
+                                                    <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
+                                                        Không có bản ghi phù hợp.
+                                                    </Typography>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Box>
+                    ) : (
+
+                        <Stack spacing={1} sx={{ mt: 1 }}>
+                            {filteredRows.length === 0 ? (
+                                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
+                                    <Typography align="center" color="text.secondary" variant="body2">
+                                        Không có bản ghi phù hợp.
+                                    </Typography>
+                                </Paper>
+                            ) : filteredRows.map((r) => {
+                                const donVi = donvis.find((d) => d.id === r.donViId);
+                                const beneficiaryName = r.tenDonVi || donVi?.name || `ID: ${r.donViId}`;
+                                const createdDate = isoToDisplay(r.ngay).split(" ")[0];
+                                return (
+                                    <Paper
+                                        key={r.id}
+                                        variant="outlined"
+                                        onClick={() => openDetailDialog(r)}
+                                        sx={{
+                                            p: 1.25,
+                                            borderRadius: 2.5,
+                                            bgcolor: "background.paper",
+                                            cursor: "pointer",
+                                            boxShadow: "0 6px 18px rgba(15, 23, 42, 0.05)",
+                                        }}
+                                    >
+                                        <Stack spacing={0.75}>
+                                            <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+                                                <Box sx={{ minWidth: 0 }}>
+                                                    <Typography sx={{ fontWeight: 800, fontSize: "0.96rem" }} noWrap>
+                                                        {r.maSoSec || `SS-${r.id}`}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {createdDate} · {r.tenNguoiTao || "—"}
+                                                    </Typography>
+                                                </Box>
+                                                <StatusChip status={getDisplayStatus(r)} />
                                             </Stack>
 
-                                            <Popover
-                                                open={Boolean(anchorTrangThai)}
-                                                anchorEl={anchorTrangThai}
-                                                onClose={() => setAnchorTrangThai(null)}
-                                                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                                                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                                                PaperProps={{ sx: { p: 1.5, width: 240 } }}
-                                            >
-                                                <Stack spacing={1}>
-                                                    <FormControl size="small" fullWidth>
-                                                        <InputLabel shrink>Chọn trạng thái</InputLabel>
-                                                        <Select
-                                                            multiple
-                                                            displayEmpty
-                                                            label="Chọn trạng thái"
-                                                            value={qTrangThai}
-                                                            onChange={handleStatusFilterChange}
-                                                            renderValue={(selected) =>
-                                                                selected.length
-                                                                    ? selected.map(getStatusFilterLabel).join(", ")
-                                                                    : "Tất cả"
-                                                            }
-                                                            sx={{
-                                                                "& .MuiSelect-select": {
-                                                                    whiteSpace: "nowrap",
-                                                                    overflow: "hidden",
-                                                                    textOverflow: "ellipsis",
-                                                                },
-                                                            }}
-                                                        >
-                                                            <MenuItem value="__all__">
-                                                                <Checkbox checked={qTrangThai.length === 0} />
-                                                                <ListItemText primary="Tất cả" />
-                                                            </MenuItem>
-                                                            {STATUS_FILTER_OPTIONS.map((option) => (
-                                                                <MenuItem key={option.value} value={option.value}>
-                                                                    <Checkbox checked={qTrangThai.includes(option.value)} />
-                                                                    <ListItemText primary={option.label} />
-                                                                </MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
+                                            <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: "primary.main" }}>
+                                                {fmtMoney(r.soTien)} {r.maLoaiTien || "VND"}
+                                            </Typography>
 
-                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                        {qTrangThai.length > 0 && (
-                                                            <Button startIcon={<ClearIcon />} onClick={() => setQTrangThai([])} size="small">
-                                                                Xoá
-                                                            </Button>
-                                                        )}
-                                                        <Button variant="contained" size="small" onClick={() => setAnchorTrangThai(null)}>
-                                                            OK
-                                                        </Button>
-                                                    </Stack>
-                                                </Stack>
-                                            </Popover>
-                                        </TableCell>
-                                        <TableCell sx={{ ...stickyActionCellSx, zIndex: 4 }}>Thao tác</TableCell>
-                                    </TableRow>
-                                </TableHead>
+                                            <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+                                                {beneficiaryName}
+                                            </Typography>
 
-                                <TableBody>
-                                    {filteredRows.map((r, i) => (
-                                        <TableRow
-                                            key={r.id}
-                                            hover
-                                            sx={{ cursor: "pointer" }}
-                                            onClick={() => {
-                                                if (hasSelectedText()) return;
-                                                openDetailDialog(r);
-                                            }}
-                                        >
-                                            <TableCell>{i + 1}</TableCell>
-                                            <TableCell>{r.maSoSec || `SS-${r.id}`}</TableCell>
-                                            <TableCell>{isoToDisplay(r.ngay).split(" ")[0]}</TableCell>
-                                            <TableCell>
-                                                <Tooltip title={r.ghiChu || ""}><span>{r.noiDung}</span></Tooltip>
-                                            </TableCell>
-                                            <TableCell>{donvis.find((d) => d.id === r.donViId)?.name || r.donViId}</TableCell>
-                                            <TableCell>{r.soTaiKhoanHuongThu || donvis.find((d) => d.id === r.donViId)?.stk || "—"}</TableCell>
-                                            <TableCell>{r.maNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.maNganHang || "—"}</TableCell>
-                                            <TableCell>{getTenNganHang(r) || "—"}</TableCell>
-                                            <TableCell>{r.chiNhanhNganHangHuongThu || donvis.find((d) => d.id === r.donViId)?.chiNhanhNganHang || "—"}</TableCell>
-                                            <TableCell>{r.tenNguoiTao || "—"}</TableCell>
-                                            <TableCell>{r.tenDonViNguoiTao || "—"}</TableCell>
-                                            <TableCell>{EXPENSE_LABELS[r.maLoaiChiPhi] || r.maLoaiChiPhi || "—"}</TableCell>
-                                            <TableCell>{r.maLoaiTien || "VND"}</TableCell>
-                                            <TableCell align="right">
-                                                <Tooltip title={amountToVietnameseText(r.soTien, r.maLoaiTien || "VND") || ""} arrow placement="top">
-                                                    <Typography component="span" sx={{ cursor: "help" }}>
-                                                        {fmtMoney(r.soTien)}
-                                                    </Typography>
-                                                </Tooltip>
-                                            </TableCell>
-                                            <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
-                                            <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
-                                            <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
-                                            <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
-                                                <PhieuSecActions
-                                                    phieu={r}
-                                                    canEdit={canEdit(r)}
-                                                    canReturn={canReturn(r)}
-                                                    canSubmit={canSubmitPhieu(r)}
-                                                    canApprove={canApprove(r)}
-                                                    canReject={canReject(r)}
-                                                    canDelete={canDeletePhieu(r)}
-                                                    submitting={submitPhieuId === r.id}
-                                                    onEdit={openEditDialog}
-                                                    onReturn={openReturnDialog}
-                                                    onSubmit={handleSubmitPhieu}
-                                                    onApprove={(phieu, event) => handleApprove(phieu, true, event)}
-                                                    onReject={(phieu, event) => handleApprove(phieu, false, event)}
-                                                    onDelete={openDeletePhieuDialog}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-
-                                    {filteredRows.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={18}>
-                                                <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
-                                                    Không có bản ghi phù hợp.
-                                                </Typography>
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Box>
-
-                    <Stack spacing={1} sx={{ display: { xs: "flex", md: "none" }, mt: 1 }}>
-                        {filteredRows.length === 0 ? (
-                            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2.5 }}>
-                                <Typography align="center" color="text.secondary" variant="body2">
-                                    Không có bản ghi phù hợp.
-                                </Typography>
-                            </Paper>
-                        ) : filteredRows.map((r) => {
-                            const donVi = donvis.find((d) => d.id === r.donViId);
-                            const beneficiaryName = r.tenDonVi || donVi?.name || `ID: ${r.donViId}`;
-                            const createdDate = isoToDisplay(r.ngay).split(" ")[0];
-                            return (
-                                <Paper
-                                    key={r.id}
-                                    variant="outlined"
-                                    onClick={() => openDetailDialog(r)}
-                                    sx={{
-                                        p: 1.25,
-                                        borderRadius: 2.5,
-                                        bgcolor: "background.paper",
-                                        cursor: "pointer",
-                                        boxShadow: "0 6px 18px rgba(15, 23, 42, 0.05)",
-                                    }}
-                                >
-                                    <Stack spacing={0.75}>
-                                        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
-                                            <Box sx={{ minWidth: 0 }}>
-                                                <Typography sx={{ fontWeight: 800, fontSize: "0.96rem" }} noWrap>
-                                                    {r.maSoSec || `SS-${r.id}`}
-                                                </Typography>
-                                                <Typography variant="caption" color="text.secondary">
-                                                    {createdDate} · {r.tenNguoiTao || "—"}
-                                                </Typography>
-                                            </Box>
-                                            <StatusChip status={getDisplayStatus(r)} />
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
+                                                {r.noiDung || "Không có nội dung"}
+                                            </Typography>
                                         </Stack>
-
-                                        <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: "primary.main" }}>
-                                            {fmtMoney(r.soTien)} {r.maLoaiTien || "VND"}
-                                        </Typography>
-
-                                        <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
-                                            {beneficiaryName}
-                                        </Typography>
-
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
-                                            {r.noiDung || "Không có nội dung"}
-                                        </Typography>
-                                    </Stack>
-                                </Paper>
-                            );
-                        })}
-                    </Stack>
+                                    </Paper>
+                                );
+                            })}
+                        </Stack>
+                    )}
                 </>
             )}
 
@@ -2411,42 +2410,29 @@ export default function PhieuSec({ mode = "VND" }) {
 
             {/* Dialog tạo phiếu */}
             <PhieuSecFormDialog
+                key={`phieu-form-${formDialogSession}`}
                 open={openCreate}
                 isMobile={isMobile}
                 isNgoaiTe={isNgoaiTe}
                 editingPhieu={editingPhieu}
-                form={form}
+                initialForm={initialForm}
+                selectedDonViId={selectedDonViId}
                 donvis={donvis}
                 currencies={currencies}
                 canEdit={editingPhieu ? canEdit(editingPhieu) : false}
-                onFormChange={(changes) => setForm((current) => ({ ...current, ...changes }))}
-                onContentCommit={handleNoiDungCommit}
-                onAmountCommit={handleSoTienCommit}
                 onAddDonVi={openAddDonVi}
                 onEditDonVi={openEditDonVi}
-                onClose={() => { setOpenCreate(false); resetForm(); }}
+                onClose={closeFormDialog}
                 onSubmit={submitCreate}
             />
             <DonViDialog
+                key={`don-vi-form-${donViDialogSession}`}
                 open={openAddDv}
                 isMobile={isMobile}
                 mode={dvDialogMode}
-                fields={{
-                    name: dvName,
-                    transferName: dvTenChuyenKhoan,
-                    accountNumber: dvStk,
-                    bankCode: dvMaNH,
-                    branch: dvChiNhanhNH,
-                }}
+                initialFields={donViInitialFields}
                 banks={banks}
                 saving={savingDv}
-                onFieldChange={(field, value) => {
-                    if (field === "name") setDvName(value);
-                    if (field === "transferName") setDvTenChuyenKhoan(value);
-                    if (field === "accountNumber") setDvStk(value);
-                    if (field === "bankCode") setDvMaNH(value);
-                    if (field === "branch") setDvChiNhanhNH(value);
-                }}
                 onClose={() => {
                     setOpenAddDv(false);
                     setDvDialogMode("create");

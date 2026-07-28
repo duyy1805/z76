@@ -2,15 +2,14 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 
 const isActiveDonVi = (item) => item?.TonTai !== false && item?.TonTai !== 0;
-const hasDonViId = (list, id) => list.some((item) => String(item.id) === String(id));
-
 export default function usePhieuSecData({
     mode,
     user,
     role,
     activeTab,
     canManageLenhChi,
-    setForm,
+    dateFrom,
+    dateTo,
     log = () => {},
 }) {
     const [rows, setRows] = useState(null);
@@ -25,6 +24,8 @@ export default function usePhieuSecData({
             roleCode: role,
             idDonVi: user?.idDonVi,
             loaiSec: mode,
+            dateFrom,
+            dateTo,
         };
 
         log("load:listPhieu params", params, {
@@ -57,13 +58,6 @@ export default function usePhieuSecData({
         setDonvis(activeDonViRows);
         setCurrencies(currencyRows || []);
         setBanks(bankRows || []);
-        setForm((current) => {
-            const hasCurrentActiveDonVi = current.donViId && hasDonViId(activeDonViRows, current.donViId);
-            return {
-                ...current,
-                donViId: hasCurrentActiveDonVi ? current.donViId : activeDonViRows?.[0]?.id || null,
-            };
-        });
     };
 
     const loadPendingLenhChi = async () => {
@@ -79,7 +73,7 @@ export default function usePhieuSecData({
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode]);
+    }, [mode, dateFrom, dateTo]);
 
     useEffect(() => {
         if (activeTab === "pending") loadPendingLenhChi();

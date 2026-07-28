@@ -27,6 +27,27 @@ const httpAuth = axios.create({
     withCredentials: true,
 });
 
+let unauthorizedHandler = null;
+let unauthorizedNotified = false;
+
+function handleUnauthorized(error) {
+    if (error?.response?.status === 401 && !unauthorizedNotified && unauthorizedHandler) {
+        unauthorizedNotified = true;
+        unauthorizedHandler();
+    }
+    return Promise.reject(error);
+}
+
+http.interceptors.response.use((response) => response, handleUnauthorized);
+httpHd.interceptors.response.use((response) => response, handleUnauthorized);
+
+export function setUnauthorizedHandler(handler) {
+    unauthorizedHandler = typeof handler === "function" ? handler : null;
+    return () => {
+        if (unauthorizedHandler === handler) unauthorizedHandler = null;
+    };
+}
+
 export async function loginERP({ username, password }) {
     const path = "/login";
     const res = await httpAuth.post(path, { username, password, authFlow: "erp-otp" });
@@ -367,12 +388,12 @@ export const hoaDonApi = {
 
 // Nếu muốn tự động gắn token vào http:
 export function attachAuthToken(token) {
-    http.interceptors.request.use((config) => {
-        if (token) config.headers.Authorization = `Bearer ${token}`;
-        return config;
-    });
-    httpHd.interceptors.request.use((config) => {
-        if (token) config.headers.Authorization = `Bearer ${token}`;
-        return config;
-    });
+    for (const client of [http, httpHd]) {
+        if (token) {
+            client.defaults.headers.common.Authorization = `Bearer ${token}`;
+        } else {
+            delete client.defaults.headers.common.Authorization;
+        }
+    }
+    if (token) unauthorizedNotified = false;
 }

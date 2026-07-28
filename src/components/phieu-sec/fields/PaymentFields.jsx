@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useEffect, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { TextField, Typography } from "@mui/material";
 import { NumericFormat } from "react-number-format";
 import {
@@ -40,17 +40,40 @@ export const BufferedTextField = memo(function BufferedTextField({
     ...props
 }) {
     const [localValue, setLocalValue] = useState(value ?? "");
+    const timerRef = useRef(null);
+    const latestValueRef = useRef(value ?? "");
+    const onCommitRef = useRef(onCommit);
 
     useEffect(() => {
-        setLocalValue(value ?? "");
+        onCommitRef.current = onCommit;
+    }, [onCommit]);
+
+    useEffect(() => {
+        const nextValue = value ?? "";
+        latestValueRef.current = nextValue;
+        setLocalValue((current) => current === nextValue ? current : nextValue);
     }, [value]);
 
+    const clearCommitTimer = useCallback(() => {
+        if (timerRef.current !== null) {
+            window.clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+    }, []);
+
+    const commit = useCallback((nextValue) => {
+        clearCommitTimer();
+        if (nextValue === latestValueRef.current) return;
+        latestValueRef.current = nextValue;
+        onCommitRef.current(nextValue);
+    }, [clearCommitTimer]);
+
     useEffect(() => {
-        const timer = window.setTimeout(() => {
-            if (localValue !== (value ?? "")) onCommit(localValue);
-        }, commitDelay);
-        return () => window.clearTimeout(timer);
-    }, [commitDelay, localValue, onCommit, value]);
+        clearCommitTimer();
+        if (localValue === latestValueRef.current) return undefined;
+        timerRef.current = window.setTimeout(() => commit(localValue), commitDelay);
+        return clearCommitTimer;
+    }, [clearCommitTimer, commit, commitDelay, localValue]);
 
     return (
         <TextField
@@ -58,7 +81,7 @@ export const BufferedTextField = memo(function BufferedTextField({
             value={localValue}
             onChange={(event) => setLocalValue(event.target.value)}
             onBlur={(event) => {
-                if (localValue !== (value ?? "")) onCommit(localValue);
+                commit(localValue);
                 onBlur?.(event);
             }}
         />

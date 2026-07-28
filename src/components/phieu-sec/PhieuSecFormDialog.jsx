@@ -1,3 +1,4 @@
+import { memo, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
     Autocomplete,
     Box,
@@ -13,33 +14,59 @@ import {
     Tooltip,
     Typography,
 } from "@mui/material";
+import { NumericFormat } from "react-number-format";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
-import { BufferedTextField, PaymentAmountField, PaymentContentField } from "./fields/PaymentFields";
-import { EXPENSE_LABELS, isSameId, stripVN } from "../../utils/phieu-sec";
+import {
+    EXPENSE_LABELS,
+    PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT,
+    PAYMENT_CONTENT_MAX_LENGTH,
+    amountToVietnameseText,
+    isSameId,
+    stripVN,
+    validatePaymentContent,
+} from "../../utils/phieu-sec";
 
-export default function PhieuSecFormDialog({
+const PhieuSecFormDialog = memo(function PhieuSecFormDialog({
     open,
     isMobile,
     isNgoaiTe,
     editingPhieu,
-    form,
+    initialForm,
+    selectedDonViId,
     donvis,
     currencies,
     canEdit,
-    onFormChange,
-    onContentCommit,
-    onAmountCommit,
     onAddDonVi,
     onEditDonVi,
     onClose,
     onSubmit,
 }) {
-    const selectedActiveDonVi = donvis.find((item) => isSameId(item.id, form.donViId));
-    const inactiveSelectedDonVi = editingPhieu && form.donViId && !selectedActiveDonVi
+    const [draft, setDraft] = useState(initialForm);
+    const deferredAmount = useDeferredValue(draft.soTien);
+    const contentError = validatePaymentContent(draft.noiDung);
+    const amountText = amountToVietnameseText(
+        deferredAmount,
+        isNgoaiTe ? draft.maLoaiTien || "ngoại tệ" : "VND"
+    );
+    const contentHelperText = contentError ||
+        `${String(draft.noiDung || "").trim().length}/${PAYMENT_CONTENT_MAX_LENGTH} ký tự. Không dùng: ${PAYMENT_CONTENT_FORBIDDEN_CHARS_TEXT}.`;
+
+    useEffect(() => {
+        if (selectedDonViId === null || selectedDonViId === undefined) return;
+        setDraft((current) => isSameId(current.donViId, selectedDonViId)
+            ? current
+            : { ...current, donViId: selectedDonViId });
+    }, [selectedDonViId]);
+
+    const selectedActiveDonVi = useMemo(
+        () => donvis.find((item) => isSameId(item.id, draft.donViId)),
+        [donvis, draft.donViId]
+    );
+    const inactiveSelectedDonVi = editingPhieu && draft.donViId && !selectedActiveDonVi
         ? {
-            id: form.donViId,
-            name: editingPhieu.tenDonVi || `ID: ${form.donViId}`,
+            id: draft.donViId,
+            name: editingPhieu.tenDonVi || `ID: ${draft.donViId}`,
             tenChuyenKhoan: editingPhieu.tenChuyenKhoanHuongThu || editingPhieu.tenDonVi || "",
             stk: editingPhieu.soTaiKhoanHuongThu || "",
             maNganHang: editingPhieu.maNganHangHuongThu || "",
@@ -48,13 +75,22 @@ export default function PhieuSecFormDialog({
         }
         : null;
     const selectedDonVi = selectedActiveDonVi || inactiveSelectedDonVi;
+    const setField = (changes) => setDraft((current) => ({ ...current, ...changes }));
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
             <DialogTitle>{editingPhieu ? "Sửa" : "Tạo"} phiếu séc {isNgoaiTe ? "ngoại tệ" : "VND"}</DialogTitle>
             <DialogContent>
                 <Stack spacing={2} mt={1}>
-                    <PaymentContentField value={form.noiDung} onCommit={onContentCommit} />
+                    <TextField
+                        label="Nội dung"
+                        fullWidth
+                        value={draft.noiDung}
+                        onChange={(event) => setField({ noiDung: event.target.value })}
+                        error={!!draft.noiDung && !!contentError}
+                        helperText={contentHelperText}
+                        inputProps={{ maxLength: PAYMENT_CONTENT_MAX_LENGTH }}
+                    />
                     <Box
                         sx={{
                             display: "grid",
@@ -67,7 +103,7 @@ export default function PhieuSecFormDialog({
                             sx={{ flex: 1 }}
                             options={donvis}
                             value={selectedDonVi || null}
-                            onChange={(_, value) => onFormChange({ donViId: value?.id ?? null })}
+                            onChange={(_, value) => setField({ donViId: value?.id ?? null })}
                             getOptionLabel={(option) => option?.name ?? ""}
                             isOptionEqualToValue={(option, value) => isSameId(option?.id, value?.id)}
                             filterOptions={(options, { inputValue }) => {
@@ -113,12 +149,12 @@ export default function PhieuSecFormDialog({
                             <AddIcon fontSize="small" />
                         </IconButton>
                         {editingPhieu && (
-                            <Tooltip title={canEdit && form.donViId ? "Sửa thông tin đơn vị hưởng thụ" : "Chỉ sửa được khi phiếu đang nháp"}>
+                            <Tooltip title={canEdit && draft.donViId ? "Sửa thông tin đơn vị hưởng thụ" : "Chỉ sửa được khi phiếu đang nháp"}>
                                 <span>
                                     <IconButton
-                                        onClick={onEditDonVi}
+                                        onClick={() => onEditDonVi(draft.donViId)}
                                         color="primary"
-                                        disabled={!canEdit || !form.donViId}
+                                        disabled={!canEdit || !draft.donViId}
                                         sx={{
                                             width: { xs: 48, sm: 56 },
                                             height: { xs: 48, sm: 56 },
@@ -152,7 +188,7 @@ export default function PhieuSecFormDialog({
                     </Box>
 
                     {isNgoaiTe ? (
-                        <TextField select required label="Loại tiền" value={form.maLoaiTien} onChange={(event) => onFormChange({ maLoaiTien: event.target.value })}>
+                        <TextField select required label="Loại tiền" value={draft.maLoaiTien} onChange={(event) => setField({ maLoaiTien: event.target.value })}>
                             {currencies.filter((item) => item.MaLoaiTien !== "VND").map((item) => (
                                 <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>
                                     {item.MaLoaiTien} - {item.TenLoaiTien}
@@ -160,27 +196,42 @@ export default function PhieuSecFormDialog({
                             ))}
                         </TextField>
                     ) : (
-                        <TextField select required label="Loại chi phí" value={form.maLoaiChiPhi} onChange={(event) => onFormChange({ maLoaiChiPhi: event.target.value })}>
+                        <TextField select required label="Loại chi phí" value={draft.maLoaiChiPhi} onChange={(event) => setField({ maLoaiChiPhi: event.target.value })}>
                             {Object.entries(EXPENSE_LABELS).map(([value, label]) => (
                                 <MenuItem key={value} value={value}>{label}</MenuItem>
                             ))}
                         </TextField>
                     )}
 
-                    <PaymentAmountField
-                        value={form.soTien}
-                        currencyCode={isNgoaiTe ? form.maLoaiTien || "ngoại tệ" : "VND"}
-                        onCommit={onAmountCommit}
+                    <NumericFormat
+                        customInput={TextField}
+                        label={`Số tiền (${isNgoaiTe ? draft.maLoaiTien || "ngoại tệ" : "VND"})`}
+                        thousandSeparator="."
+                        decimalSeparator=","
+                        allowNegative={false}
+                        value={draft.soTien}
+                        onValueChange={(values) => setField({ soTien: values.floatValue ?? "" })}
                     />
-                    <BufferedTextField label="Ghi chú" value={form.ghiChu} onCommit={(value) => onFormChange({ ghiChu: value })} />
+                    {amountText && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: -1 }}>
+                            Bằng chữ: {amountText}
+                        </Typography>
+                    )}
+                    <TextField
+                        label="Ghi chú"
+                        value={draft.ghiChu}
+                        onChange={(event) => setField({ ghiChu: event.target.value })}
+                    />
                 </Stack>
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Đóng</Button>
-                <Button variant="contained" onClick={onSubmit}>
+                <Button variant="contained" onClick={() => onSubmit(draft)}>
                     {editingPhieu ? "Cập nhật nháp" : "Lưu nháp"}
                 </Button>
             </DialogActions>
         </Dialog>
     );
-}
+});
+
+export default PhieuSecFormDialog;

@@ -96,7 +96,6 @@ export default function Login() {
                 invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
             }, remember);
             attachAuthToken(token);
-            window.location.replace("/dashboard");
         } catch (exception) {
             const requestId = exception?.response?.data?.requestId || exception?.response?.headers?.["x-auth-request-id"];
             const message = exception?.response?.data?.message || exception?.message || "Đăng nhập thất bại";
@@ -148,7 +147,6 @@ export default function Login() {
                 invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
             }, remember);
             attachAuthToken(token);
-            window.location.replace("/dashboard");
         } catch (exception) {
             setError(exception?.response?.data?.message || exception?.message || "Mã OTP không hợp lệ");
         } finally {
