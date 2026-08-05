@@ -1,5 +1,5 @@
 import { Box, Stack, Typography } from "@mui/material";
-import { calculateTotals, fmtMoney } from "../../utils/hoa-don";
+import { calculateTotals, currencyAmountScale, fmtMoney, INVOICE_NUMBER_FORMAT } from "../../utils/hoa-don";
 import { amountToVietnameseText } from "../../utils/phieu-sec";
 
 export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND" }) {
@@ -19,7 +19,13 @@ export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND" }) {
                 {label}
             </Typography>
             <Typography sx={{ fontWeight: strong ? 850 : 650, textAlign: "right", whiteSpace: "nowrap" }}>
-                {fmtMoney(value, 0, displayCurrency)} {displayCurrency}
+                {fmtMoney(
+                    value,
+                    displayCurrency === "VND" && currency !== "VND"
+                        ? INVOICE_NUMBER_FORMAT.convertedAmount
+                        : currencyAmountScale(displayCurrency),
+                    displayCurrency
+                )} {displayCurrency}
             </Typography>
         </Box>
     );

@@ -33,10 +33,15 @@ import { useAuth } from "../store/useAuth";
 import {
     canApproveInvoice,
     canProcessInvoiceExportInfo,
+    currencyAmountScale,
+    currencyUnitPriceScale,
     fmtMoney,
+    INVOICE_NUMBER_FORMAT,
     INVOICE_TYPE_LABELS,
+    REVENUE_TYPE_LABELS,
     isInvoiceExportInfoComplete,
     TAX_MODE_LABELS,
+    vatRateLabel,
 } from "../utils/hoa-don";
 import { amountToVietnameseText } from "../utils/phieu-sec";
 
@@ -66,7 +71,7 @@ function formatQuantity(value, fraction = 2) {
     const n = Number(value || 0);
     return n.toLocaleString("en-US", {
         minimumFractionDigits: fraction,
-        maximumFractionDigits: fraction || 4,
+        maximumFractionDigits: fraction,
     });
 }
 
@@ -270,10 +275,14 @@ export default function HoaDonDetailPage() {
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.2fr .8fr" }, gap: 2 }}>
                     <SectionCard title="Thông tin người mua">
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
-                            <DetailField label="Tên đơn vị mua hàng" value={detail.tenNguoiMua} />
-                            <DetailField label="Mã số thuế" value={detail.maSoThue} />
+                            <DetailField label={detail.loaiNguoiMua === "CaNhan" ? "Họ tên người mua" : "Tên đơn vị mua hàng"} value={detail.tenNguoiMua} />
+                            <DetailField
+                                label={detail.loaiNguoiMua === "CaNhan" ? "Căn cước công dân" : "Mã số thuế"}
+                                value={detail.loaiNguoiMua === "CaNhan" ? detail.soGiayTo : detail.maSoThue}
+                            />
+                            {detail.loaiNguoiMua !== "CaNhan" && <DetailField label="Mã đơn vị" value={detail.maDonVi} />}
                             <DetailField label="Địa chỉ" value={detail.diaChi} />
-                            <DetailField label="Người mua hàng" value={detail.nguoiLienHe} />
+                            {detail.loaiNguoiMua !== "CaNhan" && <DetailField label="Người mua hàng" value={detail.nguoiLienHe} />}
                             <DetailField label="Email" value={detail.email} />
                             <DetailField label="Điện thoại" value={detail.dienThoai} />
                         </Box>
@@ -282,6 +291,7 @@ export default function HoaDonDetailPage() {
                     <SectionCard title="Thông tin hóa đơn">
                         <Stack spacing={1.5}>
                             <DetailField label="Ngày hóa đơn" value={detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : ""} />
+                            <DetailField label="Loại hình doanh thu" value={REVENUE_TYPE_LABELS[detail.loaiHinhDoanhThu] || detail.loaiHinhDoanhThu} />
                             <DetailField label="Ký hiệu dự kiến" value={detail.kyHieuDuKien} />
                             {detail.soHoaDon && <DetailField label="Số hóa đơn đã phát hành" value={`${detail.kyHieuHoaDon} - ${detail.soHoaDon}`} />}
                         </Stack>
@@ -320,7 +330,7 @@ export default function HoaDonDetailPage() {
                                         </MenuItem>
                                     ))}
                                 </TextField>
-                                <NumericTextField label="Tỷ giá" value={exportInfo?.tyGia || ""} disabled={exportInfo?.maLoaiTien === "VND"} onChange={(value) => setExportField({ tyGia: value })} />
+                                <NumericTextField decimalScale={INVOICE_NUMBER_FORMAT.exchangeRate} label="Tỷ giá" value={exportInfo?.tyGia || ""} disabled={exportInfo?.maLoaiTien === "VND"} onChange={(value) => setExportField({ tyGia: value })} />
                             </Box>
 
                             {showTaxPerLine && (
@@ -403,20 +413,20 @@ export default function HoaDonDetailPage() {
                                         <TableCell>{line.MaHang || "—"}</TableCell>
                                         <TableCell>{line.TenHangHoaDichVu}</TableCell>
                                         <TableCell>{line.DonViTinh || "—"}</TableCell>
-                                        <TableCell align="right">{formatQuantity(line.SoLuong, 2)}</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.DonGia, 0, detail.maLoaiTien)}</TableCell>
-                                        <TableCell align="right">{line.ThueSuatGTGT}%</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.ThanhTien, 0, detail.maLoaiTien)}</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.TienThueGTGT, 0, detail.maLoaiTien)}</TableCell>
+                                        <TableCell align="right">{formatQuantity(line.SoLuong, INVOICE_NUMBER_FORMAT.quantity)}</TableCell>
+                                        <TableCell align="right">{fmtMoney(line.DonGia, currencyUnitPriceScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
+                                        <TableCell align="right">{vatRateLabel(line.MaThueSuatGTGT, line.ThueSuatGTGT)}</TableCell>
+                                        <TableCell align="right">{fmtMoney(line.ThanhTien, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
+                                        <TableCell align="right">{fmtMoney(line.TienThueGTGT, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
                     <Stack alignItems="flex-end" spacing={1} sx={{ mt: 2 }}>
-                        <Typography>Tổng tiền hàng: <b>{fmtMoney(detail.tongTienHang, 0, detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
-                        <Typography>Tiền thuế GTGT: <b>{fmtMoney(detail.tongTienThue, 0, detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
-                        <Typography variant="h6">Tổng thanh toán: {fmtMoney(detail.tongTienThanhToan, 0, detail.maLoaiTien)} {detail.maLoaiTien}</Typography>
+                        <Typography>Tổng tiền hàng: <b>{fmtMoney(detail.tongTienHang, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
+                        <Typography>Tiền thuế GTGT: <b>{fmtMoney(detail.tongTienThue, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
+                        <Typography variant="h6">Tổng thanh toán: {fmtMoney(detail.tongTienThanhToan, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</Typography>
                         {totalPaymentText && (
                             <Typography variant="body2" color="text.secondary" sx={{ textAlign: "right", maxWidth: 520 }}>
                                 Bằng chữ: {totalPaymentText}

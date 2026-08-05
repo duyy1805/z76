@@ -15,8 +15,8 @@ PLP review project/
 *.local
 
 *.sql
-# !migrations/
-# !migrations/*.sql
+!migrations/
+!migrations/*.sql
 
 # Editor directories and files
 .vscode/*

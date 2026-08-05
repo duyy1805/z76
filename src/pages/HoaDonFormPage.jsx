@@ -22,8 +22,12 @@ import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import {
     DEFAULT_INVOICE_FORM,
+    INVOICE_NUMBER_FORMAT,
     INVOICE_TYPE_LABELS,
+    REVENUE_TYPE_LABELS,
     TAX_MODE_LABELS,
+    VAT_RATE_OPTIONS,
+    vatRateValue,
     invoiceToForm,
     normalizeInvoicePayload,
 } from "../utils/hoa-don";
@@ -114,14 +118,31 @@ export default function HoaDonFormPage() {
     const setQuocPhong = (patch) => setForm((current) => ({ ...current, quocPhong: { ...current.quocPhong, ...patch } }));
 
     const validate = () => {
-        if (!form.tenNguoiMuaSnapshot?.trim()) return "Chọn hoặc nhập tên người mua.";
+        const isCompany = form.loaiNguoiMua === "DoanhNghiep";
+        const taxCode = String(form.maSoThueSnapshot || "").replace(/[\s.-]/g, "");
+        const citizenId = String(form.soGiayToSnapshot || "").replace(/\s/g, "");
+        const email = String(form.emailSnapshot || "").trim();
+        const phone = String(form.dienThoaiSnapshot || "").replace(/[\s().-]/g, "");
+        if (isCompany && !taxCode) return "Nhập mã số thuế của công ty.";
+        if (isCompany && !/^\d{10}(?:\d{3})?$/.test(taxCode)) return "Mã số thuế phải gồm 10 hoặc 13 chữ số.";
+        if (!form.tenNguoiMuaSnapshot?.trim()) return isCompany ? "Nhập tên đơn vị mua hàng." : "Nhập họ tên người mua.";
         if (!form.diaChiSnapshot?.trim()) return "Nhập địa chỉ người mua.";
+        if (!isCompany && citizenId && !/^(?:\d{9}|\d{12})$/.test(citizenId)) return "CCCD/CMND phải gồm 9 hoặc 12 chữ số.";
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Email người mua không hợp lệ.";
+        if (phone && !/^\+?\d{8,15}$/.test(phone)) return "Số điện thoại người mua không hợp lệ.";
         if (!form.ngayHoaDon) return "Nhập ngày hóa đơn.";
+        if (!form.loaiHinhDoanhThu) return "Chọn loại hình doanh thu.";
         if (!form.chiTiet?.length || form.chiTiet.some((line) => !line.tenHangHoaDichVu?.trim())) return "Mỗi dòng hàng phải có tên hàng hóa/dịch vụ.";
+        if (form.cheDoThue === "NhieuThueSuat" && form.chiTiet.some((line) => !String(line.maThueSuatGTGT ?? line.thueSuatGTGT ?? ""))) {
+            return "Chọn thuế GTGT cho từng dòng hàng.";
+        }
         if (!form.maLoaiTien) return "Chọn loại tiền.";
         if (form.maLoaiTien !== "VND" && Number(form.tyGia || 0) <= 0) return "Nhập tỷ giá hợp lệ.";
-        if (form.maLoaiHoaDon === "QuocPhong" && (!form.quocPhong?.quyetDinhGiaoNhiemVu || !form.quocPhong?.soHopDong)) {
-            return "Hóa đơn quốc phòng cần quyết định giao nhiệm vụ và số hợp đồng.";
+        if (form.loaiHinhDoanhThu === "QuocPhongNhomI" && !form.quocPhong?.quyetDinhGiaoNhiemVu?.trim()) {
+            return "Quốc phòng nhóm I cần nhập quyết định giao nhiệm vụ.";
+        }
+        if (form.loaiHinhDoanhThu === "QuocPhongNhomI" && !form.quocPhong?.soHopDong?.trim()) {
+            return "Quốc phòng nhóm I cần nhập số hợp đồng.";
         }
         return "";
     };
@@ -181,6 +202,9 @@ export default function HoaDonFormPage() {
                         <TextField select label="Chế độ thuế" value={form.cheDoThue} onChange={(e) => setField({ cheDoThue: e.target.value })}>
                             {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
+                        <TextField select required label="Loại hình doanh thu" value={form.loaiHinhDoanhThu || ""} onChange={(e) => setField({ loaiHinhDoanhThu: e.target.value })}>
+                            {Object.entries(REVENUE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                        </TextField>
                         <TextField select label="Loại tiền" value={form.maLoaiTien || "VND"} onChange={(e) => setCurrency(e.target.value)}>
                             {currencyOptions.map((item) => (
                                 <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>
@@ -189,10 +213,12 @@ export default function HoaDonFormPage() {
                             ))}
                         </TextField>
                         {form.maLoaiTien !== "VND" && (
-                            <NumericTextField label="Tỷ giá" value={form.tyGia || ""} onChange={(value) => setField({ tyGia: value })} />
+                            <NumericTextField decimalScale={INVOICE_NUMBER_FORMAT.exchangeRate} label="Tỷ giá" value={form.tyGia || ""} onChange={(value) => setField({ tyGia: value })} />
                         )}
                         {form.cheDoThue === "MotThueSuat" && (
-                            <NumericTextField label="Thuế GTGT (%)" value={form.thueSuatChung} onChange={(value) => setField({ thueSuatChung: value })} />
+                            <TextField select label="Thuế GTGT" value={String(form.thueSuatChung ?? "0")} onChange={(event) => setField({ thueSuatChung: event.target.value })}>
+                                {VAT_RATE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+                            </TextField>
                         )}
                         <TextField label="Ký hiệu dự kiến" value={form.kyHieuDuKien || ""} onChange={(e) => setField({ kyHieuDuKien: e.target.value })} placeholder={kyHieuSuggestion} />
                         <TextField label="Mẫu hóa đơn dự kiến" value={form.mauHoaDonDuKien || ""} onChange={(e) => setField({ mauHoaDonDuKien: e.target.value })} />
@@ -208,8 +234,18 @@ export default function HoaDonFormPage() {
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" }, gap: 1.5 }}>
                             <TextField label="Nhà máy" value={form.quocPhong.nhaMay} onChange={(e) => setQuocPhong({ nhaMay: e.target.value })} />
                             <TextField label="Bộ phận" value={form.quocPhong.tenBoPhan} onChange={(e) => setQuocPhong({ tenBoPhan: e.target.value })} />
-                            <TextField label="Quyết định giao nhiệm vụ *" value={form.quocPhong.quyetDinhGiaoNhiemVu} onChange={(e) => setQuocPhong({ quyetDinhGiaoNhiemVu: e.target.value })} />
-                            <TextField label="Số hợp đồng *" value={form.quocPhong.soHopDong} onChange={(e) => setQuocPhong({ soHopDong: e.target.value })} />
+                            <TextField
+                                required={form.loaiHinhDoanhThu === "QuocPhongNhomI"}
+                                label="Quyết định giao nhiệm vụ"
+                                value={form.quocPhong.quyetDinhGiaoNhiemVu}
+                                onChange={(e) => setQuocPhong({ quyetDinhGiaoNhiemVu: e.target.value })}
+                            />
+                            <TextField
+                                required={form.loaiHinhDoanhThu === "QuocPhongNhomI"}
+                                label="Số hợp đồng"
+                                value={form.quocPhong.soHopDong}
+                                onChange={(e) => setQuocPhong({ soHopDong: e.target.value })}
+                            />
                             <TextField label="Số phiếu xuất" value={form.quocPhong.soPhieuXuat} onChange={(e) => setQuocPhong({ soPhieuXuat: e.target.value })} />
                             <TextField label="Phê duyệt giá" value={form.quocPhong.pheDuyetGia} onChange={(e) => setQuocPhong({ pheDuyetGia: e.target.value })} />
                         </Box>
@@ -230,7 +266,18 @@ export default function HoaDonFormPage() {
                             tyGia={form.tyGia}
                             currency={form.maLoaiTien}
                         />
-                        <HoaDonTotals lines={form.chiTiet.map((line) => ({ ...line, thueSuatGTGT: form.cheDoThue === "MotThueSuat" ? form.thueSuatChung : line.thueSuatGTGT }))} tyGia={form.tyGia} currency={form.maLoaiTien} />
+                        <HoaDonTotals
+                            lines={form.chiTiet.map((line) => ({
+                                ...line,
+                                thueSuatGTGT: vatRateValue(
+                                    form.cheDoThue === "MotThueSuat"
+                                        ? form.thueSuatChung
+                                        : line.maThueSuatGTGT ?? line.thueSuatGTGT
+                                ),
+                            }))}
+                            tyGia={form.tyGia}
+                            currency={form.maLoaiTien}
+                        />
                     </Stack>
                 </SectionCard>
 

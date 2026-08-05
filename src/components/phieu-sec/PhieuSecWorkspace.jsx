@@ -73,7 +73,7 @@ const logSoSec = (...args) => {
     if (DEBUG_SOSEC) console.log("[SoSec][PhieuSec]", ...args);
 };
 const INACTIVE_DON_VI_MESSAGE = "Đơn vị hưởng thụ đã ngưng sử dụng hoặc không tồn tại";
-const getDefaultDateFrom = () => dayjs().subtract(14, "day").startOf("day");
+const getDefaultDateFrom = () => dayjs().subtract(31, "day").startOf("day");
 const getDefaultDateTo = () => dayjs().endOf("day");
 const DetailField = ({ label, children, sx }) => (
     <Box sx={{ minWidth: 0, minHeight: 56, ...sx }}>

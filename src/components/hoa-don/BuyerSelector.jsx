@@ -1,278 +1,276 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Autocomplete,
-    Box,
-    Button,
-    Checkbox,
-    FormControlLabel,
-    Paper,
-    Stack,
-    TextField,
-    Typography,
+    Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions,
+    DialogContent, DialogTitle, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
+import BusinessIcon from "@mui/icons-material/Business";
+import PersonIcon from "@mui/icons-material/Person";
+import PublicIcon from "@mui/icons-material/Public";
 import { hoaDonApi } from "../../lib/api";
 
-export default function BuyerSelector({ form, setForm, user, disabled = false, setToast }) {
-    const [buyers, setBuyers] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [quickOpen, setQuickOpen] = useState(false);
-    const [quick, setQuick] = useState({
-        tenPhapLy: "",
-        maSoThue: "",
-        maDonVi: "",
-        diaChi: "",
-        hoTen: "",
-        email: "",
-        dienThoai: "",
-        laKhachHangNuocNgoai: false,
-    });
+const COMPANY = "DoanhNghiep";
+const PERSON = "CaNhan";
+const normalizeTaxCode = (value) => String(value || "").replace(/[\s.-]/g, "");
+const hasBuyerData = (form) => Boolean(
+    form.tenNguoiMuaSnapshot || form.maSoThueSnapshot || form.soGiayToSnapshot ||
+    form.diaChiSnapshot || form.nguoiLienHeSnapshot || form.emailSnapshot || form.dienThoaiSnapshot
+);
+const emptyBuyerPatch = (loaiNguoiMua) => ({
+    loaiNguoiMua, nguoiMuaId: null, diaChiId: null, lienHeId: null,
+    tenNguoiMuaSnapshot: "", maSoThueSnapshot: "", soGiayToSnapshot: "",
+    maDonViSnapshot: "", diaChiSnapshot: "", nguoiLienHeSnapshot: "",
+    emailSnapshot: "", dienThoaiSnapshot: "",
+});
 
+export default function BuyerSelector({ form, setForm, disabled = false, setToast }) {
+    const [buyers, setBuyers] = useState([]);
+    const [loadingBuyers, setLoadingBuyers] = useState(false);
+    const [lookupLoading, setLookupLoading] = useState(false);
+    const [lastLookedUpTaxCode, setLastLookedUpTaxCode] = useState("");
+    const [confirmType, setConfirmType] = useState("");
     const selected = useMemo(
         () => buyers.find((item) => Number(item.NguoiMuaId) === Number(form.nguoiMuaId)) || null,
         [buyers, form.nguoiMuaId]
     );
 
     const loadBuyers = async (keyword = "") => {
-        setLoading(true);
+        setLoadingBuyers(true);
         try {
             setBuyers(await hoaDonApi.listNguoiMua({ tukhoa: keyword, take: 50 }));
+        } catch {
+            setBuyers([]);
         } finally {
-            setLoading(false);
+            setLoadingBuyers(false);
         }
     };
-
-    useEffect(() => {
-        loadBuyers();
-    }, []);
+    useEffect(() => { loadBuyers(); }, []);
+    const updateSnapshot = (patch) => setForm((current) => ({ ...current, ...patch }));
 
     const applyBuyer = async (buyer) => {
         if (!buyer) {
-            setForm((current) => ({
-                ...current,
-                nguoiMuaId: null,
-                diaChiId: null,
-                lienHeId: null,
-                tenNguoiMuaSnapshot: "",
-                maSoThueSnapshot: "",
-                soGiayToSnapshot: "",
-                maDonViSnapshot: "",
-                diaChiSnapshot: "",
-                nguoiLienHeSnapshot: "",
-                emailSnapshot: "",
-                dienThoaiSnapshot: "",
-            }));
+            updateSnapshot(emptyBuyerPatch(form.loaiNguoiMua || COMPANY));
             return;
         }
-
-        const detail = await hoaDonApi.getNguoiMua(buyer.NguoiMuaId);
-        const diaChi = detail.diaChi?.find((item) => item.IsDefault) || detail.diaChi?.[0] || {};
-        const lienHe = detail.lienHe?.find((item) => item.IsDefault) || detail.lienHe?.[0] || {};
-
-        setForm((current) => ({
-            ...current,
-            nguoiMuaId: detail.NguoiMuaId,
-            diaChiId: diaChi.DiaChiId || null,
-            lienHeId: lienHe.LienHeId || null,
-            tenNguoiMuaSnapshot: detail.TenPhapLy || "",
-            maSoThueSnapshot: detail.MaSoThue || "",
-            soGiayToSnapshot: detail.SoGiayTo || "",
-            maDonViSnapshot: detail.MaDonVi || "",
-            diaChiSnapshot: diaChi.DiaChi || "",
-            nguoiLienHeSnapshot: lienHe.HoTen || "",
-            emailSnapshot: lienHe.Email || "",
-            dienThoaiSnapshot: lienHe.DienThoai || "",
-        }));
+        try {
+            const detail = await hoaDonApi.getNguoiMua(buyer.NguoiMuaId);
+            const diaChi = detail.diaChi?.find((item) => item.IsDefault) || detail.diaChi?.[0] || {};
+            const lienHe = detail.lienHe?.find((item) => item.IsDefault) || detail.lienHe?.[0] || {};
+            const loaiNguoiMua = detail.LoaiNguoiMua || (detail.MaSoThue ? COMPANY : PERSON);
+            updateSnapshot({
+                loaiNguoiMua,
+                nguoiMuaId: detail.NguoiMuaId,
+                diaChiId: diaChi.DiaChiId || null,
+                lienHeId: lienHe.LienHeId || null,
+                tenNguoiMuaSnapshot: detail.TenPhapLy || "",
+                maSoThueSnapshot: loaiNguoiMua === COMPANY ? detail.MaSoThue || "" : "",
+                soGiayToSnapshot: loaiNguoiMua === PERSON ? detail.SoGiayTo || "" : "",
+                maDonViSnapshot: loaiNguoiMua === COMPANY ? detail.MaDonVi || "" : "",
+                diaChiSnapshot: diaChi.DiaChi || "",
+                nguoiLienHeSnapshot: loaiNguoiMua === COMPANY ? lienHe.HoTen || "" : "",
+                emailSnapshot: lienHe.Email || "",
+                dienThoaiSnapshot: lienHe.DienThoai || "",
+            });
+            setLastLookedUpTaxCode(normalizeTaxCode(detail.MaSoThue));
+        } catch (error) {
+            setToast?.({ open: true, type: "error", msg: error?.response?.data?.message || "Không lấy được thông tin người mua." });
+        }
     };
 
-    const createQuickBuyer = async () => {
-        if (!quick.tenPhapLy.trim()) {
-            setToast?.({ open: true, type: "warning", msg: "Nhập tên pháp lý người mua." });
+    const changeBuyerType = (nextType) => {
+        if (!nextType || nextType === form.loaiNguoiMua) return;
+        if (hasBuyerData(form)) {
+            setConfirmType(nextType);
             return;
         }
-        const requesterUserId = user?.id;
-        const buyer = await hoaDonApi.createNguoiMua({
-            requesterUserId,
-            tenPhapLy: quick.tenPhapLy,
-            maSoThue: quick.maSoThue,
-            maDonVi: quick.maDonVi,
-            laKhachHangNuocNgoai: quick.laKhachHangNuocNgoai,
-        });
-        if (quick.diaChi) {
-            await hoaDonApi.createNguoiMuaDiaChi(buyer.NguoiMuaId, {
-                requesterUserId,
-                diaChi: quick.diaChi,
-                isDefault: true,
-            });
-        }
-        if (quick.hoTen || quick.email || quick.dienThoai) {
-            await hoaDonApi.createNguoiMuaLienHe(buyer.NguoiMuaId, {
-                requesterUserId,
-                hoTen: quick.hoTen || quick.tenPhapLy,
-                email: quick.email,
-                dienThoai: quick.dienThoai,
-                isDefault: true,
-            });
-        }
+        updateSnapshot(emptyBuyerPatch(nextType));
+        setLastLookedUpTaxCode("");
+    };
+    const confirmBuyerType = () => {
+        updateSnapshot(emptyBuyerPatch(confirmType));
+        setLastLookedUpTaxCode("");
+        setConfirmType("");
+    };
 
-        await loadBuyers(quick.tenPhapLy);
-        await applyBuyer(buyer);
-        setQuickOpen(false);
-        setQuick({
-            tenPhapLy: "",
-            maSoThue: "",
-            maDonVi: "",
-            diaChi: "",
-            hoTen: "",
-            email: "",
-            dienThoai: "",
-            laKhachHangNuocNgoai: false,
-        });
-        setToast?.({ open: true, type: "success", msg: "Đã tạo và chọn người mua." });
+    const lookupTaxCode = async () => {
+        const taxCode = normalizeTaxCode(form.maSoThueSnapshot);
+        if (!taxCode) {
+            setToast?.({ open: true, type: "warning", msg: "Nhập mã số thuế trước khi tra cứu." });
+            return;
+        }
+        if (taxCode === lastLookedUpTaxCode) return;
+        setLookupLoading(true);
+        try {
+            const result = await hoaDonApi.lookupBusinessTaxCode(taxCode);
+            setLastLookedUpTaxCode(taxCode);
+            if (!result?.found || !result?.data) {
+                setToast?.({ open: true, type: "warning", msg: result?.message || "Không tìm thấy doanh nghiệp. Bạn có thể nhập thông tin thủ công." });
+                return;
+            }
+            updateSnapshot({
+                nguoiMuaId: null, diaChiId: null, lienHeId: null,
+                maSoThueSnapshot: result.data.maSoThue || taxCode,
+                tenNguoiMuaSnapshot: result.data.tenPhapLy || "",
+                diaChiSnapshot: result.data.diaChi || "",
+            });
+            setToast?.({ open: true, type: "success", msg: "Đã lấy thông tin doanh nghiệp từ VietQR." });
+        } catch (error) {
+            const message = error?.response?.status === 429
+                ? "Vượt giới hạn tra cứu, vui lòng thử lại hoặc nhập thủ công."
+                : error?.response?.data?.message || "Không tra cứu được MST. Bạn có thể nhập thông tin thủ công.";
+            setToast?.({ open: true, type: "warning", msg: message });
+        } finally {
+            setLookupLoading(false);
+        }
     };
 
     const buyerOptionLabel = (option) => {
         if (!option) return "";
+        const identifier = option.MaSoThue || option.SoGiayTo;
         return [
             option.TenPhapLy,
-            option.MaSoThue ? `MST: ${option.MaSoThue}` : "",
-            option.MaNguoiMua ? `Mã KH: ${option.MaNguoiMua}` : "",
+            identifier ? `${option.MaSoThue ? "MST" : "CCCD"}: ${identifier}` : "",
+            option.NguoiLienHeMacDinh ? `Người mua: ${option.NguoiLienHeMacDinh}` : "",
+            option.EmailMacDinh ? `Email: ${option.EmailMacDinh}` : "",
         ].filter(Boolean).join(" • ");
     };
+    const isCompany = (form.loaiNguoiMua || COMPANY) === COMPANY;
 
     return (
         <Stack spacing={2}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1.25} alignItems={{ xs: "stretch", md: "flex-start" }}>
-                <Autocomplete
-                    sx={{ flex: 1 }}
-                    disabled={disabled}
-                    options={buyers}
-                    slotProps={{ paper: { sx: { minWidth: 720 } } }}
-                    loading={loading}
-                    value={selected}
-                    onInputChange={(_, value, reason) => {
-                        if (reason === "input") loadBuyers(value);
-                    }}
-                    onChange={(_, value) => applyBuyer(value)}
-                    getOptionLabel={buyerOptionLabel}
-                    isOptionEqualToValue={(option, value) => Number(option?.NguoiMuaId) === Number(value?.NguoiMuaId)}
-                    renderOption={(props, option) => (
-                        <Box component="li" {...props} key={option.NguoiMuaId} sx={{ display: "block !important", py: 1.25 }}>
-                            <Typography sx={{ fontWeight: 750 }}>{option.TenPhapLy}</Typography>
-                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 0.5, mt: 0.5 }}>
-                                <Typography variant="caption" color="text.secondary">Mã KH: {option.MaNguoiMua || "—"}</Typography>
-                                <Typography variant="caption" color="text.secondary">MST/CCCD: {option.MaSoThue || option.SoGiayTo || "—"}</Typography>
-                                <Typography variant="caption" color="text.secondary">Mã đơn vị: {option.MaDonVi || "—"}</Typography>
-                                <Typography variant="caption" color="text.secondary">Liên hệ: {option.NguoiLienHeMacDinh || "—"}</Typography>
-                                <Typography variant="caption" color="text.secondary">Email: {option.EmailMacDinh || "—"}</Typography>
-                                <Typography variant="caption" color="text.secondary">Điện thoại: {option.DienThoaiMacDinh || "—"}</Typography>
-                            </Box>
-                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-                                Địa chỉ: {option.DiaChiMacDinh || "—"}
-                            </Typography>
+            <Autocomplete
+                disabled={disabled}
+                options={buyers}
+                slotProps={{ paper: { sx: { minWidth: { md: 760 } } } }}
+                loading={loadingBuyers}
+                value={selected}
+                onInputChange={(_, value, reason) => { if (reason === "input") loadBuyers(value); }}
+                onChange={(_, value) => applyBuyer(value)}
+                getOptionLabel={buyerOptionLabel}
+                isOptionEqualToValue={(option, value) => Number(option?.NguoiMuaId) === Number(value?.NguoiMuaId)}
+                renderOption={(props, option) => {
+                    const identifier = option.MaSoThue || option.SoGiayTo;
+                    const isCompanyOption = option.LoaiNguoiMua
+                        ? option.LoaiNguoiMua === COMPANY
+                        : Boolean(option.MaSoThue);
+                    return (
+                        <Box
+                            component="li"
+                            {...props}
+                            key={option.NguoiMuaId}
+                            sx={{ display: "block !important", py: 1.25 }}
+                        >
+                            <Typography sx={{ fontWeight: 800 }}>{option.TenPhapLy}</Typography>
+                            <Stack
+                                direction={{ xs: "column", md: "row" }}
+                                spacing={{ xs: 0.25, md: 2 }}
+                                sx={{ mt: 0.35 }}
+                            >
+                                <Typography variant="caption" color="text.secondary">
+                                    Loại: {isCompanyOption ? "Công ty" : "Cá nhân"}
+                                </Typography>
+                                {identifier && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        {option.MaSoThue ? "MST" : "CCCD"}: {identifier}
+                                    </Typography>
+                                )}
+                                {option.MaDonVi && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        Mã đơn vị: {option.MaDonVi}
+                                    </Typography>
+                                )}
+                            </Stack>
+                            {option.DiaChiMacDinh && (
+                                <Typography variant="body2" sx={{ mt: 0.45, overflowWrap: "anywhere" }}>
+                                    Địa chỉ: {option.DiaChiMacDinh}
+                                </Typography>
+                            )}
+                            {(option.NguoiLienHeMacDinh || option.EmailMacDinh || option.DienThoaiMacDinh) && (
+                                <Stack
+                                    direction={{ xs: "column", md: "row" }}
+                                    spacing={{ xs: 0.25, md: 2 }}
+                                    sx={{ mt: 0.35 }}
+                                >
+                                    {option.NguoiLienHeMacDinh && (
+                                        <Typography variant="caption">
+                                            Người mua: {option.NguoiLienHeMacDinh}
+                                        </Typography>
+                                    )}
+                                    {option.EmailMacDinh && (
+                                        <Typography variant="caption">
+                                            Email: {option.EmailMacDinh}
+                                        </Typography>
+                                    )}
+                                    {option.DienThoaiMacDinh && (
+                                        <Typography variant="caption">
+                                            Điện thoại: {option.DienThoaiMacDinh}
+                                        </Typography>
+                                    )}
+                                </Stack>
+                            )}
                         </Box>
-                    )}
-                    renderInput={(params) => (
-                        <TextField {...params} label="Tìm/chọn người mua" placeholder="Tên, mã số thuế hoặc mã khách hàng" />
-                    )}
+                    );
+                }}
+                renderInput={(params) => <TextField {...params} label="Tìm người mua đã lưu" placeholder="Tên, MST hoặc CCCD" />}
+            />
+            <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>Loại người mua</Typography>
+                <ToggleButtonGroup
+                    exclusive disabled={disabled} value={form.loaiNguoiMua || COMPANY}
+                    onChange={(_, value) => changeBuyerType(value)} color="primary" fullWidth
+                >
+                    <ToggleButton value={COMPANY}><BusinessIcon sx={{ mr: 1 }} />Công ty</ToggleButton>
+                    <ToggleButton value={PERSON}><PersonIcon sx={{ mr: 1 }} />Cá nhân</ToggleButton>
+                </ToggleButtonGroup>
+            </Box>
+            {isCompany ? (
+                <CompanyFields
+                    form={form} disabled={disabled} lookupLoading={lookupLoading}
+                    canLookup={normalizeTaxCode(form.maSoThueSnapshot) !== lastLookedUpTaxCode}
+                    onLookup={lookupTaxCode} updateSnapshot={updateSnapshot}
                 />
-                {!disabled && (
-                    <Button startIcon={<AddIcon />} variant="outlined" onClick={() => setQuickOpen((value) => !value)} sx={{ minHeight: 54 }}>
-                        Tạo nhanh
-                    </Button>
-                )}
-            </Stack>
-
-            {quickOpen && !disabled && (
-                <Alert severity="info" icon={false} sx={{ borderRadius: 2 }}>
-                    <Stack spacing={1.5}>
-                        <Typography sx={{ fontWeight: 800 }}>Tạo nhanh người mua</Typography>
-                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 1fr" }, gap: 1.25 }}>
-                            <TextField label="Tên pháp lý *" value={quick.tenPhapLy} onChange={(e) => setQuick({ ...quick, tenPhapLy: e.target.value })} />
-                            <TextField label="Mã số thuế/CCCD" value={quick.maSoThue} onChange={(e) => setQuick({ ...quick, maSoThue: e.target.value })} />
-                            <TextField label="Mã đơn vị" value={quick.maDonVi} onChange={(e) => setQuick({ ...quick, maDonVi: e.target.value })} />
-                            <TextField label="Địa chỉ mặc định" value={quick.diaChi} onChange={(e) => setQuick({ ...quick, diaChi: e.target.value })} sx={{ gridColumn: { md: "1 / -1" } }} />
-                            <TextField label="Người liên hệ" value={quick.hoTen} onChange={(e) => setQuick({ ...quick, hoTen: e.target.value })} />
-                            <TextField label="Email" value={quick.email} onChange={(e) => setQuick({ ...quick, email: e.target.value })} />
-                            <TextField label="Điện thoại" value={quick.dienThoai} onChange={(e) => setQuick({ ...quick, dienThoai: e.target.value })} />
-                            <FormControlLabel control={<Checkbox checked={quick.laKhachHangNuocNgoai} onChange={(e) => setQuick({ ...quick, laKhachHangNuocNgoai: e.target.checked })} />} label="Khách hàng nước ngoài" />
-                        </Box>
-                        <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                            <Button onClick={() => setQuickOpen(false)}>Đóng</Button>
-                            <Button variant="contained" onClick={createQuickBuyer}>Tạo và chọn</Button>
-                        </Stack>
-                    </Stack>
-                </Alert>
-            )}
-
-            <BuyerSnapshotCard form={form} />
+            ) : <PersonFields form={form} disabled={disabled} updateSnapshot={updateSnapshot} />}
+            <Dialog open={Boolean(confirmType)} onClose={() => setConfirmType("")} maxWidth="xs" fullWidth>
+                <DialogTitle>Đổi loại người mua?</DialogTitle>
+                <DialogContent>Dữ liệu người mua đang nhập sẽ bị xóa để tránh lưu lẫn thông tin công ty và cá nhân.</DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmType("")}>Hủy</Button>
+                    <Button variant="contained" onClick={confirmBuyerType}>Đổi loại</Button>
+                </DialogActions>
+            </Dialog>
         </Stack>
     );
 }
 
-function BuyerSnapshotCard({ form }) {
-    const hasBuyer = Boolean(form.tenNguoiMuaSnapshot || form.maSoThueSnapshot || form.diaChiSnapshot);
-    const fields = [
-        { label: "Tên đơn vị mua hàng", value: form.tenNguoiMuaSnapshot, wide: true },
-        { label: "Mã số thuế/CCCD", value: form.maSoThueSnapshot || form.soGiayToSnapshot },
-        { label: "Mã đơn vị", value: form.maDonViSnapshot },
-        { label: "Địa chỉ", value: form.diaChiSnapshot, wide: true },
-        { label: "Người mua hàng", value: form.nguoiLienHeSnapshot },
-        { label: "Email", value: form.emailSnapshot },
-        { label: "Số điện thoại", value: form.dienThoaiSnapshot },
-    ];
-
+function CompanyFields({ form, disabled, lookupLoading, canLookup, onLookup, updateSnapshot }) {
     return (
-        <Paper
-            elevation={0}
-            sx={{
-                p: { xs: 1.5, md: 2 },
-                borderRadius: 2.5,
-                border: (theme) => `1px solid ${theme.palette.divider}`,
-                bgcolor: "#F8FAFC",
-            }}
-        >
-            <Stack spacing={1.5}>
-                <Box>
-                    <Typography sx={{ fontWeight: 850 }}>Thông tin sẽ ghi lên hóa đơn</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Chỉ chọn/tạo người mua ở phía trên. Dữ liệu dưới đây là snapshot hiển thị, không nhập tay.
-                    </Typography>
-                </Box>
-
-                {!hasBuyer ? (
-                    <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                        Chưa chọn người mua. Hãy chọn từ danh mục hoặc tạo nhanh người mua mới.
-                    </Alert>
-                ) : (
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.4fr 1fr 1fr" }, gap: 1.25 }}>
-                        {fields.map((item) => (
-                            <InfoTile key={item.label} label={item.label} value={item.value} wide={item.wide} />
-                        ))}
-                    </Box>
-                )}
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" }, gap: 1.5 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ gridColumn: { md: "span 2" } }}>
+                <TextField fullWidth required disabled={disabled} label="Mã số thuế" value={form.maSoThueSnapshot || ""}
+                    onChange={(e) => updateSnapshot({ maSoThueSnapshot: e.target.value, nguoiMuaId: null })} />
+                <Button variant="outlined" startIcon={lookupLoading ? <CircularProgress size={18} /> : <PublicIcon />}
+                    disabled={disabled || lookupLoading || !canLookup} onClick={onLookup} sx={{ minWidth: 150, whiteSpace: "nowrap" }}>
+                    Lấy thông tin
+                </Button>
             </Stack>
-        </Paper>
+            <TextField disabled={disabled} label="Mã đơn vị" value={form.maDonViSnapshot || ""} onChange={(e) => updateSnapshot({ maDonViSnapshot: e.target.value })} />
+            <TextField required disabled={disabled} label="Tên đơn vị" value={form.tenNguoiMuaSnapshot || ""} onChange={(e) => updateSnapshot({ tenNguoiMuaSnapshot: e.target.value })} sx={{ gridColumn: { md: "span 2" } }} />
+            <TextField required disabled={disabled} label="Địa chỉ" value={form.diaChiSnapshot || ""} onChange={(e) => updateSnapshot({ diaChiSnapshot: e.target.value })} sx={{ gridColumn: { md: "1 / -1" } }} />
+            <TextField disabled={disabled} label="Người mua hàng" value={form.nguoiLienHeSnapshot || ""} onChange={(e) => updateSnapshot({ nguoiLienHeSnapshot: e.target.value })} />
+            <TextField disabled={disabled} type="email" label="Email" value={form.emailSnapshot || ""} onChange={(e) => updateSnapshot({ emailSnapshot: e.target.value })} />
+            <TextField disabled={disabled} label="Số điện thoại" value={form.dienThoaiSnapshot || ""} onChange={(e) => updateSnapshot({ dienThoaiSnapshot: e.target.value })} />
+        </Box>
     );
 }
 
-function InfoTile({ label, value, wide }) {
+function PersonFields({ form, disabled, updateSnapshot }) {
     return (
-        <Box
-            sx={{
-                gridColumn: wide ? { xs: "auto", md: "span 2" } : "auto",
-                minWidth: 0,
-                p: 1.25,
-                borderRadius: 2,
-                bgcolor: "background.paper",
-                border: (theme) => `1px solid ${theme.palette.divider}`,
-            }}
-        >
-            <Typography variant="caption" color="text.secondary">{label}</Typography>
-            <Typography sx={{ mt: 0.35, fontWeight: 750, overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
-                {value || "—"}
-            </Typography>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr" }, gap: 1.5 }}>
+            <TextField required disabled={disabled} label="Họ tên người mua" value={form.tenNguoiMuaSnapshot || ""} onChange={(e) => updateSnapshot({ tenNguoiMuaSnapshot: e.target.value })} />
+            <TextField disabled={disabled} label="Căn cước công dân" value={form.soGiayToSnapshot || ""} onChange={(e) => updateSnapshot({ soGiayToSnapshot: e.target.value })} />
+            <TextField required disabled={disabled} label="Địa chỉ" value={form.diaChiSnapshot || ""} onChange={(e) => updateSnapshot({ diaChiSnapshot: e.target.value })} sx={{ gridColumn: { md: "1 / -1" } }} />
+            <TextField disabled={disabled} type="email" label="Email" value={form.emailSnapshot || ""} onChange={(e) => updateSnapshot({ emailSnapshot: e.target.value })} />
+            <TextField disabled={disabled} label="Số điện thoại" value={form.dienThoaiSnapshot || ""} onChange={(e) => updateSnapshot({ dienThoaiSnapshot: e.target.value })} />
+            <Alert severity="info" sx={{ gridColumn: { md: "1 / -1" } }}>Thông tin cá nhân được nhập trực tiếp và không gửi đến VietQR.</Alert>
         </Box>
     );
 }

@@ -180,14 +180,10 @@ export const isSameId = (left, right) =>
 
 export function getDisplayStatus(phieu) {
     if (phieu?.trangThai !== "HoanThanh") return phieu?.trangThai;
-    if (phieu?.maLoaiChiPhi === "TienXDCB") return "HoanThanh";
     return phieu?.maLenhChi ? "HoanThanh_DaCoLenhChi" : "HoanThanh_ChuaCoLenhChi";
 }
 
 export function getCompletedAt(phieu) {
-    if (phieu?.trangThai === "HoanThanh" && phieu?.maLoaiChiPhi === "TienXDCB") {
-        return phieu?.gdTime || phieu?.kttTime || null;
-    }
     if (!phieu?.maLenhChi) return null;
     return phieu?.ngayNhapLenhChi || null;
 }

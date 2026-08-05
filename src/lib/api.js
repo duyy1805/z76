@@ -290,6 +290,10 @@ function cleanParams(params = {}) {
 }
 
 export const hoaDonApi = {
+    async lookupBusinessTaxCode(taxCode) {
+        const { data } = await httpHd.get(`/tra-cuu-mst/${encodeURIComponent(taxCode)}`);
+        return data;
+    },
     async lookup() {
         const { data } = await httpHd.get("/lookup");
         return data;

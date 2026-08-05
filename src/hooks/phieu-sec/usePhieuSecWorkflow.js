@@ -34,6 +34,13 @@ export default function usePhieuSecWorkflow({
     const [deletePhieuSubmitting, setDeletePhieuSubmitting] = useState(false);
     const [submitPhieuId, setSubmitPhieuId] = useState(null);
 
+    const closeDetailIfActive = (phieuId) => {
+        if (detail?.id !== phieuId) return;
+        setOpenDetail(false);
+        setDetail(null);
+        resetAttachments();
+    };
+
     const handleApprove = async (phieu, agree, event) => {
         event?.stopPropagation();
         if (!agree) {
@@ -59,6 +66,7 @@ export default function usePhieuSecWorkflow({
             log("approve:after", updated);
             setRows((rows) => rows?.map((item) => item.id === updated.id ? updated : item));
             setDetail((current) => current?.id === updated.id ? updated : current);
+            closeDetailIfActive(phieu.id);
             setToast({ open: true, msg: "Đã duyệt", type: "success" });
         } catch (error) {
             log("approve:error", error?.response?.data || error);
@@ -74,6 +82,7 @@ export default function usePhieuSecWorkflow({
             const updated = await api.submitPhieu(phieu.id, { ...user, role });
             setRows((rows) => rows?.map((item) => item.id === updated.id ? updated : item));
             setDetail((current) => current?.id === updated.id ? updated : current);
+            closeDetailIfActive(phieu.id);
             setToast({ open: true, msg: "Đã trình TBP", type: "success" });
         } catch (error) {
             setToast({
@@ -101,6 +110,7 @@ export default function usePhieuSecWorkflow({
             setRejectOpen(false);
             setRejectTarget(null);
             setRejectReason("");
+            closeDetailIfActive(rejectTarget.id);
             setToast({ open: true, msg: "Đã từ chối phiếu", type: "success" });
         } catch (error) {
             setToast({
@@ -139,6 +149,7 @@ export default function usePhieuSecWorkflow({
             setReturnOpen(false);
             setReturnTarget(null);
             setReturnReason("");
+            closeDetailIfActive(returnTarget.id);
             setToast({ open: true, msg: "Đã trả lại phiếu để chỉnh sửa", type: "success" });
         } catch (error) {
             setToast({

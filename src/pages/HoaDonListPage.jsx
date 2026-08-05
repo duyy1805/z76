@@ -35,7 +35,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canConfirmInvoiceExported, canEditInvoice, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canEditInvoice, currencyAmountScale, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
 
 function normalizeSearch(value) {
     return String(value || "")
@@ -444,7 +444,7 @@ export default function HoaDonListPage() {
                                     <Typography variant="caption" color="text.secondary">MST: {row.maSoThue || "—"}</Typography>
                                 </TableCell>
                                 <TableCell>{row.ngayHoaDon ? String(row.ngayHoaDon).slice(0, 10) : "—"}</TableCell>
-                                <TableCell align="right">{fmtMoney(row.tongTienThanhToan, 0, row.maLoaiTien)} {row.maLoaiTien}</TableCell>
+                                <TableCell align="right">{fmtMoney(row.tongTienThanhToan, currencyAmountScale(row.maLoaiTien), row.maLoaiTien)} {row.maLoaiTien}</TableCell>
                                 <TableCell><StatusChip status={row.maTrangThai} /></TableCell>
                                 <TableCell>{row.tenNguoiDangKy || row.nguoiDangKyId}</TableCell>
                                 <TableCell align="right">

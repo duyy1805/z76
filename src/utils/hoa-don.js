@@ -20,10 +20,49 @@ export const TAX_MODE_LABELS = {
     NhieuThueSuat: "Nhiều thuế suất",
 };
 
+export const REVENUE_TYPE_LABELS = {
+    KinhDoanhThuongMai: "Kinh doanh thương mại",
+    KinhTeNoiDia: "Kinh tế nội địa",
+    QuocPhongNhomI: "Quốc phòng nhóm I",
+    QuocPhongNhomII: "Quốc phòng nhóm II",
+    XuatKhau: "Xuất khẩu",
+};
+
+export const VAT_RATE_OPTIONS = [
+    { value: "0", label: "0%", rate: 0 },
+    { value: "5", label: "5%", rate: 5 },
+    { value: "8", label: "8%", rate: 8 },
+    { value: "10", label: "10%", rate: 10 },
+    { value: "KCT", label: "KCT", rate: 0 },
+    { value: "KKKNT", label: "KKKNT", rate: 0 },
+    { value: "KHAC", label: "KHAC", rate: 0 },
+];
+
+export function vatRateValue(code) {
+    return VAT_RATE_OPTIONS.find((option) => option.value === String(code ?? ""))?.rate ?? 0;
+}
+
+export function vatRateLabel(code, fallbackRate = 0) {
+    return VAT_RATE_OPTIONS.find((option) => option.value === String(code ?? ""))?.label
+        || `${Number(fallbackRate || 0)}%`;
+}
+
+export const INVOICE_NUMBER_FORMAT = {
+    convertedAmount: 0,
+    convertedUnitPrice: 5,
+    exchangeRate: 0,
+    foreignAmount: 3,
+    foreignUnitPrice: 3,
+    percentage: 2,
+    quantity: 2,
+};
+
 export const DEFAULT_INVOICE_FORM = {
     maLoaiHoaDon: "TrongNuoc",
     cheDoThue: "MotThueSuat",
+    loaiHinhDoanhThu: "",
     nguoiMuaId: null,
+    loaiNguoiMua: "DoanhNghiep",
     diaChiId: null,
     lienHeId: null,
     ngayHoaDon: new Date().toISOString().slice(0, 10),
@@ -41,7 +80,7 @@ export const DEFAULT_INVOICE_FORM = {
     nguoiLienHeSnapshot: "",
     emailSnapshot: "",
     dienThoaiSnapshot: "",
-    thueSuatChung: 0,
+    thueSuatChung: "0",
     ghiChu: "",
     chiTiet: [emptyInvoiceLine(1)],
     quocPhong: {
@@ -66,6 +105,7 @@ export function emptyInvoiceLine(soDong = 1) {
         donGia: "",
         tyLeChietKhau: 0,
         thueSuatGTGT: "",
+        maThueSuatGTGT: "",
         tinhChatHHDV: "",
         ghiChu: "",
         soLuongHopDong: "",
@@ -82,8 +122,27 @@ export function fmtMoney(value, fraction = 0, currency = "VND") {
     const locale = String(currency || "VND").toUpperCase() === "VND" ? "vi-VN" : "en-US";
     return n.toLocaleString(locale, {
         minimumFractionDigits: fraction,
-        maximumFractionDigits: fraction || 4,
+        maximumFractionDigits: fraction,
     });
+}
+
+export function currencyAmountScale(currency = "VND") {
+    return String(currency).toUpperCase() === "VND"
+        ? INVOICE_NUMBER_FORMAT.convertedAmount
+        : INVOICE_NUMBER_FORMAT.foreignAmount;
+}
+
+export function currencyUnitPriceScale(currency = "VND") {
+    return String(currency).toUpperCase() === "VND"
+        ? INVOICE_NUMBER_FORMAT.convertedUnitPrice
+        : INVOICE_NUMBER_FORMAT.foreignUnitPrice;
+}
+
+export function roundInvoiceNumber(value, fraction) {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) return 0;
+    const factor = 10 ** fraction;
+    return Math.round((n + Number.EPSILON) * factor) / factor;
 }
 
 export function toNumber(value, fallback = 0) {
@@ -106,8 +165,8 @@ export function calculateLine(line, tyGia = 1) {
         tienCK,
         thanhTien,
         tienThue,
-        thanhTienQuyDoi: thanhTien * toNumber(tyGia, 1),
-        tienThueQuyDoi: tienThue * toNumber(tyGia, 1),
+        thanhTienQuyDoi: roundInvoiceNumber(thanhTien * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.convertedAmount),
+        tienThueQuyDoi: roundInvoiceNumber(tienThue * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.convertedAmount),
     };
 }
 
@@ -124,26 +183,35 @@ export function calculateTotals(lines = [], tyGia = 1) {
 
 export function normalizeInvoicePayload(form, user) {
     const isOneTax = form.cheDoThue === "MotThueSuat";
-    const tax = toNumber(form.thueSuatChung, 0);
+    const isCompany = form.loaiNguoiMua === "DoanhNghiep";
     const chiTiet = (form.chiTiet || []).map((line, index) => ({
         soDong: index + 1,
         maHang: line.maHang || "",
         tenHangHoaDichVu: line.tenHangHoaDichVu || "",
         donViTinh: line.donViTinh || "",
-        soLuong: toNumber(line.soLuong, 0),
-        donGia: toNumber(line.donGia, 0),
-        tyLeChietKhau: toNumber(line.tyLeChietKhau, 0),
-        thueSuatGTGT: isOneTax ? tax : toNumber(line.thueSuatGTGT, 0),
+        soLuong: roundInvoiceNumber(line.soLuong, INVOICE_NUMBER_FORMAT.quantity),
+        donGia: roundInvoiceNumber(line.donGia, currencyUnitPriceScale(form.maLoaiTien)),
+        tyLeChietKhau: roundInvoiceNumber(line.tyLeChietKhau, INVOICE_NUMBER_FORMAT.percentage),
+        maThueSuatGTGT: isOneTax ? String(form.thueSuatChung ?? "") : String(line.maThueSuatGTGT ?? line.thueSuatGTGT ?? ""),
+        thueSuatGTGT: roundInvoiceNumber(
+            vatRateValue(isOneTax ? form.thueSuatChung : line.maThueSuatGTGT ?? line.thueSuatGTGT),
+            INVOICE_NUMBER_FORMAT.percentage
+        ),
         tinhChatHHDV: line.tinhChatHHDV || "",
         ghiChu: line.ghiChu || "",
     }));
 
     return {
         ...form,
+        loaiNguoiMua: isCompany ? "DoanhNghiep" : "CaNhan",
+        maSoThueSnapshot: isCompany ? String(form.maSoThueSnapshot || "").replace(/[\s.-]/g, "") : "",
+        soGiayToSnapshot: isCompany ? "" : String(form.soGiayToSnapshot || "").replace(/\s/g, ""),
+        maDonViSnapshot: isCompany ? form.maDonViSnapshot || "" : "",
+        nguoiLienHeSnapshot: isCompany ? form.nguoiLienHeSnapshot || "" : "",
         hinhThucThanhToan: form.hinhThucThanhToan || "",
         requesterUserId: user?.id,
         requesterIdDonVi: user?.idDonVi,
-        tyGia: form.maLoaiTien === "VND" ? 1 : toNumber(form.tyGia, 1),
+        tyGia: form.maLoaiTien === "VND" ? 1 : roundInvoiceNumber(form.tyGia, INVOICE_NUMBER_FORMAT.exchangeRate),
         nguoiMuaId: form.nguoiMuaId ? Number(form.nguoiMuaId) : null,
         diaChiId: form.diaChiId ? Number(form.diaChiId) : null,
         lienHeId: form.lienHeId ? Number(form.lienHeId) : null,
@@ -152,19 +220,21 @@ export function normalizeInvoicePayload(form, user) {
             ...(form.quocPhong || {}),
             chiTiet: (form.chiTiet || []).map((line, index) => ({
                 soDong: index + 1,
-                soLuongHopDong: valueOrNull(line.soLuongHopDong),
-                donGiaHopDong: valueOrNull(line.donGiaHopDong),
-                soLuongThucHien: valueOrNull(line.soLuongThucHien),
-                donGiaThucHien: valueOrNull(line.donGiaThucHien),
-                soLuongLuyKe: valueOrNull(line.soLuongLuyKe),
-                donGiaLuyKe: valueOrNull(line.donGiaLuyKe),
+                soLuongHopDong: valueOrNull(line.soLuongHopDong, INVOICE_NUMBER_FORMAT.quantity),
+                donGiaHopDong: valueOrNull(line.donGiaHopDong, currencyUnitPriceScale(form.maLoaiTien)),
+                soLuongThucHien: valueOrNull(line.soLuongThucHien, INVOICE_NUMBER_FORMAT.quantity),
+                donGiaThucHien: valueOrNull(line.donGiaThucHien, currencyUnitPriceScale(form.maLoaiTien)),
+                soLuongLuyKe: valueOrNull(line.soLuongLuyKe, INVOICE_NUMBER_FORMAT.quantity),
+                donGiaLuyKe: valueOrNull(line.donGiaLuyKe, currencyUnitPriceScale(form.maLoaiTien)),
             })),
         } : undefined,
     };
 }
 
-function valueOrNull(value) {
-    return value === "" || value === null || value === undefined ? null : Number(value);
+function valueOrNull(value, fraction) {
+    return value === "" || value === null || value === undefined
+        ? null
+        : roundInvoiceNumber(value, fraction);
 }
 
 function zeroToBlank(value) {
@@ -184,6 +254,7 @@ export function invoiceToForm(detail) {
             donGia: zeroToBlank(line.DonGia),
             tyLeChietKhau: line.TyLeChietKhau ?? 0,
             thueSuatGTGT: line.ThueSuatGTGT ?? "",
+            maThueSuatGTGT: line.MaThueSuatGTGT || String(line.ThueSuatGTGT ?? ""),
             tinhChatHHDV: line.TinhChatHHDV || "",
             ghiChu: line.GhiChu || "",
             soLuongHopDong: qp.SoLuongHopDong ?? "",
@@ -199,7 +270,9 @@ export function invoiceToForm(detail) {
         ...DEFAULT_INVOICE_FORM,
         maLoaiHoaDon: detail.maLoaiHoaDon || "TrongNuoc",
         cheDoThue: detail.cheDoThue || "MotThueSuat",
+        loaiHinhDoanhThu: detail.loaiHinhDoanhThu || "",
         nguoiMuaId: detail.nguoiMuaId || null,
+        loaiNguoiMua: detail.loaiNguoiMua || (detail.maSoThue ? "DoanhNghiep" : "CaNhan"),
         ngayHoaDon: detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : "",
         hinhThucThanhToan: detail.hinhThucThanhToan || "",
         maLoaiTien: detail.maLoaiTien || "VND",
@@ -208,12 +281,14 @@ export function invoiceToForm(detail) {
         kyHieuDuKien: detail.kyHieuDuKien || "",
         tenNguoiMuaSnapshot: detail.tenNguoiMua || "",
         maSoThueSnapshot: detail.maSoThue || "",
+        soGiayToSnapshot: detail.soGiayTo || "",
+        maDonViSnapshot: detail.maDonVi || "",
         diaChiSnapshot: detail.diaChi || "",
         nguoiLienHeSnapshot: detail.nguoiLienHe || "",
         emailSnapshot: detail.email || "",
         dienThoaiSnapshot: detail.dienThoai || "",
         ghiChu: detail.ghiChu || "",
-        thueSuatChung: chiTiet[0]?.thueSuatGTGT ?? 0,
+        thueSuatChung: chiTiet[0]?.maThueSuatGTGT || String(chiTiet[0]?.thueSuatGTGT ?? "0"),
         chiTiet: chiTiet.length ? chiTiet : [emptyInvoiceLine(1)],
         quocPhong: {
             ...DEFAULT_INVOICE_FORM.quocPhong,
