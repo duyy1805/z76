@@ -146,7 +146,7 @@ export default function HoaDonListPage() {
 
         return rows.filter((row) => {
             const okMa = !qMa || normalizeSearch(row.maDangKy).includes(qMa);
-            const okNguoiMua = !qNguoiMua || normalizeSearch([row.tenNguoiMua, row.maSoThue].filter(Boolean).join(" ")).includes(qNguoiMua);
+            const okNguoiMua = !qNguoiMua || normalizeSearch([row.tenNguoiMua, row.maSoThue, row.soGiayTo, row.maDvcqhns].filter(Boolean).join(" ")).includes(qNguoiMua);
             const okNguoiTao = !qNguoiTao || normalizeSearch([row.tenNguoiDangKy, row.nguoiDangKyId].filter(Boolean).join(" ")).includes(qNguoiTao);
             const amount = Number(row.tongTienThanhToan || 0);
             const okAmountFrom = !hasAmountFrom || amount >= amountFrom;
@@ -308,7 +308,7 @@ export default function HoaDonListPage() {
 
             <Paper elevation={0} sx={{ p: 1.5, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3 }}>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.4fr 1fr 1fr 1fr 1fr" }, gap: 1.25 }}>
-                    <TextField size="small" label="Từ khóa" value={filters.tukhoa} onChange={(e) => setFilter({ tukhoa: e.target.value })} placeholder="Mã đăng ký, người mua, MST..." />
+                    <TextField size="small" label="Từ khóa" value={filters.tukhoa} onChange={(e) => setFilter({ tukhoa: e.target.value })} placeholder="Mã đăng ký, người mua, MST, MĐVCQHNS..." />
                     <TextField size="small" select label="Trạng thái" value={filters.maTrangThai} onChange={(e) => setFilter({ maTrangThai: e.target.value })}>
                         <MenuItem value="">Tất cả</MenuItem>
                         {INVOICE_STATUS_OPTIONS.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}
@@ -372,13 +372,13 @@ export default function HoaDonListPage() {
                                     <TextField
                                         autoFocus
                                         size="small"
-                                        label="Tên người mua / MST"
-                                        placeholder="Nhập tên, mã số thuế..."
+                                        label="Tên người mua / Mã định danh"
+                                        placeholder="Nhập tên, MST, MĐVCQHNS hoặc CCCD..."
                                         value={tableFilters.nguoiMua}
                                         onChange={(event) => setTableFilter({ nguoiMua: event.target.value })}
                                     />
                                     <Typography variant="caption" color="text.secondary">
-                                        Tìm không dấu, theo tên người mua hoặc mã số thuế.
+                                        Tìm không dấu, theo tên người mua, MST, MĐVCQHNS hoặc CCCD.
                                     </Typography>
                                 </HeaderFilter>
                             </TableCell>
@@ -441,7 +441,9 @@ export default function HoaDonListPage() {
                                 <TableCell>{INVOICE_TYPE_LABELS[row.maLoaiHoaDon] || row.maLoaiHoaDon}</TableCell>
                                 <TableCell>
                                     <Typography sx={{ fontWeight: 650 }}>{row.tenNguoiMua || "—"}</Typography>
-                                    <Typography variant="caption" color="text.secondary">MST: {row.maSoThue || "—"}</Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {row.loaiNguoiMua === "CaNhan" ? "CCCD" : row.maSoThue ? "MST" : "MĐVCQHNS"}: {row.loaiNguoiMua === "CaNhan" ? row.soGiayTo || "—" : row.maSoThue || row.maDvcqhns || "—"}
+                                    </Typography>
                                 </TableCell>
                                 <TableCell>{row.ngayHoaDon ? String(row.ngayHoaDon).slice(0, 10) : "—"}</TableCell>
                                 <TableCell align="right">{fmtMoney(row.tongTienThanhToan, currencyAmountScale(row.maLoaiTien), row.maLoaiTien)} {row.maLoaiTien}</TableCell>

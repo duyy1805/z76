@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
     Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions,
-    DialogContent, DialogTitle, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
+    DialogContent, DialogTitle, FormControlLabel, Stack, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
 import BusinessIcon from "@mui/icons-material/Business";
 import PersonIcon from "@mui/icons-material/Person";
@@ -10,15 +10,16 @@ import { hoaDonApi } from "../../lib/api";
 
 const COMPANY = "DoanhNghiep";
 const PERSON = "CaNhan";
+const normalizeBuyerType = (value) => value === PERSON ? PERSON : COMPANY;
 const normalizeTaxCode = (value) => String(value || "").replace(/[\s.-]/g, "");
 const hasBuyerData = (form) => Boolean(
-    form.tenNguoiMuaSnapshot || form.maSoThueSnapshot || form.soGiayToSnapshot ||
+    form.tenNguoiMuaSnapshot || form.maSoThueSnapshot || form.soGiayToSnapshot || form.maDvcqhnsSnapshot ||
     form.diaChiSnapshot || form.nguoiLienHeSnapshot || form.emailSnapshot || form.dienThoaiSnapshot
 );
 const emptyBuyerPatch = (loaiNguoiMua) => ({
-    loaiNguoiMua, nguoiMuaId: null, diaChiId: null, lienHeId: null,
+    loaiNguoiMua: normalizeBuyerType(loaiNguoiMua), khongCoMaSoThue: false, nguoiMuaId: null, diaChiId: null, lienHeId: null,
     tenNguoiMuaSnapshot: "", maSoThueSnapshot: "", soGiayToSnapshot: "",
-    maDonViSnapshot: "", diaChiSnapshot: "", nguoiLienHeSnapshot: "",
+    maDvcqhnsSnapshot: "", maDonViSnapshot: "", diaChiSnapshot: "", nguoiLienHeSnapshot: "",
     emailSnapshot: "", dienThoaiSnapshot: "",
 });
 
@@ -55,18 +56,21 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
             const detail = await hoaDonApi.getNguoiMua(buyer.NguoiMuaId);
             const diaChi = detail.diaChi?.find((item) => item.IsDefault) || detail.diaChi?.[0] || {};
             const lienHe = detail.lienHe?.find((item) => item.IsDefault) || detail.lienHe?.[0] || {};
-            const loaiNguoiMua = detail.LoaiNguoiMua || (detail.MaSoThue ? COMPANY : PERSON);
+            const loaiNguoiMua = normalizeBuyerType(detail.LoaiNguoiMua || (detail.MaSoThue || detail.MaDVCQHNS ? COMPANY : PERSON));
+            const isOrganization = loaiNguoiMua !== PERSON;
             updateSnapshot({
                 loaiNguoiMua,
+                khongCoMaSoThue: isOrganization && !detail.MaSoThue && Boolean(detail.MaDVCQHNS),
                 nguoiMuaId: detail.NguoiMuaId,
                 diaChiId: diaChi.DiaChiId || null,
                 lienHeId: lienHe.LienHeId || null,
                 tenNguoiMuaSnapshot: detail.TenPhapLy || "",
-                maSoThueSnapshot: loaiNguoiMua === COMPANY ? detail.MaSoThue || "" : "",
+                maSoThueSnapshot: isOrganization ? detail.MaSoThue || "" : "",
                 soGiayToSnapshot: loaiNguoiMua === PERSON ? detail.SoGiayTo || "" : "",
-                maDonViSnapshot: loaiNguoiMua === COMPANY ? detail.MaDonVi || "" : "",
+                maDvcqhnsSnapshot: isOrganization ? detail.MaDVCQHNS || "" : "",
+                maDonViSnapshot: isOrganization ? detail.MaDonVi || "" : "",
                 diaChiSnapshot: diaChi.DiaChi || "",
-                nguoiLienHeSnapshot: loaiNguoiMua === COMPANY ? lienHe.HoTen || "" : "",
+                nguoiLienHeSnapshot: isOrganization ? lienHe.HoTen || "" : "",
                 emailSnapshot: lienHe.Email || "",
                 dienThoaiSnapshot: lienHe.DienThoai || "",
             });
@@ -77,7 +81,7 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
     };
 
     const changeBuyerType = (nextType) => {
-        if (!nextType || nextType === form.loaiNguoiMua) return;
+        if (!nextType || nextType === normalizeBuyerType(form.loaiNguoiMua)) return;
         if (hasBuyerData(form)) {
             setConfirmType(nextType);
             return;
@@ -107,7 +111,6 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
                 return;
             }
             updateSnapshot({
-                nguoiMuaId: null, diaChiId: null, lienHeId: null,
                 maSoThueSnapshot: result.data.maSoThue || taxCode,
                 tenNguoiMuaSnapshot: result.data.tenPhapLy || "",
                 diaChiSnapshot: result.data.diaChi || "",
@@ -125,15 +128,24 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
 
     const buyerOptionLabel = (option) => {
         if (!option) return "";
-        const identifier = option.MaSoThue || option.SoGiayTo;
+        const identifier = option.MaSoThue || option.MaDVCQHNS || option.SoGiayTo;
+        const identifierLabel = option.MaSoThue ? "MST" : option.MaDVCQHNS ? "MĐVCQHNS" : "CCCD";
         return [
             option.TenPhapLy,
-            identifier ? `${option.MaSoThue ? "MST" : "CCCD"}: ${identifier}` : "",
+            identifier ? `${identifierLabel}: ${identifier}` : "",
             option.NguoiLienHeMacDinh ? `Người mua: ${option.NguoiLienHeMacDinh}` : "",
             option.EmailMacDinh ? `Email: ${option.EmailMacDinh}` : "",
         ].filter(Boolean).join(" • ");
     };
-    const isCompany = (form.loaiNguoiMua || COMPANY) === COMPANY;
+    const isCompany = normalizeBuyerType(form.loaiNguoiMua) === COMPANY;
+    const changeIdentifierMode = (withoutTaxCode) => {
+        updateSnapshot({
+            khongCoMaSoThue: withoutTaxCode,
+            maSoThueSnapshot: withoutTaxCode ? "" : form.maSoThueSnapshot,
+            maDvcqhnsSnapshot: withoutTaxCode ? form.maDvcqhnsSnapshot : "",
+        });
+        setLastLookedUpTaxCode("");
+    };
 
     return (
         <Stack spacing={2}>
@@ -148,10 +160,10 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
                 getOptionLabel={buyerOptionLabel}
                 isOptionEqualToValue={(option, value) => Number(option?.NguoiMuaId) === Number(value?.NguoiMuaId)}
                 renderOption={(props, option) => {
-                    const identifier = option.MaSoThue || option.SoGiayTo;
-                    const isCompanyOption = option.LoaiNguoiMua
-                        ? option.LoaiNguoiMua === COMPANY
-                        : Boolean(option.MaSoThue);
+                    const identifier = option.MaSoThue || option.MaDVCQHNS || option.SoGiayTo;
+                    const identifierLabel = option.MaSoThue ? "MST" : option.MaDVCQHNS ? "MĐVCQHNS" : "CCCD";
+                    const optionType = normalizeBuyerType(option.LoaiNguoiMua || (option.MaSoThue || option.MaDVCQHNS ? COMPANY : PERSON));
+                    const typeLabel = optionType === PERSON ? "Cá nhân" : "Tổ chức/Doanh nghiệp";
                     return (
                         <Box
                             component="li"
@@ -166,11 +178,11 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
                                 sx={{ mt: 0.35 }}
                             >
                                 <Typography variant="caption" color="text.secondary">
-                                    Loại: {isCompanyOption ? "Công ty" : "Cá nhân"}
+                                    Loại: {typeLabel}
                                 </Typography>
                                 {identifier && (
                                     <Typography variant="caption" color="text.secondary">
-                                        {option.MaSoThue ? "MST" : "CCCD"}: {identifier}
+                                        {identifierLabel}: {identifier}
                                     </Typography>
                                 )}
                                 {option.MaDonVi && (
@@ -210,23 +222,23 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
                         </Box>
                     );
                 }}
-                renderInput={(params) => <TextField {...params} label="Tìm người mua đã lưu" placeholder="Tên, MST hoặc CCCD" />}
+                renderInput={(params) => <TextField {...params} label="Tìm người mua đã lưu" placeholder="Tên, MST, MĐVCQHNS hoặc CCCD" />}
             />
             <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>Loại người mua</Typography>
                 <ToggleButtonGroup
-                    exclusive disabled={disabled} value={form.loaiNguoiMua || COMPANY}
+                    exclusive disabled={disabled} value={normalizeBuyerType(form.loaiNguoiMua)}
                     onChange={(_, value) => changeBuyerType(value)} color="primary" fullWidth
                 >
-                    <ToggleButton value={COMPANY}><BusinessIcon sx={{ mr: 1 }} />Công ty</ToggleButton>
+                    <ToggleButton value={COMPANY}><BusinessIcon sx={{ mr: 1 }} />Tổ chức/Doanh nghiệp</ToggleButton>
                     <ToggleButton value={PERSON}><PersonIcon sx={{ mr: 1 }} />Cá nhân</ToggleButton>
                 </ToggleButtonGroup>
             </Box>
             {isCompany ? (
-                <CompanyFields
+                <OrganizationFields
                     form={form} disabled={disabled} lookupLoading={lookupLoading}
-                    canLookup={normalizeTaxCode(form.maSoThueSnapshot) !== lastLookedUpTaxCode}
-                    onLookup={lookupTaxCode} updateSnapshot={updateSnapshot}
+                    canLookup={Boolean(normalizeTaxCode(form.maSoThueSnapshot)) && normalizeTaxCode(form.maSoThueSnapshot) !== lastLookedUpTaxCode}
+                    onLookup={lookupTaxCode} onIdentifierModeChange={changeIdentifierMode} updateSnapshot={updateSnapshot}
                 />
             ) : <PersonFields form={form} disabled={disabled} updateSnapshot={updateSnapshot} />}
             <Dialog open={Boolean(confirmType)} onClose={() => setConfirmType("")} maxWidth="xs" fullWidth>
@@ -241,17 +253,28 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
     );
 }
 
-function CompanyFields({ form, disabled, lookupLoading, canLookup, onLookup, updateSnapshot }) {
+function OrganizationFields({ form, disabled, lookupLoading, canLookup, onLookup, onIdentifierModeChange, updateSnapshot }) {
+    const withoutTaxCode = Boolean(form.khongCoMaSoThue);
     return (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" }, gap: 1.5 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ gridColumn: { md: "span 2" } }}>
-                <TextField fullWidth required disabled={disabled} label="Mã số thuế" value={form.maSoThueSnapshot || ""}
-                    onChange={(e) => updateSnapshot({ maSoThueSnapshot: e.target.value, nguoiMuaId: null })} />
-                <Button variant="outlined" startIcon={lookupLoading ? <CircularProgress size={18} /> : <PublicIcon />}
-                    disabled={disabled || lookupLoading || !canLookup} onClick={onLookup} sx={{ minWidth: 150, whiteSpace: "nowrap" }}>
-                    Lấy thông tin
-                </Button>
-            </Stack>
+            <FormControlLabel
+                sx={{ gridColumn: { md: "1 / -1" }, m: 0 }}
+                control={<Switch checked={withoutTaxCode} disabled={disabled} onChange={(event) => onIdentifierModeChange(event.target.checked)} />}
+                label="Đơn vị không có mã số thuế"
+            />
+            {withoutTaxCode ? (
+                <TextField required disabled={disabled} label="MĐVCQHNS" value={form.maDvcqhnsSnapshot || ""}
+                    onChange={(e) => updateSnapshot({ maDvcqhnsSnapshot: e.target.value })} sx={{ gridColumn: { md: "span 2" } }} />
+            ) : (
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ gridColumn: { md: "span 2" } }}>
+                    <TextField fullWidth required disabled={disabled} label="Mã số thuế" value={form.maSoThueSnapshot || ""}
+                        onChange={(e) => updateSnapshot({ maSoThueSnapshot: e.target.value })} />
+                    <Button variant="outlined" startIcon={lookupLoading ? <CircularProgress size={18} /> : <PublicIcon />}
+                        disabled={disabled || lookupLoading || !canLookup} onClick={onLookup} sx={{ minWidth: 150, whiteSpace: "nowrap" }}>
+                        Lấy thông tin
+                    </Button>
+                </Stack>
+            )}
             <TextField disabled={disabled} label="Mã đơn vị" value={form.maDonViSnapshot || ""} onChange={(e) => updateSnapshot({ maDonViSnapshot: e.target.value })} />
             <TextField required disabled={disabled} label="Tên đơn vị" value={form.tenNguoiMuaSnapshot || ""} onChange={(e) => updateSnapshot({ tenNguoiMuaSnapshot: e.target.value })} sx={{ gridColumn: { md: "span 2" } }} />
             <TextField required disabled={disabled} label="Địa chỉ" value={form.diaChiSnapshot || ""} onChange={(e) => updateSnapshot({ diaChiSnapshot: e.target.value })} sx={{ gridColumn: { md: "1 / -1" } }} />

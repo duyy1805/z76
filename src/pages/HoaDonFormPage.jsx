@@ -118,13 +118,18 @@ export default function HoaDonFormPage() {
     const setQuocPhong = (patch) => setForm((current) => ({ ...current, quocPhong: { ...current.quocPhong, ...patch } }));
 
     const validate = () => {
-        const isCompany = form.loaiNguoiMua === "DoanhNghiep";
+        const isCompany = form.loaiNguoiMua !== "CaNhan";
+        const withoutTaxCode = isCompany && Boolean(form.khongCoMaSoThue);
         const taxCode = String(form.maSoThueSnapshot || "").replace(/[\s.-]/g, "");
+        const budgetRelationCode = String(form.maDvcqhnsSnapshot || "").trim();
         const citizenId = String(form.soGiayToSnapshot || "").replace(/\s/g, "");
         const email = String(form.emailSnapshot || "").trim();
         const phone = String(form.dienThoaiSnapshot || "").replace(/[\s().-]/g, "");
-        if (isCompany && !taxCode) return "Nhập mã số thuế của công ty.";
-        if (isCompany && !/^\d{10}(?:\d{3})?$/.test(taxCode)) return "Mã số thuế phải gồm 10 hoặc 13 chữ số.";
+        if (isCompany && !withoutTaxCode && !taxCode) return "Nhập mã số thuế của tổ chức/doanh nghiệp.";
+        if (isCompany && !withoutTaxCode && !/^\d{10}(?:\d{3})?$/.test(taxCode)) return "Mã số thuế phải gồm 10 hoặc 13 chữ số.";
+        if (isCompany && withoutTaxCode && !budgetRelationCode) return "Nhập MĐVCQHNS của đơn vị.";
+        if (isCompany && withoutTaxCode && taxCode) return "Đơn vị không có mã số thuế chỉ được nhập MĐVCQHNS.";
+        if (isCompany && !withoutTaxCode && budgetRelationCode) return "Tổ chức/doanh nghiệp chỉ được nhập một trong hai mã: MST hoặc MĐVCQHNS.";
         if (!form.tenNguoiMuaSnapshot?.trim()) return isCompany ? "Nhập tên đơn vị mua hàng." : "Nhập họ tên người mua.";
         if (!form.diaChiSnapshot?.trim()) return "Nhập địa chỉ người mua.";
         if (!isCompany && citizenId && !/^(?:\d{9}|\d{12})$/.test(citizenId)) return "CCCD/CMND phải gồm 9 hoặc 12 chữ số.";
@@ -138,11 +143,17 @@ export default function HoaDonFormPage() {
         }
         if (!form.maLoaiTien) return "Chọn loại tiền.";
         if (form.maLoaiTien !== "VND" && Number(form.tyGia || 0) <= 0) return "Nhập tỷ giá hợp lệ.";
-        if (form.loaiHinhDoanhThu === "QuocPhongNhomI" && !form.quocPhong?.quyetDinhGiaoNhiemVu?.trim()) {
-            return "Quốc phòng nhóm I cần nhập quyết định giao nhiệm vụ.";
+        if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.quyetDinhGiaoNhiemVu?.trim()) {
+            return "Nhập quyết định giao nhiệm vụ.";
         }
-        if (form.loaiHinhDoanhThu === "QuocPhongNhomI" && !form.quocPhong?.soHopDong?.trim()) {
-            return "Quốc phòng nhóm I cần nhập số hợp đồng.";
+        if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.soHopDong?.trim()) {
+            return "Nhập số hợp đồng.";
+        }
+        if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.soPhieuXuat?.trim()) {
+            return "Nhập số phiếu xuất.";
+        }
+        if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.pheDuyetGia?.trim()) {
+            return "Nhập thông tin phê duyệt giá.";
         }
         return "";
     };
@@ -232,22 +243,20 @@ export default function HoaDonFormPage() {
                 {form.maLoaiHoaDon === "QuocPhong" && (
                     <SectionCard title="Thông tin kiểm soát hàng quốc phòng">
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" }, gap: 1.5 }}>
-                            <TextField label="Nhà máy" value={form.quocPhong.nhaMay} onChange={(e) => setQuocPhong({ nhaMay: e.target.value })} />
-                            <TextField label="Bộ phận" value={form.quocPhong.tenBoPhan} onChange={(e) => setQuocPhong({ tenBoPhan: e.target.value })} />
                             <TextField
-                                required={form.loaiHinhDoanhThu === "QuocPhongNhomI"}
+                                required
                                 label="Quyết định giao nhiệm vụ"
                                 value={form.quocPhong.quyetDinhGiaoNhiemVu}
                                 onChange={(e) => setQuocPhong({ quyetDinhGiaoNhiemVu: e.target.value })}
                             />
                             <TextField
-                                required={form.loaiHinhDoanhThu === "QuocPhongNhomI"}
+                                required
                                 label="Số hợp đồng"
                                 value={form.quocPhong.soHopDong}
                                 onChange={(e) => setQuocPhong({ soHopDong: e.target.value })}
                             />
-                            <TextField label="Số phiếu xuất" value={form.quocPhong.soPhieuXuat} onChange={(e) => setQuocPhong({ soPhieuXuat: e.target.value })} />
-                            <TextField label="Phê duyệt giá" value={form.quocPhong.pheDuyetGia} onChange={(e) => setQuocPhong({ pheDuyetGia: e.target.value })} />
+                            <TextField required label="Số phiếu xuất" value={form.quocPhong.soPhieuXuat} onChange={(e) => setQuocPhong({ soPhieuXuat: e.target.value })} />
+                            <TextField required label="Phê duyệt giá" value={form.quocPhong.pheDuyetGia} onChange={(e) => setQuocPhong({ pheDuyetGia: e.target.value })} />
                         </Box>
                     </SectionCard>
                 )}

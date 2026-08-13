@@ -63,6 +63,7 @@ export const DEFAULT_INVOICE_FORM = {
     loaiHinhDoanhThu: "",
     nguoiMuaId: null,
     loaiNguoiMua: "DoanhNghiep",
+    khongCoMaSoThue: false,
     diaChiId: null,
     lienHeId: null,
     ngayHoaDon: new Date().toISOString().slice(0, 10),
@@ -75,6 +76,7 @@ export const DEFAULT_INVOICE_FORM = {
     tenNguoiMuaSnapshot: "",
     maSoThueSnapshot: "",
     soGiayToSnapshot: "",
+    maDvcqhnsSnapshot: "",
     maDonViSnapshot: "",
     diaChiSnapshot: "",
     nguoiLienHeSnapshot: "",
@@ -84,8 +86,6 @@ export const DEFAULT_INVOICE_FORM = {
     ghiChu: "",
     chiTiet: [emptyInvoiceLine(1)],
     quocPhong: {
-        nhaMay: "",
-        tenBoPhan: "",
         quyetDinhGiaoNhiemVu: "",
         soHopDong: "",
         soPhieuXuat: "",
@@ -183,7 +183,8 @@ export function calculateTotals(lines = [], tyGia = 1) {
 
 export function normalizeInvoicePayload(form, user) {
     const isOneTax = form.cheDoThue === "MotThueSuat";
-    const isCompany = form.loaiNguoiMua === "DoanhNghiep";
+    const isCompany = form.loaiNguoiMua !== "CaNhan";
+    const withoutTaxCode = isCompany && Boolean(form.khongCoMaSoThue);
     const chiTiet = (form.chiTiet || []).map((line, index) => ({
         soDong: index + 1,
         maHang: line.maHang || "",
@@ -204,8 +205,10 @@ export function normalizeInvoicePayload(form, user) {
     return {
         ...form,
         loaiNguoiMua: isCompany ? "DoanhNghiep" : "CaNhan",
-        maSoThueSnapshot: isCompany ? String(form.maSoThueSnapshot || "").replace(/[\s.-]/g, "") : "",
+        khongCoMaSoThue: withoutTaxCode,
+        maSoThueSnapshot: isCompany && !withoutTaxCode ? String(form.maSoThueSnapshot || "").replace(/[\s.-]/g, "") : "",
         soGiayToSnapshot: isCompany ? "" : String(form.soGiayToSnapshot || "").replace(/\s/g, ""),
+        maDvcqhnsSnapshot: withoutTaxCode ? String(form.maDvcqhnsSnapshot || "").trim() : "",
         maDonViSnapshot: isCompany ? form.maDonViSnapshot || "" : "",
         nguoiLienHeSnapshot: isCompany ? form.nguoiLienHeSnapshot || "" : "",
         hinhThucThanhToan: form.hinhThucThanhToan || "",
@@ -272,7 +275,8 @@ export function invoiceToForm(detail) {
         cheDoThue: detail.cheDoThue || "MotThueSuat",
         loaiHinhDoanhThu: detail.loaiHinhDoanhThu || "",
         nguoiMuaId: detail.nguoiMuaId || null,
-        loaiNguoiMua: detail.loaiNguoiMua || (detail.maSoThue ? "DoanhNghiep" : "CaNhan"),
+        loaiNguoiMua: detail.loaiNguoiMua === "CaNhan" ? "CaNhan" : "DoanhNghiep",
+        khongCoMaSoThue: !detail.maSoThue && Boolean(detail.maDvcqhns),
         ngayHoaDon: detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : "",
         hinhThucThanhToan: detail.hinhThucThanhToan || "",
         maLoaiTien: detail.maLoaiTien || "VND",
@@ -282,6 +286,7 @@ export function invoiceToForm(detail) {
         tenNguoiMuaSnapshot: detail.tenNguoiMua || "",
         maSoThueSnapshot: detail.maSoThue || "",
         soGiayToSnapshot: detail.soGiayTo || "",
+        maDvcqhnsSnapshot: detail.maDvcqhns || "",
         maDonViSnapshot: detail.maDonVi || "",
         diaChiSnapshot: detail.diaChi || "",
         nguoiLienHeSnapshot: detail.nguoiLienHe || "",
@@ -293,8 +298,6 @@ export function invoiceToForm(detail) {
         quocPhong: {
             ...DEFAULT_INVOICE_FORM.quocPhong,
             ...(detail.quocPhong || {}),
-            nhaMay: detail.quocPhong?.NhaMay || "",
-            tenBoPhan: detail.quocPhong?.TenBoPhan || "",
             quyetDinhGiaoNhiemVu: detail.quocPhong?.QuyetDinhGiaoNhiemVu || "",
             soHopDong: detail.quocPhong?.SoHopDong || "",
             soPhieuXuat: detail.quocPhong?.SoPhieuXuat || "",

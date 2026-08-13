@@ -277,8 +277,8 @@ export default function HoaDonDetailPage() {
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
                             <DetailField label={detail.loaiNguoiMua === "CaNhan" ? "Họ tên người mua" : "Tên đơn vị mua hàng"} value={detail.tenNguoiMua} />
                             <DetailField
-                                label={detail.loaiNguoiMua === "CaNhan" ? "Căn cước công dân" : "Mã số thuế"}
-                                value={detail.loaiNguoiMua === "CaNhan" ? detail.soGiayTo : detail.maSoThue}
+                                label={detail.loaiNguoiMua === "CaNhan" ? "Căn cước công dân" : detail.maSoThue ? "Mã số thuế" : "MĐVCQHNS"}
+                                value={detail.loaiNguoiMua === "CaNhan" ? detail.soGiayTo : detail.maSoThue || detail.maDvcqhns}
                             />
                             {detail.loaiNguoiMua !== "CaNhan" && <DetailField label="Mã đơn vị" value={detail.maDonVi} />}
                             <DetailField label="Địa chỉ" value={detail.diaChi} />
