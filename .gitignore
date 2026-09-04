@@ -14,9 +14,11 @@ dist-ssr
 PLP review project/
 *.local
 
+# Local test artifacts (Excel samples, temporary imports, etc.)
+local-artifacts/
+
+.env
 *.sql
-!migrations/
-!migrations/*.sql
 
 # Editor directories and files
 .vscode/*
