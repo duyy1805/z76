@@ -135,6 +135,7 @@ export default function HoaDonFormPage() {
         if (!isCompany && citizenId && !/^(?:\d{9}|\d{12})$/.test(citizenId)) return "CCCD/CMND phải gồm 9 hoặc 12 chữ số.";
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Email người mua không hợp lệ.";
         if (phone && !/^\+?\d{8,15}$/.test(phone)) return "Số điện thoại người mua không hợp lệ.";
+        if (!form.maLoaiHoaDon) return "Chọn loại hóa đơn.";
         if (!form.ngayHoaDon) return "Nhập ngày hóa đơn.";
         if (!form.loaiHinhDoanhThu) return "Chọn loại hình doanh thu.";
         if (!form.chiTiet?.length || form.chiTiet.some((line) => !line.tenHangHoaDichVu?.trim())) return "Mỗi dòng hàng phải có tên hàng hóa/dịch vụ.";
@@ -206,7 +207,8 @@ export default function HoaDonFormPage() {
 
                 <SectionCard title="Thông tin hóa đơn" subtitle="Nhân viên đăng ký loại nghiệp vụ, ngày hóa đơn dự kiến, thông tin thuế và thông tin nhận diện hồ sơ. Người phụ trách hóa đơn có thể kiểm tra, điều chỉnh trước khi xuất.">
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 1.5 }}>
-                        <TextField select label="Loại hóa đơn" value={form.maLoaiHoaDon} onChange={(e) => setField({ maLoaiHoaDon: e.target.value })}>
+                        <TextField select required label="Loại hóa đơn" value={form.maLoaiHoaDon || ""} onChange={(e) => setField({ maLoaiHoaDon: e.target.value })}>
+                            <MenuItem value="" disabled>Chọn loại hóa đơn</MenuItem>
                             {Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
                         <TextField type="date" label="Ngày hóa đơn" value={form.ngayHoaDon || ""} onChange={(e) => setField({ ngayHoaDon: e.target.value })} InputLabelProps={{ shrink: true }} />
@@ -214,6 +216,7 @@ export default function HoaDonFormPage() {
                             {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
                         <TextField select required label="Loại hình doanh thu" value={form.loaiHinhDoanhThu || ""} onChange={(e) => setField({ loaiHinhDoanhThu: e.target.value })}>
+                            <MenuItem value="" disabled>Chọn loại hình doanh thu</MenuItem>
                             {Object.entries(REVENUE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
                         <TextField select label="Loại tiền" value={form.maLoaiTien || "VND"} onChange={(e) => setCurrency(e.target.value)}>

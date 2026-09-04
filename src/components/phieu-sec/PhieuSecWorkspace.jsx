@@ -266,6 +266,8 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qTo, setQTo] = useState(getDefaultDateTo);
     const [qCompletedFrom, setQCompletedFrom] = useState(null);
     const [qCompletedTo, setQCompletedTo] = useState(null);
+    const [qGdFrom, setQGdFrom] = useState(null);
+    const [qGdTo, setQGdTo] = useState(null);
     const [qTrangThai, setQTrangThai] = useState([]);
     const [qLoaiChiPhi, setQLoaiChiPhi] = useState("");
     const [qSoTienOperator, setQSoTienOperator] = useState("=");
@@ -280,6 +282,7 @@ export default function PhieuSec({ mode = "VND" }) {
     const [anchorDonViNguoiTao, setAnchorDonViNguoiTao] = useState(null);
     const [anchorLoaiChiPhi, setAnchorLoaiChiPhi] = useState(null);
     const [anchorCompleted, setAnchorCompleted] = useState(null);
+    const [anchorGd, setAnchorGd] = useState(null);
 
 
     const permissionContext = { role, permissions, expenseReviewerCodes, userId: user?.id };
@@ -657,6 +660,8 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasTo = !!qTo;
         const hasCompletedFrom = !!qCompletedFrom;
         const hasCompletedTo = !!qCompletedTo;
+        const hasGdFrom = !!qGdFrom;
+        const hasGdTo = !!qGdTo;
         const hasSoTien = qSoTien !== "" && Number.isFinite(Number(qSoTien));
         const hasMobile = qMobile.trim() !== "";
 
@@ -692,6 +697,16 @@ export default function PhieuSec({ mode = "VND" }) {
                     if (hasCompletedTo) okCompletedDate = okCompletedDate && completedDateKey <= qCompletedTo.format("YYYY-MM-DD");
                 } else {
                     okCompletedDate = false;
+                }
+            }
+            let okGdDate = true;
+            if (hasGdFrom || hasGdTo) {
+                const gdDateKey = isoToDateKey(r.gdTime);
+                if (gdDateKey) {
+                    if (hasGdFrom) okGdDate = okGdDate && gdDateKey >= qGdFrom.format("YYYY-MM-DD");
+                    if (hasGdTo) okGdDate = okGdDate && gdDateKey <= qGdTo.format("YYYY-MM-DD");
+                } else {
+                    okGdDate = false;
                 }
             }
             let okStatus = true;
@@ -786,7 +801,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 okMobile = stripVN(String(mobileSearchText).toLowerCase()).includes(qMobileNorm);
             }
 
-            return okDate && okCompletedDate && okStatus && okMa && okNd && okDv && okNguoiTao && okDonViNguoiTao && okLoaiChiPhi && okSoTien && okMobile;
+            return okDate && okCompletedDate && okGdDate && okStatus && okMa && okNd && okDv && okNguoiTao && okDonViNguoiTao && okLoaiChiPhi && okSoTien && okMobile;
         });
 
         if (activeTab === "pending") return matchedRows;
@@ -802,7 +817,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qDonViNguoiTao, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qDonViNguoiTao, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qGdFrom, qGdTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
 
     const visibleAmountSummary = useMemo(() => {
         const summaryRows = filteredRows || [];
@@ -843,6 +858,10 @@ export default function PhieuSec({ mode = "VND" }) {
         if (key === "completed") {
             setQCompletedFrom(null);
             setQCompletedTo(null);
+        }
+        if (key === "gd") {
+            setQGdFrom(null);
+            setQGdTo(null);
         }
     };
 
@@ -1369,7 +1388,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                     size="small"
                                     stickyHeader
                                     sx={{
-                                        minWidth: 2280,
+                                        minWidth: 2480,
                                         "& .MuiTableCell-root:first-of-type": { pl: 2 },
                                         "& .MuiTableCell-root:last-of-type": { pr: 1.5 },
                                     }}
@@ -1747,6 +1766,54 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     </LocalizationProvider>
                                                 </Popover>
                                             </TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Ngày Giám đốc xác nhận</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorGd(e.currentTarget)}
+                                                        aria-label="Lọc theo ngày Giám đốc xác nhận"
+                                                        color={qGdFrom || qGdTo ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+                                                <Popover
+                                                    open={Boolean(anchorGd)}
+                                                    anchorEl={anchorGd}
+                                                    onClose={() => setAnchorGd(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                                        <Stack spacing={1.25}>
+                                                            <DatePicker
+                                                                label="Từ ngày"
+                                                                value={qGdFrom}
+                                                                onChange={setQGdFrom}
+                                                                slotProps={{ textField: { size: "small" } }}
+                                                            />
+                                                            <DatePicker
+                                                                label="Đến ngày"
+                                                                value={qGdTo}
+                                                                onChange={setQGdTo}
+                                                                slotProps={{ textField: { size: "small" } }}
+                                                            />
+                                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                                {(qGdFrom || qGdTo) && (
+                                                                    <Button startIcon={<ClearIcon />} onClick={() => clearFilter("gd")} size="small">
+                                                                        Xóa
+                                                                    </Button>
+                                                                )}
+                                                                <Button variant="contained" size="small" onClick={() => setAnchorGd(null)}>
+                                                                    OK
+                                                                </Button>
+                                                            </Stack>
+                                                        </Stack>
+                                                    </LocalizationProvider>
+                                                </Popover>
+                                            </TableCell>
                                             <TableCell sx={{ ...stickyStatusCellSx, whiteSpace: "nowrap", zIndex: 4 }}>
                                                 <Stack direction="row" spacing={0.5} alignItems="center">
                                                     <span>Trạng thái</span>
@@ -1855,6 +1922,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 </TableCell>
                                                 <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
                                                 <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
+                                                <TableCell>{isoToDisplay(r.gdTime).split(" ")[0]}</TableCell>
                                                 <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
                                                 <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
                                                     <PhieuSecActions
@@ -1879,7 +1947,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
                                         {filteredRows.length === 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={18}>
+                                                <TableCell colSpan={19}>
                                                     <Typography align="center" color="text.secondary" sx={{ py: 2 }}>
                                                         Không có bản ghi phù hợp.
                                                     </Typography>

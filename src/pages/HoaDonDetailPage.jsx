@@ -9,6 +9,7 @@ import {
     DialogContent,
     DialogTitle,
     Divider,
+    IconButton,
     MenuItem,
     Paper,
     Snackbar,
@@ -23,6 +24,10 @@ import {
     Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import SaveIcon from "@mui/icons-material/Save";
 import { NumericFormat } from "react-number-format";
 import StatusChip from "../components/StatusChip";
@@ -32,6 +37,7 @@ import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import {
     canApproveInvoice,
+    canEditInvoice,
     canProcessInvoiceExportInfo,
     currencyAmountScale,
     currencyUnitPriceScale,
@@ -73,6 +79,14 @@ function formatQuantity(value, fraction = 2) {
         minimumFractionDigits: fraction,
         maximumFractionDigits: fraction,
     });
+}
+
+function formatFileSize(value) {
+    const bytes = Number(value || 0);
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function buildCurrencyOptions(currencies = [], selectedCurrency = "VND") {
@@ -118,6 +132,9 @@ export default function HoaDonDetailPage() {
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     const [reasonDialog, setReasonDialog] = useState({ open: false, type: "", title: "", label: "", reason: "" });
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [attachmentFiles, setAttachmentFiles] = useState([]);
+    const [uploadingAttachments, setUploadingAttachments] = useState(false);
+    const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
 
     const load = useCallback(async () => {
         if (!id || !user?.id || !user?.idDonVi) return;
@@ -192,6 +209,7 @@ export default function HoaDonDetailPage() {
     };
 
     const canEditExportInfo = canProcessInvoiceExportInfo(detail, auth);
+    const canManageAttachments = canEditInvoice(detail, auth);
     const exportInfoComplete = isInvoiceExportInfoComplete(detail);
     const approveDisabledReason = detail?.maTrangThai === "ChoXuLy_HoaDon" && canApproveInvoice(detail, auth) && !exportInfoComplete
         ? "Cần lưu đủ hình thức thanh toán, chế độ thuế, thuế suất, loại tiền và tỷ giá trước khi duyệt."
@@ -242,6 +260,36 @@ export default function HoaDonDetailPage() {
         }
     };
 
+    const uploadAttachments = async () => {
+        if (!attachmentFiles.length) return;
+        setUploadingAttachments(true);
+        try {
+            await hoaDonApi.uploadTaiLieuHoaDon(detail.id, attachmentFiles, user);
+            setAttachmentFiles([]);
+            setToast({ open: true, type: "success", msg: "Đã đính kèm tài liệu." });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Đính kèm tài liệu thất bại." });
+        } finally {
+            setUploadingAttachments(false);
+        }
+    };
+
+    const deleteAttachment = async (attachment) => {
+        const taiLieuId = attachment.TaiLieuId ?? attachment.taiLieuId;
+        if (!taiLieuId || !window.confirm(`Xóa tài liệu “${attachment.FileName || attachment.fileName || "đã chọn"}”?`)) return;
+        setDeletingAttachmentId(taiLieuId);
+        try {
+            await hoaDonApi.deleteTaiLieuHoaDon(taiLieuId, user);
+            setToast({ open: true, type: "success", msg: "Đã xóa tài liệu đính kèm." });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Xóa tài liệu thất bại." });
+        } finally {
+            setDeletingAttachmentId(null);
+        }
+    };
+
     if (loading) return <Typography sx={{ p: 3 }}>Đang tải chi tiết...</Typography>;
     if (!detail) return <Alert severity="warning">Không tìm thấy hóa đơn.</Alert>;
 
@@ -254,9 +302,14 @@ export default function HoaDonDetailPage() {
                         <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
                             <Typography variant="h5">{detail.maDangKy}</Typography>
                             <StatusChip status={detail.maTrangThai} />
+                            {detail.maNhomImport && (
+                                <Button size="small" variant="outlined" onClick={() => navigate(`/hoa-don-dien-tu/nhom-import/${detail.nhomImportId}`)}>
+                                    Nhóm {detail.maNhomImport}
+                                </Button>
+                            )}
                         </Stack>
                         <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                            {INVOICE_TYPE_LABELS[detail.maLoaiHoaDon] || detail.maLoaiHoaDon} · {detail.tenNguoiMua || "Chưa có người mua"}
+                            {INVOICE_TYPE_LABELS[detail.maLoaiHoaDon] || detail.maLoaiHoaDon || "Chưa phân loại"} · {detail.tenNguoiMua || "Chưa có người mua"}
                         </Typography>
                     </Box>
                     <HoaDonWorkflowActions
@@ -433,6 +486,86 @@ export default function HoaDonDetailPage() {
                             </Typography>
                         )}
                     </Stack>
+                </SectionCard>
+
+                <SectionCard
+                    title="Tài liệu đính kèm"
+                    subtitle={canManageAttachments ? "Có thể chọn tối đa 10 tài liệu trong mỗi lần tải lên." : "Tài liệu thuộc hồ sơ hóa đơn."}
+                    action={canManageAttachments && (
+                        <Button component="label" variant="outlined" startIcon={<AttachFileIcon />} disabled={uploadingAttachments}>
+                            Chọn tài liệu
+                            <input
+                                hidden
+                                multiple
+                                type="file"
+                                onChange={(event) => {
+                                    setAttachmentFiles(Array.from(event.target.files || []).slice(0, 10));
+                                    event.target.value = "";
+                                }}
+                            />
+                        </Button>
+                    )}
+                >
+                    {canManageAttachments && attachmentFiles.length > 0 && (
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} sx={{ mb: 2 }}>
+                            <Typography variant="body2" sx={{ flex: 1 }}>
+                                Đã chọn {attachmentFiles.length} tài liệu: {attachmentFiles.map((file) => file.name).join(", ")}
+                            </Typography>
+                            <Button startIcon={<UploadFileIcon />} variant="contained" onClick={uploadAttachments} disabled={uploadingAttachments}>
+                                {uploadingAttachments ? "Đang tải lên..." : "Tải lên"}
+                            </Button>
+                            <Button onClick={() => setAttachmentFiles([])} disabled={uploadingAttachments}>Bỏ chọn</Button>
+                        </Stack>
+                    )}
+
+                    {(detail.taiLieu || []).length ? (
+                        <TableContainer component={Paper} elevation={0} sx={{ border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 2 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Tên tài liệu</TableCell>
+                                        <TableCell sx={{ width: 120 }}>Dung lượng</TableCell>
+                                        <TableCell sx={{ minWidth: 160 }}>Ngày đính kèm</TableCell>
+                                        <TableCell align="right" sx={{ width: 120 }}>Thao tác</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(detail.taiLieu || []).map((attachment) => {
+                                        const taiLieuId = attachment.TaiLieuId ?? attachment.taiLieuId;
+                                        return (
+                                            <TableRow key={taiLieuId} hover>
+                                                <TableCell>{attachment.FileName || attachment.fileName || "Tài liệu"}</TableCell>
+                                                <TableCell>{formatFileSize(attachment.FileSize ?? attachment.fileSize)}</TableCell>
+                                                <TableCell>{attachment.NgayTao || attachment.ngayTao ? new Date(attachment.NgayTao || attachment.ngayTao).toLocaleString("vi-VN") : "—"}</TableCell>
+                                                <TableCell align="right">
+                                                    <IconButton
+                                                        size="small"
+                                                        title="Mở tài liệu"
+                                                        onClick={() => window.open(hoaDonApi.getTaiLieuHoaDonUrl(taiLieuId, user), "_blank", "noopener,noreferrer")}
+                                                    >
+                                                        <OpenInNewIcon fontSize="small" />
+                                                    </IconButton>
+                                                    {canManageAttachments && (
+                                                        <IconButton
+                                                            size="small"
+                                                            color="error"
+                                                            title="Xóa tài liệu"
+                                                            disabled={deletingAttachmentId === taiLieuId}
+                                                            onClick={() => deleteAttachment(attachment)}
+                                                        >
+                                                            <DeleteOutlineIcon fontSize="small" />
+                                                        </IconButton>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    ) : (
+                        <Typography color="text.secondary">Chưa có tài liệu đính kèm.</Typography>
+                    )}
                 </SectionCard>
 
                 <SectionCard title="Lịch sử xử lý">

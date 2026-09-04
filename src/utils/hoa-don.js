@@ -271,7 +271,7 @@ export function invoiceToForm(detail) {
 
     return {
         ...DEFAULT_INVOICE_FORM,
-        maLoaiHoaDon: detail.maLoaiHoaDon || "TrongNuoc",
+        maLoaiHoaDon: detail.isImportIncomplete ? (detail.maLoaiHoaDon || "") : (detail.maLoaiHoaDon || "TrongNuoc"),
         cheDoThue: detail.cheDoThue || "MotThueSuat",
         loaiHinhDoanhThu: detail.loaiHinhDoanhThu || "",
         nguoiMuaId: detail.nguoiMuaId || null,

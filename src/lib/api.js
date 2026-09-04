@@ -351,6 +351,27 @@ export const hoaDonApi = {
         const { data } = await httpHd.put(`/hoa-don/${id}/thong-tin-xuat`, payload);
         return data;
     },
+    async uploadTaiLieuHoaDon(id, files, user) {
+        const formData = new FormData();
+        Array.from(files || []).forEach((file) => formData.append("files", file));
+        formData.append("requesterUserId", user?.id || "");
+        formData.append("requesterIdDonVi", user?.idDonVi || "");
+        const { data } = await httpHd.post(`/hoa-don/${id}/tai-lieu`, formData);
+        return data;
+    },
+    getTaiLieuHoaDonUrl(taiLieuId, user) {
+        const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
+        return `${httpHd.defaults.baseURL}/hoa-don/tai-lieu/${taiLieuId}${q ? `?${q}` : ""}`;
+    },
+    async deleteTaiLieuHoaDon(taiLieuId, user) {
+        const { data } = await httpHd.delete(`/hoa-don/tai-lieu/${taiLieuId}`, {
+            data: {
+                requesterUserId: user?.id,
+                requesterIdDonVi: user?.idDonVi,
+            },
+        });
+        return data;
+    },
     async listNguoiMua(params = {}) {
         const q = new URLSearchParams(cleanParams(params)).toString();
         const { data } = await httpHd.get(`/nguoi-mua${q ? `?${q}` : ""}`);
@@ -387,6 +408,52 @@ export const hoaDonApi = {
     getDotXuatFileExcelUrl(dotXuatFileId, user) {
         const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
         return `${httpHd.defaults.baseURL}/dot-xuat-file/${dotXuatFileId}/export.xlsx${q ? `?${q}` : ""}`;
+    },
+    async previewNhomImport(file, user) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("requesterUserId", user?.id || "");
+        formData.append("requesterIdDonVi", user?.idDonVi || "");
+        const { data } = await httpHd.post("/nhom-import/preview", formData);
+        return data;
+    },
+    async createNhomImport(file, user, ghiChu = "") {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("requesterUserId", user?.id || "");
+        formData.append("requesterIdDonVi", user?.idDonVi || "");
+        if (ghiChu) formData.append("ghiChu", ghiChu);
+        const { data } = await httpHd.post("/nhom-import", formData);
+        return data;
+    },
+    async listNhomImport(user) {
+        const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
+        const { data } = await httpHd.get(`/nhom-import?${q}`);
+        return data;
+    },
+    async getNhomImport(id, user) {
+        const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
+        const { data } = await httpHd.get(`/nhom-import/${id}?${q}`);
+        return data;
+    },
+    getNhomImportFileUrl(id, user) {
+        const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
+        return `${httpHd.defaults.baseURL}/nhom-import/${id}/file?${q}`;
+    },
+    async submitNhomImport(id, user) {
+        const { data } = await httpHd.post(`/nhom-import/${id}/submit`, {
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+        });
+        return data;
+    },
+    async approveNhomImport(id, user) {
+        const { data } = await httpHd.post(`/nhom-import/${id}/approve`, {
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+            tenNguoiThucHien: user?.fullName || user?.name || user?.username,
+        });
+        return data;
     },
 };
 

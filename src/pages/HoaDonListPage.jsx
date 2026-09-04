@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
     Alert,
     Box,
@@ -15,6 +15,7 @@ import {
     Popover,
     Snackbar,
     Stack,
+    Tab,
     Table,
     TableBody,
     TableCell,
@@ -22,6 +23,7 @@ import {
     TableHead,
     TableRow,
     TextField,
+    Tabs,
     Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -36,6 +38,7 @@ import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import { canConfirmInvoiceExported, canEditInvoice, currencyAmountScale, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
+import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 
 function normalizeSearch(value) {
     return String(value || "")
@@ -97,6 +100,7 @@ function HeaderFilter({ label, active, width = 280, children, onClear }) {
 
 export default function HoaDonListPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const auth = useAuth();
     const { user } = auth;
     const [rows, setRows] = useState([]);
@@ -109,6 +113,8 @@ export default function HoaDonListPage() {
     const [filters, setFilters] = useState({ tukhoa: "", maTrangThai: "", maLoaiHoaDon: "", dateFrom: "", dateTo: "" });
     const [tableFilters, setTableFilters] = useState({ maDangKy: "", nguoiMua: "", nguoiTao: "", amountFrom: "", amountTo: "" });
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+    const [activeTab, setActiveTab] = useState(location.state?.tab === "groups" ? 1 : 0);
+    const showToast = useCallback((type, msg) => setToast({ open: true, type, msg }), []);
 
     const params = useMemo(() => ({
         userId: user?.id,
@@ -145,9 +151,14 @@ export default function HoaDonListPage() {
         const hasAmountTo = tableFilters.amountTo !== "" && Number.isFinite(amountTo);
 
         return rows.filter((row) => {
-            const okMa = !qMa || normalizeSearch(row.maDangKy).includes(qMa);
+            const okMa = !qMa || normalizeSearch([row.maDangKy, row.maNhomImport].filter(Boolean).join(" ")).includes(qMa);
             const okNguoiMua = !qNguoiMua || normalizeSearch([row.tenNguoiMua, row.maSoThue, row.soGiayTo, row.maDvcqhns].filter(Boolean).join(" ")).includes(qNguoiMua);
-            const okNguoiTao = !qNguoiTao || normalizeSearch([row.tenNguoiDangKy, row.nguoiDangKyId].filter(Boolean).join(" ")).includes(qNguoiTao);
+            const okNguoiTao = !qNguoiTao || normalizeSearch([
+                row.tenNguoiDangKy,
+                row.nguoiDangKyId,
+                row.tenBoPhanNguoiTao,
+                row.tenDonVi,
+            ].filter(Boolean).join(" ")).includes(qNguoiTao);
             const amount = Number(row.tongTienThanhToan || 0);
             const okAmountFrom = !hasAmountFrom || amount >= amountFrom;
             const okAmountTo = !hasAmountTo || amount <= amountTo;
@@ -283,7 +294,7 @@ export default function HoaDonListPage() {
                         Đăng ký, trình duyệt và theo dõi hồ sơ hóa đơn thanh toán.
                     </Typography>
                 </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {activeTab === 0 && <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <Button
                         startIcon={<DownloadIcon />}
                         variant="outlined"
@@ -303,9 +314,17 @@ export default function HoaDonListPage() {
                     </Button>
                     <Button startIcon={<RefreshIcon />} variant="outlined" onClick={load} disabled={loading}>Tải lại</Button>
                     <Button startIcon={<AddIcon />} variant="contained" onClick={() => navigate("/hoa-don-dien-tu/new")}>Tạo hóa đơn</Button>
-                </Stack>
+                </Stack>}
             </Stack>
 
+            <Paper elevation={0} sx={{ border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3, px: 1 }}>
+                <Tabs value={activeTab} onChange={(event, value) => setActiveTab(value)}>
+                    <Tab label="Hóa đơn" />
+                    <Tab label="Nhóm import" />
+                </Tabs>
+            </Paper>
+
+            {activeTab === 0 ? <>
             <Paper elevation={0} sx={{ p: 1.5, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3 }}>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.4fr 1fr 1fr 1fr 1fr" }, gap: 1.25 }}>
                     <TextField size="small" label="Từ khóa" value={filters.tukhoa} onChange={(e) => setFilter({ tukhoa: e.target.value })} placeholder="Mã đăng ký, người mua, MST, MĐVCQHNS..." />
@@ -347,15 +366,15 @@ export default function HoaDonListPage() {
                             </TableCell>
                             <TableCell sx={{ minWidth: 150 }}>
                                 <HeaderFilter
-                                    label="Mã ĐK"
+                                    label="Mã ĐK / Nhóm"
                                     active={Boolean(tableFilters.maDangKy)}
                                     onClear={() => setTableFilter({ maDangKy: "" })}
                                 >
                                     <TextField
                                         autoFocus
                                         size="small"
-                                        label="Mã đăng ký"
-                                        placeholder="VD: HD-2026..."
+                                        label="Mã đăng ký hoặc mã nhóm"
+                                        placeholder="VD: HD-2026... hoặc NI-2026..."
                                         value={tableFilters.maDangKy}
                                         onChange={(event) => setTableFilter({ maDangKy: event.target.value })}
                                     />
@@ -417,12 +436,13 @@ export default function HoaDonListPage() {
                                         autoFocus
                                         size="small"
                                         label="Người tạo"
-                                        placeholder="Tên hoặc ID người tạo..."
+                                        placeholder="Tên, ID hoặc bộ phận..."
                                         value={tableFilters.nguoiTao}
                                         onChange={(event) => setTableFilter({ nguoiTao: event.target.value })}
                                     />
                                 </HeaderFilter>
                             </TableCell>
+                            <TableCell sx={{ minWidth: 190 }}>Bộ phận người tạo</TableCell>
                             <TableCell align="right">Thao tác</TableCell>
                         </TableRow>
                     </TableHead>
@@ -437,7 +457,14 @@ export default function HoaDonListPage() {
                                         onChange={() => toggleRow(row.id)}
                                     />
                                 </TableCell>
-                                <TableCell sx={{ fontWeight: 750 }}>{row.maDangKy}</TableCell>
+                                <TableCell>
+                                    <Typography sx={{ fontWeight: 750 }}>{row.maDangKy}</Typography>
+                                    {row.maNhomImport && (
+                                        <Button size="small" sx={{ minWidth: 0, p: 0, fontSize: 11 }} onClick={() => navigate(`/hoa-don-dien-tu/nhom-import/${row.nhomImportId}`)}>
+                                            {row.maNhomImport}
+                                        </Button>
+                                    )}
+                                </TableCell>
                                 <TableCell>{INVOICE_TYPE_LABELS[row.maLoaiHoaDon] || row.maLoaiHoaDon}</TableCell>
                                 <TableCell>
                                     <Typography sx={{ fontWeight: 650 }}>{row.tenNguoiMua || "—"}</Typography>
@@ -449,6 +476,7 @@ export default function HoaDonListPage() {
                                 <TableCell align="right">{fmtMoney(row.tongTienThanhToan, currencyAmountScale(row.maLoaiTien), row.maLoaiTien)} {row.maLoaiTien}</TableCell>
                                 <TableCell><StatusChip status={row.maTrangThai} /></TableCell>
                                 <TableCell>{row.tenNguoiDangKy || row.nguoiDangKyId}</TableCell>
+                                <TableCell>{row.tenBoPhanNguoiTao || row.tenDonVi || "—"}</TableCell>
                                 <TableCell align="right">
                                     <IconButton size="small" onClick={() => navigate(`/hoa-don-dien-tu/${row.id}`)}><VisibilityIcon fontSize="small" /></IconButton>
                                     {canEditInvoice(row, auth) && (
@@ -467,6 +495,10 @@ export default function HoaDonListPage() {
                     </TableBody>
                 </Table>
             </TableContainer>
+
+            </> : (
+                <ImportGroupPanel user={user} navigate={navigate} onToast={showToast} />
+            )}
 
             <Snackbar open={toast.open} autoHideDuration={3200} onClose={() => setToast({ ...toast, open: false })}>
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
