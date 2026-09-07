@@ -27,7 +27,7 @@ import {
 } from "../../utils/hoa-don";
 
 function NumericTextField({ value, onChange, inputProps, isMoney = false, isQuantity = false, currency = "VND", ...props }) {
-    const useVietnameseFormat = isQuantity || (isMoney && String(currency || "VND").toUpperCase() === "VND");
+    const useVietnameseFormat = isQuantity || isMoney || String(currency || "VND").toUpperCase() === "VND";
     return (
         <NumericFormat
             {...props}

@@ -137,6 +137,7 @@ export default function HoaDonFormPage() {
         if (phone && !/^\+?\d{8,15}$/.test(phone)) return "Số điện thoại người mua không hợp lệ.";
         if (!form.maLoaiHoaDon) return "Chọn loại hóa đơn.";
         if (!form.ngayHoaDon) return "Nhập ngày hóa đơn.";
+        if (!form.hanThanhToan) return "Nhập thời hạn thanh toán.";
         if (!form.loaiHinhDoanhThu) return "Chọn loại hình doanh thu.";
         if (!form.chiTiet?.length || form.chiTiet.some((line) => !line.tenHangHoaDichVu?.trim())) return "Mỗi dòng hàng phải có tên hàng hóa/dịch vụ.";
         if (form.cheDoThue === "NhieuThueSuat" && form.chiTiet.some((line) => !String(line.maThueSuatGTGT ?? line.thueSuatGTGT ?? ""))) {
@@ -212,6 +213,7 @@ export default function HoaDonFormPage() {
                             {Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
                         <TextField type="date" label="Ngày hóa đơn" value={form.ngayHoaDon || ""} onChange={(e) => setField({ ngayHoaDon: e.target.value })} InputLabelProps={{ shrink: true }} />
+                        <TextField required type="date" label="Thời hạn thanh toán" value={form.hanThanhToan || ""} onChange={(e) => setField({ hanThanhToan: e.target.value })} InputLabelProps={{ shrink: true }} />
                         <TextField select label="Chế độ thuế" value={form.cheDoThue} onChange={(e) => setField({ cheDoThue: e.target.value })}>
                             {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
@@ -289,6 +291,8 @@ export default function HoaDonFormPage() {
                             }))}
                             tyGia={form.tyGia}
                             currency={form.maLoaiTien}
+                            cheDoThue={form.cheDoThue}
+                            thueSuatChung={vatRateValue(form.thueSuatChung)}
                         />
                     </Stack>
                 </SectionCard>

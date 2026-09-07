@@ -6,6 +6,10 @@ import {
     Button,
     Chip,
     CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     Paper,
     Snackbar,
     Stack,
@@ -23,6 +27,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import SendIcon from "@mui/icons-material/Send";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
@@ -45,6 +50,8 @@ export default function HoaDonImportGroupDetailPage() {
     const [running, setRunning] = useState(false);
     const [result, setResult] = useState(null);
     const [toast, setToast] = useState({ open: false, type: "success", msg: "" });
+    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [deletingGroup, setDeletingGroup] = useState(false);
 
     const load = useCallback(async () => {
         if (!id || !user?.id || !user?.idDonVi) return;
@@ -68,6 +75,7 @@ export default function HoaDonImportGroupDetailPage() {
         return invoices.some((invoice) => invoice.maTrangThai === "KhoiTao") && (isOwner || hasInvoicePermission(auth, "HD_Admin"));
     }, [auth, data?.group?.nguoiTaoId, invoices, user?.id]);
     const canApproveGroup = useMemo(() => invoices.some((invoice) => canApproveInvoice(invoice, auth)), [auth, invoices]);
+    const canDeleteGroup = hasInvoicePermission(auth, "HD_Admin");
 
     const runBulk = async (action) => {
         setRunning(true);
@@ -90,6 +98,28 @@ export default function HoaDonImportGroupDetailPage() {
         }
     };
 
+    const confirmDeleteGroup = async () => {
+        setDeletingGroup(true);
+        try {
+            await hoaDonApi.deleteNhomImport(id, user);
+            navigate("/hoa-don-dien-tu", {
+                replace: true,
+                state: {
+                    tab: "groups",
+                    toast: {
+                        type: "success",
+                        msg: `Đã xóa nhóm ${data?.group?.maNhom || "import"} và file Excel gốc. Các hóa đơn trong nhóm vẫn được giữ nguyên.`,
+                    },
+                },
+            });
+        } catch (error) {
+            setConfirmDeleteOpen(false);
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Xóa nhóm import thất bại." });
+        } finally {
+            setDeletingGroup(false);
+        }
+    };
+
     if (loading && !data) {
         return <Stack alignItems="center" sx={{ p: 6 }}><CircularProgress /></Stack>;
     }
@@ -107,6 +137,11 @@ export default function HoaDonImportGroupDetailPage() {
                     <Button startIcon={<DownloadIcon />} variant="outlined" onClick={() => { window.location.href = hoaDonApi.getNhomImportFileUrl(id, user); }}>Tải file gốc</Button>
                     <Button startIcon={<SendIcon />} variant="contained" disabled={!canSubmitGroup || running} onClick={() => runBulk("submit")}>Trình phần hợp lệ</Button>
                     <Button startIcon={<CheckCircleIcon />} color="success" variant="contained" disabled={!canApproveGroup || running} onClick={() => runBulk("approve")}>Duyệt phần hợp lệ</Button>
+                    {canDeleteGroup && (
+                        <Button startIcon={<DeleteOutlineIcon />} color="error" variant="outlined" disabled={running} onClick={() => setConfirmDeleteOpen(true)}>
+                            Xóa nhóm
+                        </Button>
+                    )}
                 </Stack>
             </Stack>
 
@@ -147,7 +182,7 @@ export default function HoaDonImportGroupDetailPage() {
                                 <TableCell>{invoice.ngayHoaDon ? String(invoice.ngayHoaDon).slice(0, 10) : "—"}</TableCell>
                                 <TableCell align="right">{fmtMoney(invoice.tongTienThanhToan, currencyAmountScale(invoice.maLoaiTien), invoice.maLoaiTien)} {invoice.maLoaiTien}</TableCell>
                                 <TableCell><StatusChip status={invoice.maTrangThai} /></TableCell>
-                                <TableCell><Chip size="small" color={invoice.isImportIncomplete ? "warning" : "success"} label={invoice.isImportIncomplete ? "Cần bổ sung" : "Đủ phân loại"} /></TableCell>
+                                <TableCell><Chip size="small" color={invoice.isImportIncomplete ? "warning" : "success"} label={invoice.isImportIncomplete ? "Cần bổ sung" : "Đủ thông tin"} /></TableCell>
                                 <TableCell align="right">
                                     <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigate(`/hoa-don-dien-tu/${invoice.id}`)}>Xem</Button>
                                     {canEditInvoice(invoice, auth) && <Button size="small" startIcon={<EditIcon />} onClick={() => navigate(`/hoa-don-dien-tu/${invoice.id}/edit`)}>Sửa</Button>}
@@ -162,6 +197,21 @@ export default function HoaDonImportGroupDetailPage() {
             <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast((current) => ({ ...current, open: false }))}>
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
             </Snackbar>
+
+            <Dialog open={confirmDeleteOpen} onClose={() => !deletingGroup && setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Xóa nhóm import?</DialogTitle>
+                <DialogContent>
+                    <Typography color="text.secondary">
+                        Nhóm {group?.maNhom || "này"} sẽ không còn hiển thị và file Excel gốc sẽ bị xóa thật khỏi Google Drive hoặc vùng lưu trữ local cũ. Các hóa đơn trong nhóm vẫn được giữ nguyên.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmDeleteOpen(false)} disabled={deletingGroup}>Đóng</Button>
+                    <Button color="error" variant="contained" onClick={confirmDeleteGroup} disabled={deletingGroup}>
+                        {deletingGroup ? "Đang xóa..." : "Xóa nhóm"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

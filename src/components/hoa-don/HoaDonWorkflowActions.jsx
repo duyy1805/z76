@@ -33,7 +33,6 @@ export default function HoaDonWorkflowActions({
     const canDelete = canDeleteInvoice(invoice, auth);
     const isDraft = invoice?.maTrangThai === "KhoiTao";
     const isApprovalState = ["ChoDuyet_TBP", "ChoXuLy_HoaDon"].includes(invoice?.maTrangThai);
-    const isDeletableState = ["KhoiTao", "TuChoi"].includes(invoice?.maTrangThai);
 
     return (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -70,9 +69,9 @@ export default function HoaDonWorkflowActions({
                     </ButtonWithReason>
                 </>
             )}
-            {isDeletableState && (
-                <ButtonWithReason disabled={!canDelete} reason="Bạn chỉ được xóa hóa đơn nháp/từ chối do mình tạo hoặc có quyền HD_Admin.">
-                    <Button startIcon={<DeleteIcon />} color="error" variant="outlined" disabled={!canDelete} onClick={onDelete}>
+            {canDelete && (
+                <ButtonWithReason disabled={false} reason="">
+                    <Button startIcon={<DeleteIcon />} color="error" variant="outlined" onClick={onDelete}>
                         Xóa
                     </Button>
                 </ButtonWithReason>

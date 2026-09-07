@@ -51,6 +51,11 @@ import {
 } from "../utils/hoa-don";
 import { amountToVietnameseText } from "../utils/phieu-sec";
 
+const ATTACHMENT_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
+const ATTACHMENT_MAX_FILES = 10;
+const ATTACHMENT_MAX_SIZE = 30 * 1024 * 1024;
+const ATTACHMENT_ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"]);
+
 const DetailField = ({ label, value }) => (
     <Box sx={{ minWidth: 0 }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
@@ -132,6 +137,7 @@ export default function HoaDonDetailPage() {
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     const [reasonDialog, setReasonDialog] = useState({ open: false, type: "", title: "", label: "", reason: "" });
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [deletingInvoice, setDeletingInvoice] = useState(false);
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [uploadingAttachments, setUploadingAttachments] = useState(false);
     const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
@@ -203,9 +209,19 @@ export default function HoaDonDetailPage() {
     };
 
     const confirmDelete = async () => {
-        setConfirmDeleteOpen(false);
-        await runAction("Xóa", () => hoaDonApi.deleteHoaDon(detail.id, user));
-        navigate("/hoa-don-dien-tu");
+        setDeletingInvoice(true);
+        try {
+            await hoaDonApi.deleteHoaDon(detail.id, user);
+            navigate("/hoa-don-dien-tu", {
+                replace: true,
+                state: { toast: { type: "success", msg: "Xóa hóa đơn thành công." } },
+            });
+        } catch (error) {
+            setConfirmDeleteOpen(false);
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Xóa hóa đơn thất bại." });
+        } finally {
+            setDeletingInvoice(false);
+        }
     };
 
     const canEditExportInfo = canProcessInvoiceExportInfo(detail, auth);
@@ -275,9 +291,31 @@ export default function HoaDonDetailPage() {
         }
     };
 
+    const selectAttachmentFiles = (fileList) => {
+        const files = Array.from(fileList || []);
+        if (files.length > ATTACHMENT_MAX_FILES) {
+            setAttachmentFiles([]);
+            setToast({ open: true, type: "warning", msg: `Chỉ được chọn tối đa ${ATTACHMENT_MAX_FILES} file trong mỗi lần.` });
+            return;
+        }
+        const unsupported = files.find((file) => !ATTACHMENT_ALLOWED_EXTENSIONS.has(file.name.split(".").pop()?.toLowerCase()));
+        if (unsupported) {
+            setAttachmentFiles([]);
+            setToast({ open: true, type: "warning", msg: `File “${unsupported.name}” không thuộc định dạng được hỗ trợ.` });
+            return;
+        }
+        const oversized = files.find((file) => file.size > ATTACHMENT_MAX_SIZE);
+        if (oversized) {
+            setAttachmentFiles([]);
+            setToast({ open: true, type: "warning", msg: `File “${oversized.name}” vượt quá giới hạn 30 MB.` });
+            return;
+        }
+        setAttachmentFiles(files);
+    };
+
     const deleteAttachment = async (attachment) => {
         const taiLieuId = attachment.TaiLieuId ?? attachment.taiLieuId;
-        if (!taiLieuId || !window.confirm(`Xóa tài liệu “${attachment.FileName || attachment.fileName || "đã chọn"}”?`)) return;
+        if (!taiLieuId || !window.confirm(`Xóa tài liệu “${attachment.FileName || attachment.fileName || "đã chọn"}”? File sẽ bị xóa thật khỏi Google Drive hoặc vùng lưu trữ local cũ.`)) return;
         setDeletingAttachmentId(taiLieuId);
         try {
             await hoaDonApi.deleteTaiLieuHoaDon(taiLieuId, user);
@@ -344,6 +382,7 @@ export default function HoaDonDetailPage() {
                     <SectionCard title="Thông tin hóa đơn">
                         <Stack spacing={1.5}>
                             <DetailField label="Ngày hóa đơn" value={detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : ""} />
+                            <DetailField label="Thời hạn thanh toán" value={detail.hanThanhToan ? String(detail.hanThanhToan).slice(0, 10) : ""} />
                             <DetailField label="Loại hình doanh thu" value={REVENUE_TYPE_LABELS[detail.loaiHinhDoanhThu] || detail.loaiHinhDoanhThu} />
                             <DetailField label="Ký hiệu dự kiến" value={detail.kyHieuDuKien} />
                             {detail.soHoaDon && <DetailField label="Số hóa đơn đã phát hành" value={`${detail.kyHieuHoaDon} - ${detail.soHoaDon}`} />}
@@ -456,7 +495,7 @@ export default function HoaDonDetailPage() {
                                     <TableCell align="right">Đơn giá</TableCell>
                                     <TableCell align="right">% thuế</TableCell>
                                     <TableCell align="right">Thành tiền</TableCell>
-                                    <TableCell align="right">Tiền thuế</TableCell>
+                                    {detail.cheDoThue === "NhieuThueSuat" && <TableCell align="right">Tiền thuế</TableCell>}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -470,7 +509,9 @@ export default function HoaDonDetailPage() {
                                         <TableCell align="right">{fmtMoney(line.DonGia, currencyUnitPriceScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
                                         <TableCell align="right">{vatRateLabel(line.MaThueSuatGTGT, line.ThueSuatGTGT)}</TableCell>
                                         <TableCell align="right">{fmtMoney(line.ThanhTien, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
-                                        <TableCell align="right">{fmtMoney(line.TienThueGTGT, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
+                                        {detail.cheDoThue === "NhieuThueSuat" && (
+                                            <TableCell align="right">{fmtMoney(line.TienThueGTGT, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)}</TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -490,7 +531,9 @@ export default function HoaDonDetailPage() {
 
                 <SectionCard
                     title="Tài liệu đính kèm"
-                    subtitle={canManageAttachments ? "Có thể chọn tối đa 10 tài liệu trong mỗi lần tải lên." : "Tài liệu thuộc hồ sơ hóa đơn."}
+                    subtitle={canManageAttachments
+                        ? "Tối đa 10 file/lần, 30 MB/file; hỗ trợ PDF, Word, Excel và ảnh JPG/PNG."
+                        : "Tài liệu thuộc hồ sơ hóa đơn."}
                     action={canManageAttachments && (
                         <Button component="label" variant="outlined" startIcon={<AttachFileIcon />} disabled={uploadingAttachments}>
                             Chọn tài liệu
@@ -498,8 +541,9 @@ export default function HoaDonDetailPage() {
                                 hidden
                                 multiple
                                 type="file"
+                                accept={ATTACHMENT_ACCEPT}
                                 onChange={(event) => {
-                                    setAttachmentFiles(Array.from(event.target.files || []).slice(0, 10));
+                                    selectAttachmentFiles(event.target.files);
                                     event.target.value = "";
                                 }}
                             />
@@ -614,16 +658,18 @@ export default function HoaDonDetailPage() {
                 </DialogActions>
             </Dialog>
 
-            <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
+            <Dialog open={confirmDeleteOpen} onClose={() => !deletingInvoice && setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>Xóa hồ sơ hóa đơn?</DialogTitle>
                 <DialogContent>
                     <Typography color="text.secondary">
-                        Hồ sơ sẽ được xóa mềm và không còn hiển thị trong danh sách làm việc.
+                        Hồ sơ sẽ được xóa mềm và không còn hiển thị trong danh sách làm việc. Toàn bộ file đính kèm sẽ bị xóa thật khỏi Google Drive hoặc vùng lưu trữ local cũ.
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setConfirmDeleteOpen(false)}>Đóng</Button>
-                    <Button color="error" variant="contained" onClick={confirmDelete}>Xóa hồ sơ</Button>
+                    <Button onClick={() => setConfirmDeleteOpen(false)} disabled={deletingInvoice}>Đóng</Button>
+                    <Button color="error" variant="contained" onClick={confirmDelete} disabled={deletingInvoice}>
+                        {deletingInvoice ? "Đang xóa..." : "Xóa hồ sơ"}
+                    </Button>
                 </DialogActions>
             </Dialog>
         </Box>

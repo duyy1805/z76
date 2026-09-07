@@ -48,6 +48,7 @@ export function vatRateLabel(code, fallbackRate = 0) {
 }
 
 export const INVOICE_NUMBER_FORMAT = {
+    storageAmount: 4,
     convertedAmount: 0,
     convertedUnitPrice: 5,
     exchangeRate: 0,
@@ -67,6 +68,7 @@ export const DEFAULT_INVOICE_FORM = {
     diaChiId: null,
     lienHeId: null,
     ngayHoaDon: new Date().toISOString().slice(0, 10),
+    hanThanhToan: "",
     hinhThucThanhToan: "",
     maLoaiTien: "VND",
     tyGia: 1,
@@ -117,10 +119,9 @@ export function emptyInvoiceLine(soDong = 1) {
     };
 }
 
-export function fmtMoney(value, fraction = 0, currency = "VND") {
+export function fmtMoney(value, fraction = 0) {
     const n = Number(value || 0);
-    const locale = String(currency || "VND").toUpperCase() === "VND" ? "vi-VN" : "en-US";
-    return n.toLocaleString(locale, {
+    return n.toLocaleString("vi-VN", {
         minimumFractionDigits: fraction,
         maximumFractionDigits: fraction,
     });
@@ -156,29 +157,55 @@ export function calculateLine(line, tyGia = 1) {
     const donGia = toNumber(line.donGia, 0);
     const tyLeChietKhau = toNumber(line.tyLeChietKhau, 0);
     const thueSuatGTGT = toNumber(line.thueSuatGTGT, 0);
-    const truocCK = soLuong * donGia;
-    const tienCK = truocCK * tyLeChietKhau / 100;
-    const thanhTien = truocCK - tienCK;
-    const tienThue = thanhTien * thueSuatGTGT / 100;
+    const truocCK = roundInvoiceNumber(soLuong * donGia, INVOICE_NUMBER_FORMAT.storageAmount);
+    const tienCK = roundInvoiceNumber(soLuong * donGia * tyLeChietKhau / 100, INVOICE_NUMBER_FORMAT.storageAmount);
+    const thanhTien = roundInvoiceNumber(soLuong * donGia * (100 - tyLeChietKhau) / 100, INVOICE_NUMBER_FORMAT.storageAmount);
+    const tienThue = roundInvoiceNumber(thanhTien * thueSuatGTGT / 100, INVOICE_NUMBER_FORMAT.storageAmount);
     return {
         truocCK,
         tienCK,
         thanhTien,
         tienThue,
-        thanhTienQuyDoi: roundInvoiceNumber(thanhTien * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.convertedAmount),
-        tienThueQuyDoi: roundInvoiceNumber(tienThue * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.convertedAmount),
+        thanhTienQuyDoi: roundInvoiceNumber(thanhTien * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.storageAmount),
+        tienThueQuyDoi: roundInvoiceNumber(tienThue * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.storageAmount),
     };
 }
 
-export function calculateTotals(lines = [], tyGia = 1) {
-    return lines.reduce((acc, line) => {
+export function calculateTotals(lines = [], tyGia = 1, cheDoThue = "NhieuThueSuat", thueSuatChung = null) {
+    const totals = lines.reduce((acc, line) => {
         const calc = calculateLine(line, tyGia);
         acc.tongTienHang += calc.thanhTien;
         acc.tongTienThue += calc.tienThue;
         acc.tongTienThanhToan += calc.thanhTien + calc.tienThue;
+        acc.tongTienHangQuyDoi += calc.thanhTienQuyDoi;
+        acc.tongTienThueQuyDoi += calc.tienThueQuyDoi;
         acc.tongQuyDoi += calc.thanhTienQuyDoi + calc.tienThueQuyDoi;
         return acc;
-    }, { tongTienHang: 0, tongTienThue: 0, tongTienThanhToan: 0, tongQuyDoi: 0 });
+    }, {
+        tongTienHang: 0,
+        tongTienThue: 0,
+        tongTienThanhToan: 0,
+        tongTienHangQuyDoi: 0,
+        tongTienThueQuyDoi: 0,
+        tongQuyDoi: 0,
+    });
+
+    if (cheDoThue === "MotThueSuat") {
+        const commonRate = toNumber(thueSuatChung ?? lines[0]?.thueSuatGTGT, 0);
+        totals.tongTienThue = roundInvoiceNumber(totals.tongTienHang * commonRate / 100, 4);
+        totals.tongTienThanhToan = roundInvoiceNumber(totals.tongTienHang + totals.tongTienThue, INVOICE_NUMBER_FORMAT.storageAmount);
+        totals.tongTienThueQuyDoi = roundInvoiceNumber(
+            totals.tongTienThue * toNumber(tyGia, 1),
+            INVOICE_NUMBER_FORMAT.storageAmount
+        );
+        totals.tongQuyDoi = roundInvoiceNumber(totals.tongTienHangQuyDoi + totals.tongTienThueQuyDoi, INVOICE_NUMBER_FORMAT.storageAmount);
+    }
+
+    for (const key of Object.keys(totals)) {
+        totals[key] = roundInvoiceNumber(totals[key], INVOICE_NUMBER_FORMAT.storageAmount);
+    }
+
+    return totals;
 }
 
 export function normalizeInvoicePayload(form, user) {
@@ -211,6 +238,7 @@ export function normalizeInvoicePayload(form, user) {
         maDvcqhnsSnapshot: withoutTaxCode ? String(form.maDvcqhnsSnapshot || "").trim() : "",
         maDonViSnapshot: isCompany ? form.maDonViSnapshot || "" : "",
         nguoiLienHeSnapshot: isCompany ? form.nguoiLienHeSnapshot || "" : "",
+        hanThanhToan: form.hanThanhToan || "",
         hinhThucThanhToan: form.hinhThucThanhToan || "",
         requesterUserId: user?.id,
         requesterIdDonVi: user?.idDonVi,
@@ -278,6 +306,7 @@ export function invoiceToForm(detail) {
         loaiNguoiMua: detail.loaiNguoiMua === "CaNhan" ? "CaNhan" : "DoanhNghiep",
         khongCoMaSoThue: !detail.maSoThue && Boolean(detail.maDvcqhns),
         ngayHoaDon: detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : "",
+        hanThanhToan: detail.hanThanhToan ? String(detail.hanThanhToan).slice(0, 10) : "",
         hinhThucThanhToan: detail.hinhThucThanhToan || "",
         maLoaiTien: detail.maLoaiTien || "VND",
         tyGia: detail.tyGia || 1,
@@ -317,8 +346,10 @@ export function canSubmitInvoice(invoice, auth) {
 }
 
 export function canDeleteInvoice(invoice, auth) {
-    return ["KhoiTao", "TuChoi"].includes(invoice?.maTrangThai) &&
-        (Number(invoice?.nguoiDangKyId) === Number(auth?.user?.id) || hasInvoicePermission(auth, "HD_Admin"));
+    if (!invoice) return false;
+    if (hasInvoicePermission(auth, "HD_Admin")) return true;
+    return ["KhoiTao", "TuChoi"].includes(invoice.maTrangThai) &&
+        Number(invoice.nguoiDangKyId) === Number(auth?.user?.id);
 }
 
 export function canApproveInvoice(invoice, auth) {

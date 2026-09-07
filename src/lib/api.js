@@ -436,6 +436,15 @@ export const hoaDonApi = {
         const { data } = await httpHd.get(`/nhom-import/${id}?${q}`);
         return data;
     },
+    async deleteNhomImport(id, user) {
+        const { data } = await httpHd.delete(`/nhom-import/${id}`, {
+            data: {
+                requesterUserId: user?.id,
+                requesterIdDonVi: user?.idDonVi,
+            },
+        });
+        return data;
+    },
     getNhomImportFileUrl(id, user) {
         const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
         return `${httpHd.defaults.baseURL}/nhom-import/${id}/file?${q}`;

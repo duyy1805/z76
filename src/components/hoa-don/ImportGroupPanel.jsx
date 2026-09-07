@@ -10,6 +10,7 @@ import {
     DialogContent,
     DialogTitle,
     Divider,
+    IconButton,
     Paper,
     Stack,
     Table,
@@ -24,7 +25,9 @@ import {
 import FileUploadIcon from "@mui/icons-material/FileUpload";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { hoaDonApi } from "../../lib/api";
+import { hasInvoicePermission } from "../../utils/hoa-don";
 
 function groupStatus(group) {
     if (Number(group.soDaXoa || 0) === Number(group.soHoaDon || 0)) return { label: "Đã xóa", color: "default" };
@@ -46,7 +49,7 @@ function GroupSummary({ group }) {
     return parts.map(([label, count]) => `${label}: ${count}`).join(" · ") || "Chưa có dữ liệu";
 }
 
-export default function ImportGroupPanel({ user, navigate, onToast }) {
+export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,6 +58,8 @@ export default function ImportGroupPanel({ user, navigate, onToast }) {
     const [preview, setPreview] = useState(null);
     const [previewing, setPreviewing] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [groupToDelete, setGroupToDelete] = useState(null);
+    const [deletingGroup, setDeletingGroup] = useState(false);
 
     const load = useCallback(async () => {
         if (!user?.id || !user?.idDonVi) return;
@@ -122,6 +127,22 @@ export default function ImportGroupPanel({ user, navigate, onToast }) {
 
     const canCreate = Boolean(file && preview && !preview.errors?.length && !preview.duplicateGroup);
     const previewInvoices = useMemo(() => preview?.invoices || [], [preview]);
+    const canDeleteGroups = hasInvoicePermission(auth, "HD_Admin");
+
+    const confirmDeleteGroup = async () => {
+        if (!groupToDelete?.nhomImportId) return;
+        setDeletingGroup(true);
+        try {
+            await hoaDonApi.deleteNhomImport(groupToDelete.nhomImportId, user);
+            setGroupToDelete(null);
+            onToast("success", `Đã xóa nhóm ${groupToDelete.maNhom} và file Excel gốc. Các hóa đơn trong nhóm vẫn được giữ nguyên.`);
+            await load();
+        } catch (error) {
+            onToast("error", error?.response?.data?.message || "Xóa nhóm import thất bại.");
+        } finally {
+            setDeletingGroup(false);
+        }
+    };
 
     return (
         <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
@@ -158,6 +179,16 @@ export default function ImportGroupPanel({ user, navigate, onToast }) {
                                     <TableCell><Chip size="small" label={status.label} color={status.color} /></TableCell>
                                     <TableCell align="right">
                                         <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigate(`/hoa-don-dien-tu/nhom-import/${group.nhomImportId}`)}>Xem</Button>
+                                        {canDeleteGroups && (
+                                            <IconButton
+                                                size="small"
+                                                color="error"
+                                                aria-label={`Xóa nhóm import ${group.maNhom}`}
+                                                onClick={() => setGroupToDelete(group)}
+                                            >
+                                                <DeleteOutlineIcon fontSize="small" />
+                                            </IconButton>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             );
@@ -177,7 +208,9 @@ export default function ImportGroupPanel({ user, navigate, onToast }) {
                 <DialogTitle>Import nhóm hóa đơn từ Excel</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 0.5 }}>
-                        <Alert severity="info">Chỉ nhận file .xlsx theo đúng mẫu 21 cột đang được hệ thống xuất. Hóa đơn được tạo ở trạng thái nháp.</Alert>
+                        <Alert severity="info">
+                            Nhận file .xlsx mẫu 22 cột có “Thời hạn thanh toán” hoặc mẫu 21 cột cũ. File cũ vẫn tạo được nháp nhưng phải bổ sung thời hạn trước khi trình. Hóa đơn import mặc định là hóa đơn xuất khẩu, loại hình doanh thu xuất khẩu và thuế GTGT 0%.
+                        </Alert>
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
                             <Button component="label" variant="outlined" startIcon={<FileUploadIcon />}>
                                 Chọn file
@@ -238,6 +271,21 @@ export default function ImportGroupPanel({ user, navigate, onToast }) {
                     <Button onClick={closeDialog} disabled={previewing || creating}>Đóng</Button>
                     <Button variant="contained" onClick={createGroup} disabled={!canCreate || creating}>
                         {creating ? "Đang tạo nhóm..." : "Tạo nhóm nháp"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={Boolean(groupToDelete)} onClose={() => !deletingGroup && setGroupToDelete(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>Xóa nhóm import?</DialogTitle>
+                <DialogContent>
+                    <Typography color="text.secondary">
+                        Nhóm {groupToDelete?.maNhom || "này"} sẽ không còn hiển thị và file Excel gốc sẽ bị xóa thật khỏi Google Drive hoặc vùng lưu trữ local cũ. Các hóa đơn trong nhóm vẫn được giữ nguyên.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setGroupToDelete(null)} disabled={deletingGroup}>Đóng</Button>
+                    <Button color="error" variant="contained" onClick={confirmDeleteGroup} disabled={deletingGroup}>
+                        {deletingGroup ? "Đang xóa..." : "Xóa nhóm"}
                     </Button>
                 </DialogActions>
             </Dialog>

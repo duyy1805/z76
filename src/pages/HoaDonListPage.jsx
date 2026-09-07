@@ -34,10 +34,11 @@ import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canConfirmInvoiceExported, canEditInvoice, currencyAmountScale, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canDeleteInvoice, canEditInvoice, currencyAmountScale, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS } from "../utils/hoa-don";
 import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 
 function normalizeSearch(value) {
@@ -109,6 +110,8 @@ export default function HoaDonListPage() {
     const [confirmingExported, setConfirmingExported] = useState(false);
     const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const [confirmExportInfo, setConfirmExportInfo] = useState({});
+    const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+    const [deletingInvoice, setDeletingInvoice] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
     const [filters, setFilters] = useState({ tukhoa: "", maTrangThai: "", maLoaiHoaDon: "", dateFrom: "", dateTo: "" });
     const [tableFilters, setTableFilters] = useState({ maDangKy: "", nguoiMua: "", nguoiTao: "", amountFrom: "", amountTo: "" });
@@ -137,6 +140,13 @@ export default function HoaDonListPage() {
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        if (location.state?.toast) {
+            setToast({ open: true, ...location.state.toast });
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location.pathname, location.state, navigate]);
 
     const setFilter = (patch) => setFilters((current) => ({ ...current, ...patch }));
     const setTableFilter = (patch) => setTableFilters((current) => ({ ...current, ...patch }));
@@ -188,6 +198,21 @@ export default function HoaDonListPage() {
             }
             return [...new Set([...current, ...exportableIds])];
         });
+    };
+
+    const confirmDeleteInvoice = async () => {
+        if (!invoiceToDelete?.id) return;
+        setDeletingInvoice(true);
+        try {
+            await hoaDonApi.deleteHoaDon(invoiceToDelete.id, user);
+            setInvoiceToDelete(null);
+            setToast({ open: true, type: "success", msg: "Xóa hóa đơn thành công." });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Xóa hóa đơn thất bại." });
+        } finally {
+            setDeletingInvoice(false);
+        }
     };
 
     const exportSelected = async () => {
@@ -482,12 +507,22 @@ export default function HoaDonListPage() {
                                     {canEditInvoice(row, auth) && (
                                         <IconButton size="small" color="primary" onClick={() => navigate(`/hoa-don-dien-tu/${row.id}/edit`)}><EditIcon fontSize="small" /></IconButton>
                                     )}
+                                    {canDeleteInvoice(row, auth) && (
+                                        <IconButton
+                                            size="small"
+                                            color="error"
+                                            aria-label={`Xóa hóa đơn ${row.maDangKy}`}
+                                            onClick={() => setInvoiceToDelete(row)}
+                                        >
+                                            <DeleteOutlineIcon fontSize="small" />
+                                        </IconButton>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
                         {!filteredRows.length && (
                             <TableRow>
-                                <TableCell colSpan={9} align="center" sx={{ py: 6, color: "text.secondary" }}>
+                                <TableCell colSpan={10} align="center" sx={{ py: 6, color: "text.secondary" }}>
                                     {loading ? "Đang tải..." : "Chưa có hóa đơn phù hợp."}
                                 </TableCell>
                             </TableRow>
@@ -497,7 +532,7 @@ export default function HoaDonListPage() {
             </TableContainer>
 
             </> : (
-                <ImportGroupPanel user={user} navigate={navigate} onToast={showToast} />
+                <ImportGroupPanel user={user} auth={auth} navigate={navigate} onToast={showToast} />
             )}
 
             <Snackbar open={toast.open} autoHideDuration={3200} onClose={() => setToast({ ...toast, open: false })}>
@@ -578,6 +613,21 @@ export default function HoaDonListPage() {
                         disabled={confirmingExported || !selectedExportableRows.length}
                     >
                         Xác nhận đã xuất
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={Boolean(invoiceToDelete)} onClose={() => !deletingInvoice && setInvoiceToDelete(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>Xóa hồ sơ hóa đơn?</DialogTitle>
+                <DialogContent>
+                    <Typography color="text.secondary">
+                        Hóa đơn {invoiceToDelete?.maDangKy || "này"} sẽ được xóa mềm. Toàn bộ file đính kèm sẽ bị xóa thật khỏi Google Drive hoặc vùng lưu trữ local cũ.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setInvoiceToDelete(null)} disabled={deletingInvoice}>Đóng</Button>
+                    <Button color="error" variant="contained" onClick={confirmDeleteInvoice} disabled={deletingInvoice}>
+                        {deletingInvoice ? "Đang xóa..." : "Xóa hóa đơn"}
                     </Button>
                 </DialogActions>
             </Dialog>
