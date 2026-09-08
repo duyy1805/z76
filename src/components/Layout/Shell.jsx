@@ -43,6 +43,7 @@ export default function Shell({ children }) {
     const [collapsed, setCollapsed] = useState(false);
     const drawerCollapsed = !isMobile && collapsed;
     const drawerWidth = drawerCollapsed ? MINI_WIDTH : OPEN_WIDTH;
+    const isInvoiceModule = location.pathname.startsWith("/hoa-don-dien-tu");
     const roleCode = (contextRole || user?.roleCode || user?.role || "").toString();
     const canSeeAdmin = ["GD", "Admin"].includes(roleCode);
 
@@ -291,13 +292,14 @@ export default function Shell({ children }) {
 
             <Box
                 component="main"
+                className={isInvoiceModule ? "invoice-module" : undefined}
                 sx={{
                     flexGrow: 1,
                     minWidth: 0,
                     height: { md: "100vh" },
                     width: { xs: "100%", md: `calc(100% - ${drawerWidth}px)` },
                     maxWidth: "100%",
-                    p: { xs: 1.25, sm: 2, md: 2.5 },
+                    p: isInvoiceModule ? { xs: 1.25, sm: 1.5, md: 1.75 } : { xs: 1.25, sm: 2, md: 2.5 },
                     pb: { xs: 10, md: 3 },
                     overflowX: "hidden",
                     overflowY: { xs: "visible", md: "auto" },

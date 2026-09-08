@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
     Alert,
     Box,
@@ -31,6 +31,7 @@ import {
     invoiceToForm,
     normalizeInvoicePayload,
 } from "../utils/hoa-don";
+import { invoiceReturnLabel, safeInvoiceReturnTo, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 
 function NumericTextField({ value, onChange, inputProps, ...props }) {
     return (
@@ -73,12 +74,23 @@ export default function HoaDonFormPage() {
     const { id } = useParams();
     const isEdit = Boolean(id);
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useAuth();
     const [form, setForm] = useState(cloneDefaultForm);
     const [currencies, setCurrencies] = useState([]);
     const [loading, setLoading] = useState(Boolean(id));
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+    const returnTo = safeInvoiceReturnTo(
+        new URLSearchParams(location.search).get("returnTo"),
+        isEdit ? `/hoa-don-dien-tu/${id}` : "/hoa-don-dien-tu"
+    );
+
+    const detailTarget = (hoaDonId) => {
+        const detailPath = `/hoa-don-dien-tu/${hoaDonId}`;
+        const returnPathname = returnTo.split(/[?#]/, 1)[0];
+        return returnPathname === detailPath ? returnTo : withInvoiceReturnTo(detailPath, returnTo);
+    };
 
     useEffect(() => {
         api.listLoaiTien({ tontai: 1 })
@@ -145,7 +157,7 @@ export default function HoaDonFormPage() {
         }
         if (!form.maLoaiTien) return "Chọn loại tiền.";
         if (form.maLoaiTien !== "VND" && Number(form.tyGia || 0) <= 0) return "Nhập tỷ giá hợp lệ.";
-        if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.quyetDinhGiaoNhiemVu?.trim()) {
+        if (form.maLoaiHoaDon === "QuocPhong" && form.loaiHinhDoanhThu !== "QuocPhongNhomII" && !form.quocPhong?.quyetDinhGiaoNhiemVu?.trim()) {
             return "Nhập quyết định giao nhiệm vụ.";
         }
         if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.soHopDong?.trim()) {
@@ -175,11 +187,11 @@ export default function HoaDonFormPage() {
             const hoaDonId = result?.hoaDon?.id || result?.hoaDon?.hoaDonId || id;
             if (submit && hoaDonId) {
                 await hoaDonApi.submitHoaDon(hoaDonId, user);
-                navigate(`/hoa-don-dien-tu/${hoaDonId}`);
+                navigate(detailTarget(hoaDonId));
                 return;
             }
             setToast({ open: true, type: "success", msg: "Đã lưu nháp hóa đơn." });
-            if (!isEdit && hoaDonId) navigate(`/hoa-don-dien-tu/${hoaDonId}/edit`, { replace: true });
+            if (!isEdit && hoaDonId) navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/${hoaDonId}/edit`, returnTo), { replace: true });
         } catch (exception) {
             setToast({ open: true, type: "error", msg: exception?.response?.data?.message || "Lưu hóa đơn thất bại." });
         } finally {
@@ -196,7 +208,7 @@ export default function HoaDonFormPage() {
             <Stack spacing={2.25}>
                 <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1.5}>
                     <Box>
-                        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} sx={{ mb: 1 }}>Quay lại</Button>
+                        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(returnTo)} sx={{ mb: 1 }}>{invoiceReturnLabel(returnTo)}</Button>
                         <Typography variant="h5">{isEdit ? "Sửa nháp hóa đơn" : "Đăng ký hóa đơn điện tử"}</Typography>
                         <Typography color="text.secondary" sx={{ mt: 0.5 }}>Nhập đầy đủ dữ liệu bắt buộc để có thể xuất file import hóa đơn.</Typography>
                     </Box>
@@ -221,6 +233,8 @@ export default function HoaDonFormPage() {
                             <MenuItem value="" disabled>Chọn loại hình doanh thu</MenuItem>
                             {Object.entries(REVENUE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
+                        <TextField label="Hóa đơn" value={form.thongTinHoaDon || ""} onChange={(e) => setField({ thongTinHoaDon: e.target.value })} inputProps={{ maxLength: 500 }} />
+                        <TextField label="Đơn hàng" value={form.thongTinDonHang || ""} onChange={(e) => setField({ thongTinDonHang: e.target.value })} inputProps={{ maxLength: 500 }} />
                         <TextField select label="Loại tiền" value={form.maLoaiTien || "VND"} onChange={(e) => setCurrency(e.target.value)}>
                             {currencyOptions.map((item) => (
                                 <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>
@@ -248,12 +262,22 @@ export default function HoaDonFormPage() {
                 {form.maLoaiHoaDon === "QuocPhong" && (
                     <SectionCard title="Thông tin kiểm soát hàng quốc phòng">
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" }, gap: 1.5 }}>
-                            <TextField
-                                required
-                                label="Quyết định giao nhiệm vụ"
-                                value={form.quocPhong.quyetDinhGiaoNhiemVu}
-                                onChange={(e) => setQuocPhong({ quyetDinhGiaoNhiemVu: e.target.value })}
-                            />
+                            {form.loaiHinhDoanhThu !== "QuocPhongNhomII" && (
+                                <TextField
+                                    required
+                                    label="Quyết định giao nhiệm vụ"
+                                    value={form.quocPhong.quyetDinhGiaoNhiemVu}
+                                    onChange={(e) => setQuocPhong({ quyetDinhGiaoNhiemVu: e.target.value })}
+                                />
+                            )}
+                            {form.loaiHinhDoanhThu === "QuocPhongNhomI" && (
+                                <TextField
+                                    label="Nguồn ngân sách"
+                                    value={form.quocPhong.nguonNganSach || ""}
+                                    onChange={(e) => setQuocPhong({ nguonNganSach: e.target.value })}
+                                    inputProps={{ maxLength: 500 }}
+                                />
+                            )}
                             <TextField
                                 required
                                 label="Số hợp đồng"

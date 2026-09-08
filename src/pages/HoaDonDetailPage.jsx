@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
     Alert,
     Box,
@@ -48,8 +48,16 @@ import {
     isInvoiceExportInfoComplete,
     TAX_MODE_LABELS,
     vatRateLabel,
+    vatRateValue,
+    VAT_RATE_OPTIONS,
 } from "../utils/hoa-don";
 import { amountToVietnameseText } from "../utils/phieu-sec";
+import {
+    currentInvoicePath,
+    invoiceReturnLabel,
+    safeInvoiceReturnTo,
+    withInvoiceReturnTo,
+} from "../utils/hoa-don-navigation";
 
 const ATTACHMENT_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg";
 const ATTACHMENT_MAX_FILES = 10;
@@ -116,10 +124,10 @@ function initExportInfo(detail) {
         cheDoThue: detail?.cheDoThue || "MotThueSuat",
         maLoaiTien: detail?.maLoaiTien || "VND",
         tyGia: detail?.tyGia || 1,
-        thueSuatChung: hasExportInfo ? lines[0]?.ThueSuatGTGT ?? "" : "",
+        thueSuatChung: hasExportInfo ? String(lines[0]?.MaThueSuatGTGT || lines[0]?.ThueSuatGTGT || "0") : "",
         chiTiet: lines.map((line) => ({
             soDong: line.SoDong,
-            thueSuatGTGT: hasExportInfo ? line.ThueSuatGTGT ?? "" : "",
+            thueSuatGTGT: hasExportInfo ? String(line.MaThueSuatGTGT || line.ThueSuatGTGT || "0") : "",
         })),
     };
 }
@@ -127,6 +135,7 @@ function initExportInfo(detail) {
 export default function HoaDonDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const auth = useAuth();
     const { user } = auth;
     const [detail, setDetail] = useState(null);
@@ -141,6 +150,11 @@ export default function HoaDonDetailPage() {
     const [attachmentFiles, setAttachmentFiles] = useState([]);
     const [uploadingAttachments, setUploadingAttachments] = useState(false);
     const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
+    const defaultReturnTo = detail?.nhomImportId
+        ? withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${detail.nhomImportId}`, "/hoa-don-dien-tu?tab=groups")
+        : "/hoa-don-dien-tu";
+    const returnTo = safeInvoiceReturnTo(new URLSearchParams(location.search).get("returnTo"), defaultReturnTo);
+    const detailReturnTo = currentInvoicePath(location);
 
     const load = useCallback(async () => {
         if (!id || !user?.id || !user?.idDonVi) return;
@@ -212,7 +226,7 @@ export default function HoaDonDetailPage() {
         setDeletingInvoice(true);
         try {
             await hoaDonApi.deleteHoaDon(detail.id, user);
-            navigate("/hoa-don-dien-tu", {
+            navigate(returnTo, {
                 replace: true,
                 state: { toast: { type: "success", msg: "Xóa hóa đơn thành công." } },
             });
@@ -251,17 +265,22 @@ export default function HoaDonDetailPage() {
             setToast({ open: true, type: "warning", msg: "Nhập loại tiền và tỷ giá hợp lệ." });
             return;
         }
-        const chiTiet = (detail.chiTiet || []).map((line) => ({
-            soDong: line.SoDong,
-            thueSuatGTGT: showTaxPerLine
-                ? Number((exportInfo.chiTiet || []).find((item) => Number(item.soDong) === Number(line.SoDong))?.thueSuatGTGT ?? 0)
-                : Number(exportInfo.thueSuatChung ?? 0),
-        }));
+        const chiTiet = (detail.chiTiet || []).map((line) => {
+            const code = String(showTaxPerLine
+                ? (exportInfo.chiTiet || []).find((item) => Number(item.soDong) === Number(line.SoDong))?.thueSuatGTGT ?? ""
+                : exportInfo.thueSuatChung ?? "");
+            return { soDong: line.SoDong, maThueSuatGTGT: code, thueSuatGTGT: vatRateValue(code) };
+        });
+        if (chiTiet.some((line) => !VAT_RATE_OPTIONS.some((option) => option.value === line.maThueSuatGTGT))) {
+            setToast({ open: true, type: "warning", msg: "Chọn thuế GTGT cho đầy đủ các dòng hàng." });
+            return;
+        }
 
         setSavingExportInfo(true);
         try {
             await hoaDonApi.updateThongTinXuatHoaDon(detail.id, {
                 ...exportInfo,
+                thueSuatChung: vatRateValue(exportInfo.thueSuatChung),
                 tyGia: exportInfo.maLoaiTien === "VND" ? 1 : Number(exportInfo.tyGia || 1),
                 chiTiet,
                 requesterUserId: user?.id,
@@ -336,12 +355,20 @@ export default function HoaDonDetailPage() {
             <Stack spacing={2.25}>
                 <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", md: "flex-start" }} spacing={1.5}>
                     <Box>
-                        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/hoa-don-dien-tu")} sx={{ mb: 1 }}>Danh sách</Button>
+                        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(returnTo)} sx={{ mb: 1 }}>{invoiceReturnLabel(returnTo)}</Button>
                         <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
                             <Typography variant="h5">{detail.maDangKy}</Typography>
                             <StatusChip status={detail.maTrangThai} />
                             {detail.maNhomImport && (
-                                <Button size="small" variant="outlined" onClick={() => navigate(`/hoa-don-dien-tu/nhom-import/${detail.nhomImportId}`)}>
+                                <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => navigate(
+                                        invoiceReturnLabel(returnTo) === "Quay lại nhóm"
+                                            ? returnTo
+                                            : withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${detail.nhomImportId}`, returnTo)
+                                    )}
+                                >
                                     Nhóm {detail.maNhomImport}
                                 </Button>
                             )}
@@ -353,7 +380,7 @@ export default function HoaDonDetailPage() {
                     <HoaDonWorkflowActions
                         invoice={detail}
                         auth={auth}
-                        onEdit={() => navigate(`/hoa-don-dien-tu/${detail.id}/edit`)}
+                        onEdit={() => navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/${detail.id}/edit`, detailReturnTo))}
                         onSubmit={() => runAction("Trình duyệt", () => hoaDonApi.submitHoaDon(detail.id, user))}
                         onApprove={() => runAction("Duyệt", () => hoaDonApi.approveHoaDon(detail.id, { hanhDong: "Duyet", user }))}
                         onReturn={() => openReasonDialog("return")}
@@ -384,6 +411,8 @@ export default function HoaDonDetailPage() {
                             <DetailField label="Ngày hóa đơn" value={detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : ""} />
                             <DetailField label="Thời hạn thanh toán" value={detail.hanThanhToan ? String(detail.hanThanhToan).slice(0, 10) : ""} />
                             <DetailField label="Loại hình doanh thu" value={REVENUE_TYPE_LABELS[detail.loaiHinhDoanhThu] || detail.loaiHinhDoanhThu} />
+                            {detail.thongTinHoaDon && <DetailField label="Hóa đơn" value={detail.thongTinHoaDon} />}
+                            {detail.thongTinDonHang && <DetailField label="Đơn hàng" value={detail.thongTinDonHang} />}
                             <DetailField label="Ký hiệu dự kiến" value={detail.kyHieuDuKien} />
                             {detail.soHoaDon && <DetailField label="Số hóa đơn đã phát hành" value={`${detail.kyHieuHoaDon} - ${detail.soHoaDon}`} />}
                         </Stack>
@@ -410,7 +439,9 @@ export default function HoaDonDetailPage() {
                                     {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                                 </TextField>
                                 {!showTaxPerLine && (
-                                    <NumericTextField label="Thuế GTGT (%)" value={exportInfo?.thueSuatChung ?? ""} onChange={(value) => setExportField({ thueSuatChung: value })} />
+                                    <TextField select required label="Thuế GTGT" value={exportInfo?.thueSuatChung ?? ""} onChange={(event) => setExportField({ thueSuatChung: event.target.value })}>
+                                        {VAT_RATE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+                                    </TextField>
                                 )}
                                 <TextField select label="Loại tiền" value={exportInfo?.maLoaiTien || "VND"} onChange={(event) => {
                                     const maLoaiTien = event.target.value;
@@ -443,13 +474,16 @@ export default function HoaDonDetailPage() {
                                                         <TableCell>{line.SoDong}</TableCell>
                                                         <TableCell>{line.TenHangHoaDichVu}</TableCell>
                                                         <TableCell align="right">
-                                                            <NumericTextField
+                                                            <TextField
+                                                                select
                                                                 size="small"
                                                                 value={taxLine?.thueSuatGTGT ?? ""}
-                                                                onChange={(value) => setExportLineTax(line.SoDong, value)}
+                                                                onChange={(event) => setExportLineTax(line.SoDong, event.target.value)}
                                                                 inputProps={{ style: { textAlign: "right" } }}
                                                                 sx={{ width: 140 }}
-                                                            />
+                                                            >
+                                                                {VAT_RATE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+                                                            </TextField>
                                                         </TableCell>
                                                     </TableRow>
                                                 );
@@ -475,6 +509,7 @@ export default function HoaDonDetailPage() {
                             <DetailField label="Nhà máy" value={detail.quocPhong.NhaMay} />
                             <DetailField label="Bộ phận" value={detail.quocPhong.TenBoPhan} />
                             <DetailField label="Quyết định giao nhiệm vụ" value={detail.quocPhong.QuyetDinhGiaoNhiemVu} />
+                            {detail.loaiHinhDoanhThu === "QuocPhongNhomI" && <DetailField label="Nguồn ngân sách" value={detail.quocPhong.NguonNganSach} />}
                             <DetailField label="Hợp đồng" value={detail.quocPhong.SoHopDong} />
                             <DetailField label="Phiếu xuất" value={detail.quocPhong.SoPhieuXuat} />
                             <DetailField label="Phê duyệt giá" value={detail.quocPhong.PheDuyetGia} />

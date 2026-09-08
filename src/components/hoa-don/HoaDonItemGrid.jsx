@@ -121,6 +121,7 @@ export default function HoaDonItemGrid({
                                 <TableCell sx={priceCellSx} align="right">Đơn giá</TableCell>
                                 <TableCell sx={moneyCellSx} align="right">Thành tiền</TableCell>
                                 {showTaxPerLine && <TableCell sx={{ minWidth: 95 }} align="right">% thuế</TableCell>}
+                                {showTaxPerLine && <TableCell sx={moneyCellSx} align="right">Tiền thuế</TableCell>}
                                 {!readOnly && <TableCell width={54} />}
                             </TableRow>
                         )}
@@ -198,6 +199,11 @@ export default function HoaDonItemGrid({
                                                     <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
                                                 ))}
                                             </TextField>
+                                        </TableCell>
+                                    )}
+                                    {showTaxPerLine && (
+                                        <TableCell sx={{ ...moneyCellSx, whiteSpace: "nowrap" }} align="right">
+                                            <Typography sx={{ fontWeight: 700 }}>{fmtMoney(calc.tienThue, amountScale, currency)}</Typography>
                                         </TableCell>
                                     )}
                                     {showDefense && (

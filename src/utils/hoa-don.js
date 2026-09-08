@@ -15,6 +15,14 @@ export const INVOICE_TYPE_LABELS = {
     QuocPhong: "Hóa đơn hàng quốc phòng",
 };
 
+export const EXPORT_INVOICE_SYMBOL = "1C26TXK";
+
+export function issuedInvoiceSymbol(invoice) {
+    return invoice?.kyHieuHoaDon
+        || invoice?.kyHieuDuKien
+        || (invoice?.maLoaiHoaDon === "XuatKhau" ? EXPORT_INVOICE_SYMBOL : "");
+}
+
 export const TAX_MODE_LABELS = {
     MotThueSuat: "Một thuế suất",
     NhieuThueSuat: "Nhiều thuế suất",
@@ -62,6 +70,8 @@ export const DEFAULT_INVOICE_FORM = {
     maLoaiHoaDon: "TrongNuoc",
     cheDoThue: "MotThueSuat",
     loaiHinhDoanhThu: "",
+    thongTinHoaDon: "",
+    thongTinDonHang: "",
     nguoiMuaId: null,
     loaiNguoiMua: "DoanhNghiep",
     khongCoMaSoThue: false,
@@ -89,6 +99,7 @@ export const DEFAULT_INVOICE_FORM = {
     chiTiet: [emptyInvoiceLine(1)],
     quocPhong: {
         quyetDinhGiaoNhiemVu: "",
+        nguonNganSach: "",
         soHopDong: "",
         soPhieuXuat: "",
         pheDuyetGia: "",
@@ -302,6 +313,8 @@ export function invoiceToForm(detail) {
         maLoaiHoaDon: detail.isImportIncomplete ? (detail.maLoaiHoaDon || "") : (detail.maLoaiHoaDon || "TrongNuoc"),
         cheDoThue: detail.cheDoThue || "MotThueSuat",
         loaiHinhDoanhThu: detail.loaiHinhDoanhThu || "",
+        thongTinHoaDon: detail.thongTinHoaDon || "",
+        thongTinDonHang: detail.thongTinDonHang || "",
         nguoiMuaId: detail.nguoiMuaId || null,
         loaiNguoiMua: detail.loaiNguoiMua === "CaNhan" ? "CaNhan" : "DoanhNghiep",
         khongCoMaSoThue: !detail.maSoThue && Boolean(detail.maDvcqhns),
@@ -328,6 +341,7 @@ export function invoiceToForm(detail) {
             ...DEFAULT_INVOICE_FORM.quocPhong,
             ...(detail.quocPhong || {}),
             quyetDinhGiaoNhiemVu: detail.quocPhong?.QuyetDinhGiaoNhiemVu || "",
+            nguonNganSach: detail.quocPhong?.NguonNganSach || "",
             soHopDong: detail.quocPhong?.SoHopDong || "",
             soPhieuXuat: detail.quocPhong?.SoPhieuXuat || "",
             pheDuyetGia: detail.quocPhong?.PheDuyetGia || "",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import {
     Alert,
     Box,
@@ -11,6 +11,7 @@ import {
     DialogTitle,
     Divider,
     IconButton,
+    MenuItem,
     Paper,
     Stack,
     Table,
@@ -23,17 +24,36 @@ import {
     Typography,
 } from "@mui/material";
 import FileUploadIcon from "@mui/icons-material/FileUpload";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ClearIcon from "@mui/icons-material/Clear";
 import { hoaDonApi } from "../../lib/api";
 import { hasInvoicePermission } from "../../utils/hoa-don";
+import { withInvoiceReturnTo } from "../../utils/hoa-don-navigation";
 
 function groupStatus(group) {
-    if (Number(group.soDaXoa || 0) === Number(group.soHoaDon || 0)) return { label: "Đã xóa", color: "default" };
-    if (Number(group.soNhap || 0) === Number(group.soHoaDon || 0)) return { label: "Nháp", color: "default" };
-    if (Number(group.soHoanTat || 0) === Number(group.soHoaDon || 0)) return { label: "Hoàn tất", color: "success" };
-    return { label: "Đang xử lý", color: "warning" };
+    if (Number(group.soDaXoa || 0) === Number(group.soHoaDon || 0)) return { value: "deleted", label: "Đã xóa", color: "default" };
+    if (Number(group.soNhap || 0) === Number(group.soHoaDon || 0)) return { value: "draft", label: "Nháp", color: "default" };
+    if (Number(group.soSanSangXuat || 0) === Number(group.soHoaDon || 0)) return { value: "ready", label: "Sẵn sàng xuất", color: "primary" };
+    if (Number(group.soHoanTat || 0) === Number(group.soHoaDon || 0)) return { value: "completed", label: "Hoàn tất", color: "success" };
+    return { value: "processing", label: "Đang xử lý", color: "warning" };
+}
+
+function normalizeSearch(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .toLowerCase()
+        .trim();
+}
+
+function localDateKey(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const offsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
 }
 
 function GroupSummary({ group }) {
@@ -49,7 +69,7 @@ function GroupSummary({ group }) {
     return parts.map(([label, count]) => `${label}: ${count}`).join(" · ") || "Chưa có dữ liệu";
 }
 
-export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
+const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navigate, returnTo, filters, onFilterChange, onToast }, ref) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -113,7 +133,7 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
             const result = await hoaDonApi.createNhomImport(file, user, note);
             onToast("success", `Đã tạo nhóm ${result.group?.maNhom} gồm ${result.group?.soHoaDon} hóa đơn nháp.`);
             closeDialog();
-            navigate(`/hoa-don-dien-tu/nhom-import/${result.group?.nhomImportId}`);
+            navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${result.group?.nhomImportId}`, returnTo));
         } catch (error) {
             const duplicate = error?.response?.data?.duplicateGroup;
             if (duplicate?.nhomImportId) {
@@ -126,8 +146,34 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
     };
 
     const canCreate = Boolean(file && preview && !preview.errors?.length && !preview.duplicateGroup);
+
+    useImperativeHandle(ref, () => ({
+        reload: load,
+        openImport: () => setDialogOpen(true),
+        loading,
+    }), [load, loading]);
     const previewInvoices = useMemo(() => preview?.invoices || [], [preview]);
     const canDeleteGroups = hasInvoicePermission(auth, "HD_Admin");
+    const filteredGroups = useMemo(() => {
+        const keyword = normalizeSearch(filters?.keyword);
+        const creator = normalizeSearch(filters?.creator);
+        return groups.filter((group) => {
+            const status = groupStatus(group).value;
+            const createdDate = localDateKey(group.ngayTao);
+            const matchesKeyword = !keyword || normalizeSearch([
+                group.maNhom,
+                group.fileName,
+                group.ghiChu,
+                group.tenDonVi,
+            ].filter(Boolean).join(" ")).includes(keyword);
+            const matchesCreator = !creator || normalizeSearch([group.tenNguoiTao, group.nguoiTaoId, group.tenDonVi].filter(Boolean).join(" ")).includes(creator);
+            const matchesStatus = !filters?.status || filters.status === status;
+            const matchesFrom = !filters?.dateFrom || createdDate >= filters.dateFrom;
+            const matchesTo = !filters?.dateTo || createdDate <= filters.dateTo;
+            return matchesKeyword && matchesCreator && matchesStatus && matchesFrom && matchesTo;
+        });
+    }, [filters, groups]);
+    const hasFilters = Boolean(filters?.keyword || filters?.creator || filters?.status || filters?.dateFrom || filters?.dateTo);
 
     const confirmDeleteGroup = async () => {
         if (!groupToDelete?.nhomImportId) return;
@@ -146,10 +192,48 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
 
     return (
         <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="flex-end">
-                <Button startIcon={<RefreshIcon />} variant="outlined" onClick={load} disabled={loading}>Tải lại</Button>
-                <Button startIcon={<FileUploadIcon />} variant="contained" onClick={() => setDialogOpen(true)}>Import Excel</Button>
-            </Stack>
+            <Paper elevation={0} sx={{ p: 1.5, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3 }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.35fr 1fr 1fr 1fr 1fr auto" }, gap: 1.25, alignItems: "center" }}>
+                    <TextField
+                        size="small"
+                        label="Tìm nhóm import"
+                        placeholder="Mã nhóm, tên file, ghi chú, đơn vị..."
+                        value={filters?.keyword || ""}
+                        onChange={(event) => onFilterChange({ groupKeyword: event.target.value })}
+                    />
+                    <TextField
+                        size="small"
+                        label="Người import"
+                        placeholder="Tên, ID hoặc bộ phận..."
+                        value={filters?.creator || ""}
+                        onChange={(event) => onFilterChange({ groupCreator: event.target.value })}
+                    />
+                    <TextField
+                        select
+                        size="small"
+                        label="Trạng thái nhóm"
+                        value={filters?.status || ""}
+                        onChange={(event) => onFilterChange({ groupStatus: event.target.value })}
+                    >
+                        <MenuItem value="">Tất cả</MenuItem>
+                        <MenuItem value="draft">Nháp</MenuItem>
+                        <MenuItem value="processing">Đang xử lý</MenuItem>
+                        <MenuItem value="ready">Sẵn sàng xuất</MenuItem>
+                        <MenuItem value="completed">Hoàn tất</MenuItem>
+                        <MenuItem value="deleted">Đã xóa</MenuItem>
+                    </TextField>
+                    <TextField size="small" type="date" label="Từ ngày" value={filters?.dateFrom || ""} onChange={(event) => onFilterChange({ groupDateFrom: event.target.value })} InputLabelProps={{ shrink: true }} />
+                    <TextField size="small" type="date" label="Đến ngày" value={filters?.dateTo || ""} onChange={(event) => onFilterChange({ groupDateTo: event.target.value })} InputLabelProps={{ shrink: true }} />
+                    <Button
+                        size="small"
+                        startIcon={<ClearIcon />}
+                        disabled={!hasFilters}
+                        onClick={() => onFilterChange({ groupKeyword: "", groupCreator: "", groupStatus: "", groupDateFrom: "", groupDateTo: "" })}
+                    >
+                        Xóa lọc
+                    </Button>
+                </Box>
+            </Paper>
 
             <TableContainer component={Paper} elevation={0} sx={{ flex: 1, minHeight: 0, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3 }}>
                 <Table stickyHeader size="small">
@@ -158,6 +242,7 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
                             <TableCell>Mã nhóm</TableCell>
                             <TableCell>File gốc</TableCell>
                             <TableCell>Người import</TableCell>
+                            <TableCell sx={{ minWidth: 180 }}>Bộ phận người tạo</TableCell>
                             <TableCell>Ngày import</TableCell>
                             <TableCell align="center">Số hóa đơn</TableCell>
                             <TableCell>Tiến độ</TableCell>
@@ -166,19 +251,20 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {groups.map((group) => {
+                        {filteredGroups.map((group) => {
                             const status = groupStatus(group);
                             return (
                                 <TableRow key={group.nhomImportId} hover>
                                     <TableCell sx={{ fontWeight: 750 }}>{group.maNhom}</TableCell>
                                     <TableCell>{group.fileName}</TableCell>
                                     <TableCell>{group.tenNguoiTao || group.nguoiTaoId}</TableCell>
+                                    <TableCell>{group.tenDonVi || "—"}</TableCell>
                                     <TableCell>{group.ngayTao ? new Date(group.ngayTao).toLocaleString("vi-VN") : "—"}</TableCell>
                                     <TableCell align="center">{group.soHoaDon}</TableCell>
                                     <TableCell><Typography variant="caption">{GroupSummary({ group })}</Typography></TableCell>
                                     <TableCell><Chip size="small" label={status.label} color={status.color} /></TableCell>
                                     <TableCell align="right">
-                                        <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigate(`/hoa-don-dien-tu/nhom-import/${group.nhomImportId}`)}>Xem</Button>
+                                        <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${group.nhomImportId}`, returnTo))}>Xem</Button>
                                         {canDeleteGroups && (
                                             <IconButton
                                                 size="small"
@@ -193,10 +279,10 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
                                 </TableRow>
                             );
                         })}
-                        {!groups.length && (
+                        {!filteredGroups.length && (
                             <TableRow>
-                                <TableCell colSpan={8} align="center" sx={{ py: 6, color: "text.secondary" }}>
-                                    {loading ? "Đang tải..." : "Chưa có nhóm import nào."}
+                                <TableCell colSpan={9} align="center" sx={{ py: 6, color: "text.secondary" }}>
+                                    {loading ? "Đang tải..." : hasFilters ? "Không có nhóm import phù hợp bộ lọc." : "Chưa có nhóm import nào."}
                                 </TableCell>
                             </TableRow>
                         )}
@@ -224,7 +310,7 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
                         <TextField label="Ghi chú nhóm" value={note} onChange={(event) => setNote(event.target.value)} multiline minRows={2} />
 
                         {preview?.duplicateGroup && (
-                            <Alert severity="warning" action={<Button color="inherit" size="small" onClick={() => navigate(`/hoa-don-dien-tu/nhom-import/${preview.duplicateGroup.nhomImportId}`)}>Mở nhóm cũ</Button>}>
+                            <Alert severity="warning" action={<Button color="inherit" size="small" onClick={() => navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${preview.duplicateGroup.nhomImportId}`, returnTo))}>Mở nhóm cũ</Button>}>
                                 File đã được import trong nhóm {preview.duplicateGroup.maNhom}.
                             </Alert>
                         )}
@@ -291,4 +377,6 @@ export default function ImportGroupPanel({ user, auth, navigate, onToast }) {
             </Dialog>
         </Stack>
     );
-}
+});
+
+export default ImportGroupPanel;

@@ -55,3 +55,133 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Compact density for the invoice module. Keep mobile controls comfortably tappable. */
+@media (min-width: 900px) {
+  .invoice-module {
+    font-size: 0.8125rem;
+  }
+
+  .invoice-module .MuiTypography-h5 {
+    font-size: 1.25rem;
+    line-height: 1.3;
+  }
+
+  .invoice-module .MuiTypography-h6 {
+    font-size: 0.95rem;
+    line-height: 1.35;
+  }
+
+  .invoice-module .MuiTypography-body1 {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .invoice-module .MuiTypography-body2 {
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .invoice-module .MuiTypography-caption {
+    font-size: 0.6875rem;
+    line-height: 1.35;
+  }
+
+  .invoice-module .MuiButton-root {
+    min-height: 32px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .invoice-module .MuiButton-sizeSmall {
+    min-height: 28px;
+    padding: 3px 7px;
+    font-size: 0.72rem;
+  }
+
+  .invoice-module .MuiButton-startIcon,
+  .invoice-module .MuiButton-endIcon {
+    margin-left: -2px;
+  }
+
+  .invoice-module .MuiButton-startIcon > :nth-of-type(1),
+  .invoice-module .MuiButton-endIcon > :nth-of-type(1) {
+    font-size: 1.05rem;
+  }
+
+  .invoice-module .MuiIconButton-root {
+    padding: 6px;
+  }
+
+  .invoice-module .MuiInputBase-root,
+  .invoice-module .MuiInputLabel-root,
+  .invoice-module .MuiFormHelperText-root,
+  .invoice-module .MuiSelect-select {
+    font-size: 0.75rem;
+  }
+
+  .invoice-module .MuiInputBase-input,
+  .invoice-module .MuiSelect-select {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .invoice-module .MuiInputLabel-root:not(.MuiInputLabel-shrink) {
+    transform: translate(14px, 9px) scale(1);
+  }
+
+  .invoice-module .MuiTabs-root,
+  .invoice-module .MuiTab-root {
+    min-height: 38px;
+  }
+
+  .invoice-module .MuiTab-root {
+    min-width: 92px;
+    padding: 7px 12px;
+    font-size: 0.75rem;
+  }
+
+  .invoice-module .MuiTableCell-root {
+    padding: 7px 9px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .invoice-module .MuiTableCell-head {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: 0.6875rem;
+    white-space: nowrap;
+  }
+
+  .invoice-module .MuiChip-root {
+    height: 24px;
+    font-size: 0.6875rem;
+  }
+
+  .invoice-module .MuiChip-label {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .invoice-module .MuiAlert-root {
+    padding-top: 3px;
+    padding-bottom: 3px;
+    font-size: 0.75rem;
+  }
+
+  .invoice-module .MuiDialogTitle-root {
+    padding: 14px 18px 8px;
+    font-size: 1rem;
+  }
+
+  .invoice-module .MuiDialogContent-root {
+    padding: 10px 18px;
+  }
+
+  .invoice-module .MuiDialogActions-root {
+    padding: 8px 18px 14px;
+  }
+}
