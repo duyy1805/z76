@@ -1,6 +1,45 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateTotals } from "../src/utils/hoa-don.js";
+import { calculateTotals, invoiceToForm, issuedInvoiceSymbol, normalizeInvoicePayload } from "../src/utils/hoa-don.js";
+
+test("ký hiệu phát hành mặc định của hóa đơn xuất khẩu là 1C26TXK", () => {
+    assert.equal(issuedInvoiceSymbol({ maLoaiHoaDon: "XuatKhau" }), "1C26TXK");
+    assert.equal(issuedInvoiceSymbol({ maLoaiHoaDon: "TrongNuoc" }), "");
+    assert.equal(issuedInvoiceSymbol({ maLoaiHoaDon: "XuatKhau", kyHieuDuKien: "1C26ABC" }), "1C26ABC");
+});
+
+test("ánh xạ thông tin hóa đơn, đơn hàng và nguồn ngân sách khi sửa", () => {
+    const form = invoiceToForm({
+        thongTinHoaDon: "HĐ theo phụ lục 01",
+        thongTinDonHang: "ĐH-2026-09",
+        quocPhong: { NguonNganSach: "Ngân sách quốc phòng" },
+    });
+
+    assert.equal(form.thongTinHoaDon, "HĐ theo phụ lục 01");
+    assert.equal(form.thongTinDonHang, "ĐH-2026-09");
+    assert.equal(form.quocPhong.nguonNganSach, "Ngân sách quốc phòng");
+});
+
+test("payload quốc phòng nhóm II giữ quyết định cũ nhưng không yêu cầu giá trị mới", () => {
+    const payload = normalizeInvoicePayload({
+        maLoaiHoaDon: "QuocPhong",
+        loaiHinhDoanhThu: "QuocPhongNhomII",
+        maLoaiTien: "VND",
+        tyGia: 1,
+        thongTinHoaDon: "HĐ 01",
+        thongTinDonHang: "ĐH 01",
+        loaiNguoiMua: "DoanhNghiep",
+        chiTiet: [],
+        quocPhong: {
+            quyetDinhGiaoNhiemVu: "Dữ liệu lịch sử",
+            nguonNganSach: "",
+        },
+    }, { id: 1, idDonVi: 2 });
+
+    assert.equal(payload.thongTinHoaDon, "HĐ 01");
+    assert.equal(payload.thongTinDonHang, "ĐH 01");
+    assert.equal(payload.quocPhong.quyetDinhGiaoNhiemVu, "Dữ liệu lịch sử");
+});
 
 test("hóa đơn một thuế suất tính thuế từ tổng tiền hàng", () => {
     const lines = [
