@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import {
     Alert,
     Box,
@@ -27,9 +28,12 @@ import FileUploadIcon from "@mui/icons-material/FileUpload";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ClearIcon from "@mui/icons-material/Clear";
+import DownloadIcon from "@mui/icons-material/Download";
 import { hoaDonApi } from "../../lib/api";
 import { hasInvoicePermission } from "../../utils/hoa-don";
+import { UPDATED_IMPORT_HEADERS } from "../../utils/hoa-don-excel";
 import { withInvoiceReturnTo } from "../../utils/hoa-don-navigation";
+import TableHeaderFilter from "./TableHeaderFilter";
 
 function groupStatus(group) {
     if (Number(group.soDaXoa || 0) === Number(group.soHoaDon || 0)) return { value: "deleted", label: "Đã xóa", color: "default" };
@@ -56,6 +60,18 @@ function localDateKey(value) {
     return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
 }
 
+function downloadImportTemplate() {
+    const emptyRows = Array.from({ length: 2 }, () => UPDATED_IMPORT_HEADERS.map(() => ""));
+    const worksheet = XLSX.utils.aoa_to_sheet([UPDATED_IMPORT_HEADERS, ...emptyRows]);
+    worksheet["!cols"] = UPDATED_IMPORT_HEADERS.map((header) => ({
+        wch: Math.min(Math.max(header.length + 2, header.includes("Tên") || header === "Địa chỉ" ? 28 : 14), 42),
+    }));
+    worksheet["!autofilter"] = { ref: `A1:V3` };
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Hóa đơn GTGT");
+    XLSX.writeFile(workbook, "mau-import-nhom-hoa-don-22-cot.xlsx");
+}
+
 function GroupSummary({ group }) {
     const parts = [
         ["Nháp", group.soNhap],
@@ -80,6 +96,8 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
     const [creating, setCreating] = useState(false);
     const [groupToDelete, setGroupToDelete] = useState(null);
     const [deletingGroup, setDeletingGroup] = useState(false);
+    const [columnFilters, setColumnFilters] = useState({ maNhom: "", fileName: "", department: "", countFrom: "", countTo: "", progress: "" });
+    const setColumnFilter = (patch) => setColumnFilters((current) => ({ ...current, ...patch }));
 
     const load = useCallback(async () => {
         if (!user?.id || !user?.idDonVi) return;
@@ -157,6 +175,12 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
     const filteredGroups = useMemo(() => {
         const keyword = normalizeSearch(filters?.keyword);
         const creator = normalizeSearch(filters?.creator);
+        const groupCode = normalizeSearch(columnFilters.maNhom);
+        const fileName = normalizeSearch(columnFilters.fileName);
+        const department = normalizeSearch(columnFilters.department);
+        const progress = normalizeSearch(columnFilters.progress);
+        const countFrom = Number(columnFilters.countFrom);
+        const countTo = Number(columnFilters.countTo);
         return groups.filter((group) => {
             const status = groupStatus(group).value;
             const createdDate = localDateKey(group.ngayTao);
@@ -170,9 +194,16 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
             const matchesStatus = !filters?.status || filters.status === status;
             const matchesFrom = !filters?.dateFrom || createdDate >= filters.dateFrom;
             const matchesTo = !filters?.dateTo || createdDate <= filters.dateTo;
-            return matchesKeyword && matchesCreator && matchesStatus && matchesFrom && matchesTo;
+            const invoiceCount = Number(group.soHoaDon || 0);
+            const matchesGroupCode = !groupCode || normalizeSearch(group.maNhom).includes(groupCode);
+            const matchesFileName = !fileName || normalizeSearch(group.fileName).includes(fileName);
+            const matchesDepartment = !department || normalizeSearch(group.tenDonVi).includes(department);
+            const matchesCountFrom = columnFilters.countFrom === "" || invoiceCount >= countFrom;
+            const matchesCountTo = columnFilters.countTo === "" || invoiceCount <= countTo;
+            const matchesProgress = !progress || normalizeSearch(GroupSummary({ group })).includes(progress);
+            return matchesKeyword && matchesCreator && matchesStatus && matchesFrom && matchesTo && matchesGroupCode && matchesFileName && matchesDepartment && matchesCountFrom && matchesCountTo && matchesProgress;
         });
-    }, [filters, groups]);
+    }, [columnFilters, filters, groups]);
     const hasFilters = Boolean(filters?.keyword || filters?.creator || filters?.status || filters?.dateFrom || filters?.dateTo);
 
     const confirmDeleteGroup = async () => {
@@ -239,14 +270,14 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                 <Table stickyHeader size="small">
                     <TableHead>
                         <TableRow>
-                            <TableCell>Mã nhóm</TableCell>
-                            <TableCell>File gốc</TableCell>
-                            <TableCell>Người import</TableCell>
-                            <TableCell sx={{ minWidth: 180 }}>Bộ phận người tạo</TableCell>
-                            <TableCell>Ngày import</TableCell>
-                            <TableCell align="center">Số hóa đơn</TableCell>
-                            <TableCell>Tiến độ</TableCell>
-                            <TableCell>Trạng thái</TableCell>
+                            <TableCell><TableHeaderFilter label="Mã nhóm" active={Boolean(columnFilters.maNhom)} onClear={() => setColumnFilter({ maNhom: "" })}><TextField autoFocus size="small" label="Mã nhóm" value={columnFilters.maNhom} onChange={(event) => setColumnFilter({ maNhom: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="File gốc" active={Boolean(columnFilters.fileName)} onClear={() => setColumnFilter({ fileName: "" })}><TextField autoFocus size="small" label="Tên file" value={columnFilters.fileName} onChange={(event) => setColumnFilter({ fileName: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Người import" active={Boolean(filters?.creator)} onClear={() => onFilterChange({ groupCreator: "" })}><TextField autoFocus size="small" label="Người import" value={filters?.creator || ""} onChange={(event) => onFilterChange({ groupCreator: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell sx={{ minWidth: 180 }}><TableHeaderFilter label="Bộ phận người tạo" active={Boolean(columnFilters.department)} onClear={() => setColumnFilter({ department: "" })}><TextField autoFocus size="small" label="Bộ phận" value={columnFilters.department} onChange={(event) => setColumnFilter({ department: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Ngày import" active={Boolean(filters?.dateFrom || filters?.dateTo)} onClear={() => onFilterChange({ groupDateFrom: "", groupDateTo: "" })}><TextField size="small" type="date" label="Từ ngày" value={filters?.dateFrom || ""} onChange={(event) => onFilterChange({ groupDateFrom: event.target.value })} InputLabelProps={{ shrink: true }} /><TextField size="small" type="date" label="Đến ngày" value={filters?.dateTo || ""} onChange={(event) => onFilterChange({ groupDateTo: event.target.value })} InputLabelProps={{ shrink: true }} /></TableHeaderFilter></TableCell>
+                            <TableCell align="center"><TableHeaderFilter label="Số hóa đơn" active={Boolean(columnFilters.countFrom || columnFilters.countTo)} onClear={() => setColumnFilter({ countFrom: "", countTo: "" })}><TextField size="small" type="number" label="Từ" value={columnFilters.countFrom} onChange={(event) => setColumnFilter({ countFrom: event.target.value })} /><TextField size="small" type="number" label="Đến" value={columnFilters.countTo} onChange={(event) => setColumnFilter({ countTo: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Tiến độ" active={Boolean(columnFilters.progress)} onClear={() => setColumnFilter({ progress: "" })}><TextField autoFocus size="small" label="Nội dung tiến độ" value={columnFilters.progress} onChange={(event) => setColumnFilter({ progress: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Trạng thái" active={Boolean(filters?.status)} onClear={() => onFilterChange({ groupStatus: "" })}><TextField select size="small" label="Trạng thái nhóm" value={filters?.status || ""} onChange={(event) => onFilterChange({ groupStatus: event.target.value })}><MenuItem value="">Tất cả</MenuItem><MenuItem value="draft">Nháp</MenuItem><MenuItem value="processing">Đang xử lý</MenuItem><MenuItem value="ready">Sẵn sàng xuất</MenuItem><MenuItem value="completed">Hoàn tất</MenuItem><MenuItem value="deleted">Đã xóa</MenuItem></TextField></TableHeaderFilter></TableCell>
                             <TableCell align="right">Thao tác</TableCell>
                         </TableRow>
                     </TableHead>
@@ -294,7 +325,14 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                 <DialogTitle>Import nhóm hóa đơn từ Excel</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 0.5 }}>
-                        <Alert severity="info">
+                        <Alert
+                            severity="info"
+                            action={(
+                                <Button color="inherit" size="small" startIcon={<DownloadIcon />} onClick={downloadImportTemplate} sx={{ whiteSpace: "nowrap" }}>
+                                    Tải file mẫu
+                                </Button>
+                            )}
+                        >
                             Nhận file .xlsx mẫu 22 cột có “Thời hạn thanh toán” hoặc mẫu 21 cột cũ. File cũ vẫn tạo được nháp nhưng phải bổ sung thời hạn trước khi trình. Hóa đơn import mặc định là hóa đơn xuất khẩu, loại hình doanh thu xuất khẩu và thuế GTGT 0%.
                         </Alert>
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>

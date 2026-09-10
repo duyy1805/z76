@@ -1,3 +1,8 @@
+export function invoiceOrderContractInfo(invoice) {
+    return [...new Set([invoice.thongTinDonHang, invoice.thongTinHoaDon]
+        .map((value) => String(value || "").trim()).filter(Boolean))].join("; ");
+}
+
 export const INVOICE_STATUS_LABELS = {
     KhoiTao: "Nháp",
     ChoDuyet_TBP: "Chờ TBP duyệt",
@@ -242,6 +247,8 @@ export function normalizeInvoicePayload(form, user) {
 
     return {
         ...form,
+        thongTinHoaDon: "",
+        thongTinDonHang: form.maLoaiHoaDon === "QuocPhong" ? "" : String(form.thongTinDonHang || "").trim(),
         loaiNguoiMua: isCompany ? "DoanhNghiep" : "CaNhan",
         khongCoMaSoThue: withoutTaxCode,
         maSoThueSnapshot: isCompany && !withoutTaxCode ? String(form.maSoThueSnapshot || "").replace(/[\s.-]/g, "") : "",
@@ -313,8 +320,8 @@ export function invoiceToForm(detail) {
         maLoaiHoaDon: detail.isImportIncomplete ? (detail.maLoaiHoaDon || "") : (detail.maLoaiHoaDon || "TrongNuoc"),
         cheDoThue: detail.cheDoThue || "MotThueSuat",
         loaiHinhDoanhThu: detail.loaiHinhDoanhThu || "",
-        thongTinHoaDon: detail.thongTinHoaDon || "",
-        thongTinDonHang: detail.thongTinDonHang || "",
+        thongTinHoaDon: "",
+        thongTinDonHang: invoiceOrderContractInfo(detail),
         nguoiMuaId: detail.nguoiMuaId || null,
         loaiNguoiMua: detail.loaiNguoiMua === "CaNhan" ? "CaNhan" : "DoanhNghiep",
         khongCoMaSoThue: !detail.maSoThue && Boolean(detail.maDvcqhns),

@@ -42,6 +42,7 @@ import {
     currencyAmountScale,
     currencyUnitPriceScale,
     fmtMoney,
+    invoiceOrderContractInfo,
     INVOICE_NUMBER_FORMAT,
     INVOICE_TYPE_LABELS,
     REVENUE_TYPE_LABELS,
@@ -411,8 +412,7 @@ export default function HoaDonDetailPage() {
                             <DetailField label="Ngày hóa đơn" value={detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : ""} />
                             <DetailField label="Thời hạn thanh toán" value={detail.hanThanhToan ? String(detail.hanThanhToan).slice(0, 10) : ""} />
                             <DetailField label="Loại hình doanh thu" value={REVENUE_TYPE_LABELS[detail.loaiHinhDoanhThu] || detail.loaiHinhDoanhThu} />
-                            {detail.thongTinHoaDon && <DetailField label="Hóa đơn" value={detail.thongTinHoaDon} />}
-                            {detail.thongTinDonHang && <DetailField label="Đơn hàng" value={detail.thongTinDonHang} />}
+                            {detail.maLoaiHoaDon !== "QuocPhong" && invoiceOrderContractInfo(detail) && <DetailField label="Đơn hàng/hợp đồng" value={invoiceOrderContractInfo(detail)} />}
                             <DetailField label="Ký hiệu dự kiến" value={detail.kyHieuDuKien} />
                             {detail.soHoaDon && <DetailField label="Số hóa đơn đã phát hành" value={`${detail.kyHieuHoaDon} - ${detail.soHoaDon}`} />}
                         </Stack>

@@ -11,6 +11,7 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    MenuItem,
     Paper,
     Snackbar,
     Stack,
@@ -29,6 +30,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import SendIcon from "@mui/icons-material/Send";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import PreviewIcon from "@mui/icons-material/Preview";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
@@ -41,10 +43,12 @@ import {
     fmtMoney,
     hasInvoicePermission,
     INVOICE_TYPE_LABELS,
+    INVOICE_STATUS_OPTIONS,
     issuedInvoiceSymbol,
 } from "../utils/hoa-don";
 import { currentInvoicePath, safeInvoiceReturnTo, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import { buildUpdatedImportRows, UPDATED_IMPORT_HEADERS } from "../utils/hoa-don-excel";
+import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
 
 async function mapWithConcurrency(items, concurrency, mapper) {
     const results = new Array(items.length);
@@ -70,6 +74,20 @@ function todayDateInputValue() {
     return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
 }
 
+function normalizeSearch(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().trim();
+}
+
+function writeUpdatedExcelFile(rows, groupCode) {
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header: UPDATED_IMPORT_HEADERS });
+    worksheet["!cols"] = UPDATED_IMPORT_HEADERS.map((header) => ({
+        wch: Math.min(Math.max(header.length + 2, header.includes("Tên") || header === "Địa chỉ" ? 28 : 14), 42),
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Hóa đơn GTGT");
+    XLSX.writeFile(workbook, `${safeExcelFileName(groupCode)}-da-cap-nhat.xlsx`);
+}
+
 export default function HoaDonImportGroupDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -84,9 +102,14 @@ export default function HoaDonImportGroupDetailPage() {
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
     const [deletingGroup, setDeletingGroup] = useState(false);
     const [exportingUpdated, setExportingUpdated] = useState(false);
+    const [previewingUpdated, setPreviewingUpdated] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewRows, setPreviewRows] = useState([]);
     const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const [confirmExportInfo, setConfirmExportInfo] = useState({});
     const [confirmingExported, setConfirmingExported] = useState(false);
+    const [tableFilters, setTableFilters] = useState({ stt: "", code: "", type: "", buyer: "", dateFrom: "", dateTo: "", amountFrom: "", amountTo: "", status: "", completion: "" });
+    const setTableFilter = (patch) => setTableFilters((current) => ({ ...current, ...patch }));
     const listReturnTo = safeInvoiceReturnTo(
         new URLSearchParams(location.search).get("returnTo"),
         "/hoa-don-dien-tu?tab=groups"
@@ -117,6 +140,21 @@ export default function HoaDonImportGroupDetailPage() {
     }, [groupReturnTo, location.state, navigate]);
 
     const invoices = useMemo(() => data?.invoices || [], [data?.invoices]);
+    const filteredInvoices = useMemo(() => invoices.filter((invoice) => {
+        const invoiceDate = String(invoice.ngayHoaDon || "").slice(0, 10);
+        const amount = Number(invoice.tongTienThanhToan || 0);
+        const buyerText = normalizeSearch([invoice.tenNguoiMua, invoice.maSoThue, invoice.maDvcqhns].filter(Boolean).join(" "));
+        return (!tableFilters.stt || String(invoice.soThuTuTrongNhom || "").includes(tableFilters.stt.trim()))
+            && (!tableFilters.code || normalizeSearch(invoice.maDangKy).includes(normalizeSearch(tableFilters.code)))
+            && (!tableFilters.type || invoice.maLoaiHoaDon === tableFilters.type)
+            && (!tableFilters.buyer || buyerText.includes(normalizeSearch(tableFilters.buyer)))
+            && (!tableFilters.dateFrom || invoiceDate >= tableFilters.dateFrom)
+            && (!tableFilters.dateTo || invoiceDate <= tableFilters.dateTo)
+            && (tableFilters.amountFrom === "" || amount >= Number(tableFilters.amountFrom))
+            && (tableFilters.amountTo === "" || amount <= Number(tableFilters.amountTo))
+            && (!tableFilters.status || invoice.maTrangThai === tableFilters.status)
+            && (!tableFilters.completion || (tableFilters.completion === "incomplete") === Boolean(invoice.isImportIncomplete));
+    }), [invoices, tableFilters]);
     const canSubmitGroup = useMemo(() => {
         const isOwner = Number(data?.group?.nguoiTaoId) === Number(user?.id);
         return invoices.some((invoice) => invoice.maTrangThai === "KhoiTao") && (isOwner || hasInvoicePermission(auth, "HD_Admin"));
@@ -146,30 +184,47 @@ export default function HoaDonImportGroupDetailPage() {
         }
     };
 
+    const loadUpdatedExcelRows = async () => {
+        const details = await mapWithConcurrency(invoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
+                userId: user.id,
+                idDonVi: user.idDonVi,
+        }));
+        const rows = buildUpdatedImportRows(details);
+        if (!rows.length) throw new Error("Nhóm không có dòng hàng hóa để xuất Excel.");
+        return { details, rows };
+    };
+
     const downloadUpdatedExcel = async () => {
         if (!invoices.length) return;
         setExportingUpdated(true);
         try {
-            const details = await mapWithConcurrency(invoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
-                userId: user.id,
-                idDonVi: user.idDonVi,
-            }));
-            const rows = buildUpdatedImportRows(details);
-            if (!rows.length) throw new Error("Nhóm không có dòng hàng hóa để xuất Excel.");
-
-            const worksheet = XLSX.utils.json_to_sheet(rows, { header: UPDATED_IMPORT_HEADERS });
-            worksheet["!cols"] = UPDATED_IMPORT_HEADERS.map((header) => ({
-                wch: Math.min(Math.max(header.length + 2, header.includes("Tên") || header === "Địa chỉ" ? 28 : 14), 42),
-            }));
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Hóa đơn GTGT");
-            XLSX.writeFile(workbook, `${safeExcelFileName(data?.group?.maNhom)}-da-cap-nhat.xlsx`);
+            const { details, rows } = await loadUpdatedExcelRows();
+            writeUpdatedExcelFile(rows, data?.group?.maNhom);
             setToast({ open: true, type: "success", msg: `Đã tạo file Excel từ dữ liệu mới nhất của ${details.length} hóa đơn.` });
         } catch (error) {
             setToast({ open: true, type: "error", msg: error?.response?.data?.message || error?.message || "Không thể tạo file Excel cập nhật." });
         } finally {
             setExportingUpdated(false);
         }
+    };
+
+    const openUpdatedExcelPreview = async () => {
+        if (!invoices.length) return;
+        setPreviewingUpdated(true);
+        try {
+            const { rows } = await loadUpdatedExcelRows();
+            setPreviewRows(rows);
+            setPreviewOpen(true);
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || error?.message || "Không thể xem trước file Excel." });
+        } finally {
+            setPreviewingUpdated(false);
+        }
+    };
+
+    const downloadPreviewedExcel = () => {
+        writeUpdatedExcelFile(previewRows, data?.group?.maNhom);
+        setToast({ open: true, type: "success", msg: "Đã tạo file Excel theo nội dung xem trước." });
     };
 
     const openConfirmExportDialog = () => {
@@ -269,6 +324,9 @@ export default function HoaDonImportGroupDetailPage() {
                 </Box>
                 <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent={{ md: "flex-end" }}>
                     <Button size="small" startIcon={<DownloadIcon />} variant="outlined" onClick={() => { window.location.href = hoaDonApi.getNhomImportFileUrl(id, user); }}>Tải file gốc</Button>
+                    <Button size="small" startIcon={<PreviewIcon />} color="secondary" variant="outlined" disabled={!invoices.length || previewingUpdated} onClick={openUpdatedExcelPreview}>
+                        {previewingUpdated ? "Đang tải dữ liệu..." : "Xem trước Excel"}
+                    </Button>
                     <Button size="small" startIcon={<DownloadIcon />} color="secondary" variant="contained" disabled={!invoices.length || exportingUpdated} onClick={downloadUpdatedExcel}>
                         {exportingUpdated ? "Đang tạo Excel..." : "Tải Excel đã cập nhật"}
                     </Button>
@@ -298,19 +356,19 @@ export default function HoaDonImportGroupDetailPage() {
                 <Table size="small" sx={{ minWidth: 1080 }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell align="center">STT file</TableCell>
-                            <TableCell>Mã đăng ký</TableCell>
-                            <TableCell>Loại hóa đơn</TableCell>
-                            <TableCell>Người mua</TableCell>
-                            <TableCell>Ngày HĐ</TableCell>
-                            <TableCell align="right">Thanh toán</TableCell>
-                            <TableCell>Trạng thái</TableCell>
-                            <TableCell>Hoàn thiện</TableCell>
+                            <TableCell align="center"><TableHeaderFilter label="STT file" active={Boolean(tableFilters.stt)} onClear={() => setTableFilter({ stt: "" })}><TextField autoFocus size="small" label="STT file" value={tableFilters.stt} onChange={(event) => setTableFilter({ stt: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Mã đăng ký" active={Boolean(tableFilters.code)} onClear={() => setTableFilter({ code: "" })}><TextField autoFocus size="small" label="Mã đăng ký" value={tableFilters.code} onChange={(event) => setTableFilter({ code: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Loại hóa đơn" active={Boolean(tableFilters.type)} onClear={() => setTableFilter({ type: "" })}><TextField select size="small" label="Loại hóa đơn" value={tableFilters.type} onChange={(event) => setTableFilter({ type: event.target.value })}><MenuItem value="">Tất cả</MenuItem>{Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Người mua" active={Boolean(tableFilters.buyer)} width={320} onClear={() => setTableFilter({ buyer: "" })}><TextField autoFocus size="small" label="Tên hoặc mã định danh" value={tableFilters.buyer} onChange={(event) => setTableFilter({ buyer: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Ngày HĐ" active={Boolean(tableFilters.dateFrom || tableFilters.dateTo)} onClear={() => setTableFilter({ dateFrom: "", dateTo: "" })}><TextField size="small" type="date" label="Từ ngày" value={tableFilters.dateFrom} onChange={(event) => setTableFilter({ dateFrom: event.target.value })} InputLabelProps={{ shrink: true }} /><TextField size="small" type="date" label="Đến ngày" value={tableFilters.dateTo} onChange={(event) => setTableFilter({ dateTo: event.target.value })} InputLabelProps={{ shrink: true }} /></TableHeaderFilter></TableCell>
+                            <TableCell align="right"><TableHeaderFilter label="Thanh toán" align="right" active={Boolean(tableFilters.amountFrom || tableFilters.amountTo)} onClear={() => setTableFilter({ amountFrom: "", amountTo: "" })}><TextField size="small" type="number" label="Từ số tiền" value={tableFilters.amountFrom} onChange={(event) => setTableFilter({ amountFrom: event.target.value })} /><TextField size="small" type="number" label="Đến số tiền" value={tableFilters.amountTo} onChange={(event) => setTableFilter({ amountTo: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Trạng thái" active={Boolean(tableFilters.status)} onClear={() => setTableFilter({ status: "" })}><TextField select size="small" label="Trạng thái" value={tableFilters.status} onChange={(event) => setTableFilter({ status: event.target.value })}><MenuItem value="">Tất cả</MenuItem>{INVOICE_STATUS_OPTIONS.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}</TextField></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Hoàn thiện" active={Boolean(tableFilters.completion)} onClear={() => setTableFilter({ completion: "" })}><TextField select size="small" label="Mức hoàn thiện" value={tableFilters.completion} onChange={(event) => setTableFilter({ completion: event.target.value })}><MenuItem value="">Tất cả</MenuItem><MenuItem value="complete">Đủ thông tin</MenuItem><MenuItem value="incomplete">Cần bổ sung</MenuItem></TextField></TableHeaderFilter></TableCell>
                             <TableCell align="right">Thao tác</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {invoices.map((invoice) => (
+                        {filteredInvoices.map((invoice) => (
                             <TableRow key={invoice.id} hover>
                                 <TableCell align="center">{invoice.soThuTuTrongNhom}</TableCell>
                                 <TableCell sx={{ fontWeight: 750 }}>{invoice.maDangKy}</TableCell>
@@ -329,7 +387,7 @@ export default function HoaDonImportGroupDetailPage() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {!invoices.length && <TableRow><TableCell colSpan={9} align="center" sx={{ py: 6 }}>Không có hóa đơn bạn được phép xem trong nhóm này.</TableCell></TableRow>}
+                        {!filteredInvoices.length && <TableRow><TableCell colSpan={9} align="center" sx={{ py: 6 }}>{invoices.length ? "Không có hóa đơn phù hợp bộ lọc." : "Không có hóa đơn bạn được phép xem trong nhóm này."}</TableCell></TableRow>}
                     </TableBody>
                 </Table>
             </TableContainer>
@@ -337,6 +395,47 @@ export default function HoaDonImportGroupDetailPage() {
             <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast((current) => ({ ...current, open: false }))}>
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
             </Snackbar>
+
+            <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth={false} fullWidth PaperProps={{ sx: { width: "calc(100vw - 48px)", height: "calc(100vh - 48px)", maxWidth: "none" } }}>
+                <DialogTitle>
+                    Xem trước Excel đã cập nhật
+                    <Typography variant="body2" color="text.secondary">
+                        {UPDATED_IMPORT_HEADERS.length} cột · {previewRows.length} dòng dữ liệu
+                    </Typography>
+                </DialogTitle>
+                <DialogContent dividers sx={{ p: 0, display: "flex", minHeight: 0 }}>
+                    <TableContainer sx={{ flex: 1 }}>
+                        <Table stickyHeader size="small" sx={{ minWidth: 3300 }}>
+                            <TableHead>
+                                <TableRow>
+                                    {UPDATED_IMPORT_HEADERS.map((header) => (
+                                        <TableCell key={header} sx={{ minWidth: header.includes("Tên") || header === "Địa chỉ" ? 240 : 135, whiteSpace: "nowrap", fontWeight: 750 }}>
+                                            {header}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {previewRows.map((row, rowIndex) => (
+                                    <TableRow key={rowIndex} hover>
+                                        {UPDATED_IMPORT_HEADERS.map((header) => (
+                                            <TableCell key={header} sx={{ whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }} title={row[header] == null ? "" : String(row[header])}>
+                                                {row[header] ?? ""}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPreviewOpen(false)}>Đóng</Button>
+                    <Button startIcon={<DownloadIcon />} color="secondary" variant="contained" disabled={!previewRows.length} onClick={downloadPreviewedExcel}>
+                        Tải file này
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <Dialog open={confirmDeleteOpen} onClose={() => !deletingGroup && setConfirmDeleteOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>Xóa nhóm import?</DialogTitle>

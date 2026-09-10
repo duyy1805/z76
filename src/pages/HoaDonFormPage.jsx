@@ -148,6 +148,8 @@ export default function HoaDonFormPage() {
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Email người mua không hợp lệ.";
         if (phone && !/^\+?\d{8,15}$/.test(phone)) return "Số điện thoại người mua không hợp lệ.";
         if (!form.maLoaiHoaDon) return "Chọn loại hóa đơn.";
+        if (form.maLoaiHoaDon === "TrongNuoc" && !form.thongTinDonHang?.trim()) return "Nhập thông tin đơn hàng/hợp đồng cho hóa đơn trong nước.";
+        if ((form.thongTinDonHang || "").trim().length > 500) return "Thông tin đơn hàng/hợp đồng không được quá 500 ký tự.";
         if (!form.ngayHoaDon) return "Nhập ngày hóa đơn.";
         if (!form.hanThanhToan) return "Nhập thời hạn thanh toán.";
         if (!form.loaiHinhDoanhThu) return "Chọn loại hình doanh thu.";
@@ -159,6 +161,9 @@ export default function HoaDonFormPage() {
         if (form.maLoaiTien !== "VND" && Number(form.tyGia || 0) <= 0) return "Nhập tỷ giá hợp lệ.";
         if (form.maLoaiHoaDon === "QuocPhong" && form.loaiHinhDoanhThu !== "QuocPhongNhomII" && !form.quocPhong?.quyetDinhGiaoNhiemVu?.trim()) {
             return "Nhập quyết định giao nhiệm vụ.";
+        }
+        if (form.maLoaiHoaDon === "QuocPhong" && form.loaiHinhDoanhThu === "QuocPhongNhomI" && !form.quocPhong?.nguonNganSach?.trim()) {
+            return "Nhập nguồn ngân sách.";
         }
         if (form.maLoaiHoaDon === "QuocPhong" && !form.quocPhong?.soHopDong?.trim()) {
             return "Nhập số hợp đồng.";
@@ -233,8 +238,9 @@ export default function HoaDonFormPage() {
                             <MenuItem value="" disabled>Chọn loại hình doanh thu</MenuItem>
                             {Object.entries(REVENUE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
-                        <TextField label="Hóa đơn" value={form.thongTinHoaDon || ""} onChange={(e) => setField({ thongTinHoaDon: e.target.value })} inputProps={{ maxLength: 500 }} />
-                        <TextField label="Đơn hàng" value={form.thongTinDonHang || ""} onChange={(e) => setField({ thongTinDonHang: e.target.value })} inputProps={{ maxLength: 500 }} />
+                        {form.maLoaiHoaDon !== "QuocPhong" && (
+                            <TextField required={form.maLoaiHoaDon === "TrongNuoc"} label="Đơn hàng/hợp đồng" value={form.thongTinDonHang || ""} onChange={(e) => setField({ thongTinDonHang: e.target.value })} inputProps={{ maxLength: 500 }} />
+                        )}
                         <TextField select label="Loại tiền" value={form.maLoaiTien || "VND"} onChange={(e) => setCurrency(e.target.value)}>
                             {currencyOptions.map((item) => (
                                 <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>
@@ -272,6 +278,7 @@ export default function HoaDonFormPage() {
                             )}
                             {form.loaiHinhDoanhThu === "QuocPhongNhomI" && (
                                 <TextField
+                                    required
                                     label="Nguồn ngân sách"
                                     value={form.quocPhong.nguonNganSach || ""}
                                     onChange={(e) => setQuocPhong({ nguonNganSach: e.target.value })}
