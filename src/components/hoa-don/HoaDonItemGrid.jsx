@@ -90,9 +90,9 @@ export default function HoaDonItemGrid({
                         {showDefense ? (
                             <>
                                 <TableRow>
-                                    <TableCell width={64} rowSpan={2}>STT</TableCell>
+                                    <TableCell width={64} rowSpan={2}>Dòng</TableCell>
                                     <TableCell sx={codeCellSx} rowSpan={2}>Mã hàng</TableCell>
-                                    <TableCell sx={nameCellSx} rowSpan={2}>Tên hàng hóa/Dịch vụ *</TableCell>
+                                    <TableCell sx={nameCellSx} rowSpan={2}>Tên hàng hóa/dịch vụ (*)</TableCell>
                                     <TableCell sx={unitCellSx} rowSpan={2}>ĐVT</TableCell>
                                     <TableCell align="center" colSpan={3}>Giá trị hợp đồng</TableCell>
                                     <TableCell align="center" colSpan={3}>Thực hiện</TableCell>
@@ -113,15 +113,15 @@ export default function HoaDonItemGrid({
                             </>
                         ) : (
                             <TableRow>
-                                <TableCell width={64}>STT</TableCell>
+                                <TableCell width={64}>Dòng</TableCell>
                                 <TableCell sx={codeCellSx}>Mã hàng</TableCell>
-                                <TableCell sx={nameCellSx}>Tên hàng hóa/Dịch vụ *</TableCell>
+                                <TableCell sx={nameCellSx}>Tên hàng hóa/dịch vụ (*)</TableCell>
                                 <TableCell sx={unitCellSx}>ĐVT</TableCell>
                                 <TableCell sx={quantityCellSx} align="right">Số lượng</TableCell>
                                 <TableCell sx={priceCellSx} align="right">Đơn giá</TableCell>
                                 <TableCell sx={moneyCellSx} align="right">Thành tiền</TableCell>
-                                {showTaxPerLine && <TableCell sx={{ minWidth: 95 }} align="right">% thuế</TableCell>}
-                                {showTaxPerLine && <TableCell sx={moneyCellSx} align="right">Tiền thuế</TableCell>}
+                                {showTaxPerLine && <TableCell sx={{ minWidth: 150 }} align="right">Thuế suất GTGT (%)</TableCell>}
+                                {showTaxPerLine && <TableCell sx={moneyCellSx} align="right">Tiền thuế GTGT</TableCell>}
                                 {!readOnly && <TableCell width={54} />}
                             </TableRow>
                         )}

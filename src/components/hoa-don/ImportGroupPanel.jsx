@@ -30,7 +30,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ClearIcon from "@mui/icons-material/Clear";
 import DownloadIcon from "@mui/icons-material/Download";
 import { hoaDonApi } from "../../lib/api";
-import { hasInvoicePermission } from "../../utils/hoa-don";
+import { formatInvoiceDate, formatInvoiceDateTime, hasInvoicePermission } from "../../utils/hoa-don";
 import { UPDATED_IMPORT_HEADERS } from "../../utils/hoa-don-excel";
 import { withInvoiceReturnTo } from "../../utils/hoa-don-navigation";
 import TableHeaderFilter from "./TableHeaderFilter";
@@ -85,7 +85,7 @@ function GroupSummary({ group }) {
     return parts.map(([label, count]) => `${label}: ${count}`).join(" · ") || "Chưa có dữ liệu";
 }
 
-const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navigate, returnTo, filters, onFilterChange, onToast }, ref) {
+const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navigate, returnTo, filters, onFilterChange, onToast, creationBlocked = false }, ref) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -145,6 +145,10 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
     };
 
     const createGroup = async () => {
+        if (creationBlocked) {
+            onToast("warning", "Đã quá 16:30. Hệ thống đang khóa import hóa đơn.");
+            return;
+        }
         if (!file || !preview || preview.errors?.length || preview.duplicateGroup) return;
         setCreating(true);
         try {
@@ -163,13 +167,19 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
         }
     };
 
-    const canCreate = Boolean(file && preview && !preview.errors?.length && !preview.duplicateGroup);
+    const canCreate = Boolean(!creationBlocked && file && preview && !preview.errors?.length && !preview.duplicateGroup);
 
     useImperativeHandle(ref, () => ({
         reload: load,
-        openImport: () => setDialogOpen(true),
+        openImport: () => {
+            if (creationBlocked) {
+                onToast("warning", "Đã quá 16:30. Hệ thống đang khóa import hóa đơn.");
+                return;
+            }
+            setDialogOpen(true);
+        },
         loading,
-    }), [load, loading]);
+    }), [creationBlocked, load, loading, onToast]);
     const previewInvoices = useMemo(() => preview?.invoices || [], [preview]);
     const canDeleteGroups = hasInvoicePermission(auth, "HD_Admin");
     const filteredGroups = useMemo(() => {
@@ -290,7 +300,7 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                                     <TableCell>{group.fileName}</TableCell>
                                     <TableCell>{group.tenNguoiTao || group.nguoiTaoId}</TableCell>
                                     <TableCell>{group.tenDonVi || "—"}</TableCell>
-                                    <TableCell>{group.ngayTao ? new Date(group.ngayTao).toLocaleString("vi-VN") : "—"}</TableCell>
+                                    <TableCell>{formatInvoiceDateTime(group.ngayTao)}</TableCell>
                                     <TableCell align="center">{group.soHoaDon}</TableCell>
                                     <TableCell><Typography variant="caption">{GroupSummary({ group })}</Typography></TableCell>
                                     <TableCell><Chip size="small" label={status.label} color={status.color} /></TableCell>
@@ -372,13 +382,13 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                                 <Typography sx={{ fontWeight: 750 }}>Xem trước {previewInvoices.length} hóa đơn</Typography>
                                 <TableContainer sx={{ maxHeight: 330, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 2 }}>
                                     <Table stickyHeader size="small">
-                                        <TableHead><TableRow><TableCell>STT</TableCell><TableCell>Người mua</TableCell><TableCell>Ngày HĐ</TableCell><TableCell>Loại tiền</TableCell><TableCell align="center">Dòng hàng</TableCell><TableCell align="center">Cảnh báo</TableCell></TableRow></TableHead>
+                                        <TableHead><TableRow><TableCell>Số thứ tự hóa đơn (*)</TableCell><TableCell>Tên đơn vị mua hàng</TableCell><TableCell>Ngày hóa đơn</TableCell><TableCell>Loại tiền</TableCell><TableCell align="center">Số dòng hàng hóa/dịch vụ</TableCell><TableCell align="center">Cảnh báo</TableCell></TableRow></TableHead>
                                         <TableBody>
                                             {previewInvoices.map((invoice) => (
                                                 <TableRow key={invoice.invoiceOrder}>
                                                     <TableCell>{invoice.invoiceOrder}</TableCell>
                                                     <TableCell>{invoice.tenNguoiMuaSnapshot || "Chưa nhập"}</TableCell>
-                                                    <TableCell>{invoice.ngayHoaDon || "Chưa nhập"}</TableCell>
+                                                    <TableCell>{invoice.ngayHoaDon ? formatInvoiceDate(invoice.ngayHoaDon) : "Chưa nhập"}</TableCell>
                                                     <TableCell>{invoice.maLoaiTien}</TableCell>
                                                     <TableCell align="center">{invoice.chiTiet?.length || 0}</TableCell>
                                                     <TableCell align="center">{invoice.warnings?.length || 0}</TableCell>

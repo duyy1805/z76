@@ -41,6 +41,8 @@ import {
     canEditInvoice,
     currencyAmountScale,
     fmtMoney,
+    formatInvoiceDate,
+    formatInvoiceDateTime,
     hasInvoicePermission,
     INVOICE_TYPE_LABELS,
     INVOICE_STATUS_OPTIONS,
@@ -78,6 +80,11 @@ function normalizeSearch(value) {
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().trim();
 }
 
+function formatExcelPreviewCell(header, value) {
+    if (value == null) return "";
+    return ["Ngày hóa đơn", "Thời hạn thanh toán"].includes(header) ? formatInvoiceDate(value) : value;
+}
+
 function writeUpdatedExcelFile(rows, groupCode) {
     const worksheet = XLSX.utils.json_to_sheet(rows, { header: UPDATED_IMPORT_HEADERS });
     worksheet["!cols"] = UPDATED_IMPORT_HEADERS.map((header) => ({
@@ -108,7 +115,7 @@ export default function HoaDonImportGroupDetailPage() {
     const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const [confirmExportInfo, setConfirmExportInfo] = useState({});
     const [confirmingExported, setConfirmingExported] = useState(false);
-    const [tableFilters, setTableFilters] = useState({ stt: "", code: "", type: "", buyer: "", dateFrom: "", dateTo: "", amountFrom: "", amountTo: "", status: "", completion: "" });
+    const [tableFilters, setTableFilters] = useState({ stt: "", code: "", type: "", buyer: "", buyerContact: "", dateFrom: "", dateTo: "", amountFrom: "", amountTo: "", status: "", completion: "" });
     const setTableFilter = (patch) => setTableFilters((current) => ({ ...current, ...patch }));
     const listReturnTo = safeInvoiceReturnTo(
         new URLSearchParams(location.search).get("returnTo"),
@@ -148,6 +155,7 @@ export default function HoaDonImportGroupDetailPage() {
             && (!tableFilters.code || normalizeSearch(invoice.maDangKy).includes(normalizeSearch(tableFilters.code)))
             && (!tableFilters.type || invoice.maLoaiHoaDon === tableFilters.type)
             && (!tableFilters.buyer || buyerText.includes(normalizeSearch(tableFilters.buyer)))
+            && (!tableFilters.buyerContact || normalizeSearch(invoice.nguoiLienHe).includes(normalizeSearch(tableFilters.buyerContact)))
             && (!tableFilters.dateFrom || invoiceDate >= tableFilters.dateFrom)
             && (!tableFilters.dateTo || invoiceDate <= tableFilters.dateTo)
             && (tableFilters.amountFrom === "" || amount >= Number(tableFilters.amountFrom))
@@ -320,7 +328,7 @@ export default function HoaDonImportGroupDetailPage() {
                 <Box sx={{ minWidth: 220, flexShrink: 0 }}>
                     <Button size="small" startIcon={<ArrowBackIcon />} onClick={() => navigate(listReturnTo)}>Danh sách nhóm import</Button>
                     <Typography variant="h5" sx={{ mt: 0.25 }}>{group?.maNhom || "Nhóm import"}</Typography>
-                    <Typography variant="body2" color="text.secondary">{group?.fileName} · {group?.soHoaDon || 0} hóa đơn · {group?.ngayTao ? new Date(group.ngayTao).toLocaleString("vi-VN") : ""}</Typography>
+                    <Typography variant="body2" color="text.secondary">{group?.fileName} · {group?.soHoaDon || 0} hóa đơn · {formatInvoiceDateTime(group?.ngayTao)}</Typography>
                 </Box>
                 <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent={{ md: "flex-end" }}>
                     <Button size="small" startIcon={<DownloadIcon />} variant="outlined" onClick={() => { window.location.href = hoaDonApi.getNhomImportFileUrl(id, user); }}>Tải file gốc</Button>
@@ -353,15 +361,16 @@ export default function HoaDonImportGroupDetailPage() {
             )}
 
             <TableContainer component={Paper} elevation={0} sx={{ border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3, overflowX: "auto" }}>
-                <Table size="small" sx={{ minWidth: 1080 }}>
+                <Table size="small" sx={{ minWidth: 1240 }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell align="center"><TableHeaderFilter label="STT file" active={Boolean(tableFilters.stt)} onClear={() => setTableFilter({ stt: "" })}><TextField autoFocus size="small" label="STT file" value={tableFilters.stt} onChange={(event) => setTableFilter({ stt: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell align="center" sx={{ width: 90 }} title="Số thứ tự hóa đơn (*)"><TableHeaderFilter label="STT" align="center" active={Boolean(tableFilters.stt)} onClear={() => setTableFilter({ stt: "" })}><TextField autoFocus size="small" label="Số thứ tự hóa đơn" value={tableFilters.stt} onChange={(event) => setTableFilter({ stt: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Mã đăng ký" active={Boolean(tableFilters.code)} onClear={() => setTableFilter({ code: "" })}><TextField autoFocus size="small" label="Mã đăng ký" value={tableFilters.code} onChange={(event) => setTableFilter({ code: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Loại hóa đơn" active={Boolean(tableFilters.type)} onClear={() => setTableFilter({ type: "" })}><TextField select size="small" label="Loại hóa đơn" value={tableFilters.type} onChange={(event) => setTableFilter({ type: event.target.value })}><MenuItem value="">Tất cả</MenuItem>{Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></TableHeaderFilter></TableCell>
-                            <TableCell><TableHeaderFilter label="Người mua" active={Boolean(tableFilters.buyer)} width={320} onClear={() => setTableFilter({ buyer: "" })}><TextField autoFocus size="small" label="Tên hoặc mã định danh" value={tableFilters.buyer} onChange={(event) => setTableFilter({ buyer: event.target.value })} /></TableHeaderFilter></TableCell>
-                            <TableCell><TableHeaderFilter label="Ngày HĐ" active={Boolean(tableFilters.dateFrom || tableFilters.dateTo)} onClear={() => setTableFilter({ dateFrom: "", dateTo: "" })}><TextField size="small" type="date" label="Từ ngày" value={tableFilters.dateFrom} onChange={(event) => setTableFilter({ dateFrom: event.target.value })} InputLabelProps={{ shrink: true }} /><TextField size="small" type="date" label="Đến ngày" value={tableFilters.dateTo} onChange={(event) => setTableFilter({ dateTo: event.target.value })} InputLabelProps={{ shrink: true }} /></TableHeaderFilter></TableCell>
-                            <TableCell align="right"><TableHeaderFilter label="Thanh toán" align="right" active={Boolean(tableFilters.amountFrom || tableFilters.amountTo)} onClear={() => setTableFilter({ amountFrom: "", amountTo: "" })}><TextField size="small" type="number" label="Từ số tiền" value={tableFilters.amountFrom} onChange={(event) => setTableFilter({ amountFrom: event.target.value })} /><TextField size="small" type="number" label="Đến số tiền" value={tableFilters.amountTo} onChange={(event) => setTableFilter({ amountTo: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Tên đơn vị mua hàng" active={Boolean(tableFilters.buyer)} width={320} onClear={() => setTableFilter({ buyer: "" })}><TextField autoFocus size="small" label="Tên hoặc mã định danh" value={tableFilters.buyer} onChange={(event) => setTableFilter({ buyer: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Người mua hàng" active={Boolean(tableFilters.buyerContact)} onClear={() => setTableFilter({ buyerContact: "" })}><TextField autoFocus size="small" label="Người mua hàng" value={tableFilters.buyerContact} onChange={(event) => setTableFilter({ buyerContact: event.target.value })} /></TableHeaderFilter></TableCell>
+                            <TableCell><TableHeaderFilter label="Ngày hóa đơn" active={Boolean(tableFilters.dateFrom || tableFilters.dateTo)} onClear={() => setTableFilter({ dateFrom: "", dateTo: "" })}><TextField size="small" type="date" label="Từ ngày" value={tableFilters.dateFrom} onChange={(event) => setTableFilter({ dateFrom: event.target.value })} InputLabelProps={{ shrink: true }} /><TextField size="small" type="date" label="Đến ngày" value={tableFilters.dateTo} onChange={(event) => setTableFilter({ dateTo: event.target.value })} InputLabelProps={{ shrink: true }} /></TableHeaderFilter></TableCell>
+                            <TableCell align="right"><TableHeaderFilter label="Tổng tiền ngoại tệ" align="right" active={Boolean(tableFilters.amountFrom || tableFilters.amountTo)} onClear={() => setTableFilter({ amountFrom: "", amountTo: "" })}><TextField size="small" type="number" label="Từ số tiền" value={tableFilters.amountFrom} onChange={(event) => setTableFilter({ amountFrom: event.target.value })} /><TextField size="small" type="number" label="Đến số tiền" value={tableFilters.amountTo} onChange={(event) => setTableFilter({ amountTo: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Trạng thái" active={Boolean(tableFilters.status)} onClear={() => setTableFilter({ status: "" })}><TextField select size="small" label="Trạng thái" value={tableFilters.status} onChange={(event) => setTableFilter({ status: event.target.value })}><MenuItem value="">Tất cả</MenuItem>{INVOICE_STATUS_OPTIONS.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}</TextField></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Hoàn thiện" active={Boolean(tableFilters.completion)} onClear={() => setTableFilter({ completion: "" })}><TextField select size="small" label="Mức hoàn thiện" value={tableFilters.completion} onChange={(event) => setTableFilter({ completion: event.target.value })}><MenuItem value="">Tất cả</MenuItem><MenuItem value="complete">Đủ thông tin</MenuItem><MenuItem value="incomplete">Cần bổ sung</MenuItem></TextField></TableHeaderFilter></TableCell>
                             <TableCell align="right">Thao tác</TableCell>
@@ -377,7 +386,8 @@ export default function HoaDonImportGroupDetailPage() {
                                     <Typography sx={{ fontWeight: 650 }}>{invoice.tenNguoiMua || "Chưa bổ sung"}</Typography>
                                     <Typography variant="caption" color="text.secondary">{invoice.maSoThue || invoice.maDvcqhns || "Chưa có mã định danh"}</Typography>
                                 </TableCell>
-                                <TableCell>{invoice.ngayHoaDon ? String(invoice.ngayHoaDon).slice(0, 10) : "—"}</TableCell>
+                                <TableCell>{invoice.nguoiLienHe || "—"}</TableCell>
+                                <TableCell>{formatInvoiceDate(invoice.ngayHoaDon)}</TableCell>
                                 <TableCell align="right">{fmtMoney(invoice.tongTienThanhToan, currencyAmountScale(invoice.maLoaiTien), invoice.maLoaiTien)} {invoice.maLoaiTien}</TableCell>
                                 <TableCell><StatusChip status={invoice.maTrangThai} /></TableCell>
                                 <TableCell><Chip size="small" color={invoice.isImportIncomplete ? "warning" : "success"} label={invoice.isImportIncomplete ? "Cần bổ sung" : "Đủ thông tin"} /></TableCell>
@@ -387,7 +397,7 @@ export default function HoaDonImportGroupDetailPage() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {!filteredInvoices.length && <TableRow><TableCell colSpan={9} align="center" sx={{ py: 6 }}>{invoices.length ? "Không có hóa đơn phù hợp bộ lọc." : "Không có hóa đơn bạn được phép xem trong nhóm này."}</TableCell></TableRow>}
+                        {!filteredInvoices.length && <TableRow><TableCell colSpan={10} align="center" sx={{ py: 6 }}>{invoices.length ? "Không có hóa đơn phù hợp bộ lọc." : "Không có hóa đơn bạn được phép xem trong nhóm này."}</TableCell></TableRow>}
                     </TableBody>
                 </Table>
             </TableContainer>
@@ -420,7 +430,7 @@ export default function HoaDonImportGroupDetailPage() {
                                     <TableRow key={rowIndex} hover>
                                         {UPDATED_IMPORT_HEADERS.map((header) => (
                                             <TableCell key={header} sx={{ whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }} title={row[header] == null ? "" : String(row[header])}>
-                                                {row[header] ?? ""}
+                                                {formatExcelPreviewCell(header, row[header])}
                                             </TableCell>
                                         ))}
                                     </TableRow>

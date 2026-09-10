@@ -8,9 +8,15 @@ export default function TableHeaderFilter({ label, active, width = 280, children
 
     return (
         <>
-            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent={align === "right" ? "flex-end" : "flex-start"} sx={{ whiteSpace: "nowrap" }}>
-                <span>{label}</span>
-                <IconButton size="small" color={active ? "primary" : "default"} onClick={(event) => setAnchorEl(event.currentTarget)} aria-label={`Lọc ${label}`}>
+            <Stack
+                direction="row"
+                spacing={0.25}
+                alignItems="center"
+                justifyContent={align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start"}
+                sx={{ minWidth: 0, width: "100%", whiteSpace: "nowrap" }}
+            >
+                <span title={typeof label === "string" ? label : undefined} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+                <IconButton sx={{ flexShrink: 0, p: 0.5 }} size="small" color={active ? "primary" : "default"} onClick={(event) => setAnchorEl(event.currentTarget)} aria-label={`Lọc ${label}`}>
                     <FilterListRoundedIcon fontSize="inherit" />
                 </IconButton>
             </Stack>

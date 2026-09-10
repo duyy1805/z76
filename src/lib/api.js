@@ -290,6 +290,19 @@ function cleanParams(params = {}) {
 }
 
 export const hoaDonApi = {
+    async getCreationCutoff(user) {
+        const q = new URLSearchParams(cleanParams({ userId: user?.id, idDonVi: user?.idDonVi })).toString();
+        const { data } = await httpHd.get(`/cau-hinh/khoa-tao-sau-1630${q ? `?${q}` : ""}`);
+        return data;
+    },
+    async updateCreationCutoff(enabled, user) {
+        const { data } = await httpHd.put("/cau-hinh/khoa-tao-sau-1630", {
+            enabled,
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+        });
+        return data;
+    },
     async lookupBusinessTaxCode(taxCode) {
         const { data } = await httpHd.get(`/tra-cuu-mst/${encodeURIComponent(taxCode)}`);
         return data;

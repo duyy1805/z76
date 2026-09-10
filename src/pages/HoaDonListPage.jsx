@@ -36,7 +36,7 @@ import FileUploadIcon from "@mui/icons-material/FileUpload";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canConfirmInvoiceExported, canDeleteInvoice, canEditInvoice, currencyAmountScale, fmtMoney, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canDeleteInvoice, canEditInvoice, currencyAmountScale, fmtMoney, formatInvoiceDate, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
 import { currentInvoicePath, readInvoiceListSearch, updateInvoiceListSearch, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
@@ -55,12 +55,6 @@ function todayDateInputValue() {
     const date = new Date();
     const timezoneOffsetMs = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
-}
-
-function formatListDate(value) {
-    const normalized = String(value || "").slice(0, 10);
-    const [year, month, day] = normalized.split("-");
-    return year && month && day ? `${day}/${month}/${year}` : "—";
 }
 
 const COMPACT_INVOICE_TYPE_LABELS = {
@@ -93,6 +87,7 @@ export default function HoaDonListPage() {
     const [deletingInvoice, setDeletingInvoice] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+    const [creationPolicy, setCreationPolicy] = useState({ enabled: false, isBlocked: false, cutoffTime: "16:30" });
     const { activeTab, filters, tableFilters, groupFilters } = useMemo(() => readInvoiceListSearch(searchParams), [searchParams]);
     const listReturnTo = currentInvoicePath(location);
     const showToast = useCallback((type, msg) => setToast({ open: true, type, msg }), []);
@@ -130,6 +125,14 @@ export default function HoaDonListPage() {
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        if (!user?.id) return undefined;
+        const loadPolicy = () => hoaDonApi.getCreationCutoff(user).then(setCreationPolicy).catch(() => {});
+        loadPolicy();
+        const intervalId = window.setInterval(loadPolicy, 60000);
+        return () => window.clearInterval(intervalId);
+    }, [user]);
 
     useEffect(() => {
         if (location.state?.toast) {
@@ -339,11 +342,11 @@ export default function HoaDonListPage() {
                         Xác nhận đã xuất ({selectedExportableIds.length})
                     </Button>
                     <Button startIcon={<RefreshIcon />} variant="outlined" onClick={load} disabled={loading}>Tải lại</Button>
-                    <Button startIcon={<AddIcon />} variant="contained" onClick={() => navigateFromList("/hoa-don-dien-tu/new")}>Tạo hóa đơn</Button>
+                    <Button startIcon={<AddIcon />} variant="contained" disabled={creationPolicy.isBlocked} title={creationPolicy.isBlocked ? "Đã quá 16:30 và chức năng tạo mới đang bị khóa." : ""} onClick={() => navigateFromList("/hoa-don-dien-tu/new")}>Tạo hóa đơn</Button>
                 </Stack>}
                 {activeTab === 1 && <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <Button startIcon={<RefreshIcon />} variant="outlined" onClick={() => importGroupPanelRef.current?.reload()}>Tải lại</Button>
-                    <Button startIcon={<FileUploadIcon />} variant="contained" onClick={() => importGroupPanelRef.current?.openImport()}>Import Excel</Button>
+                    <Button startIcon={<FileUploadIcon />} variant="contained" disabled={creationPolicy.isBlocked} title={creationPolicy.isBlocked ? "Đã quá 16:30 và chức năng import đang bị khóa." : ""} onClick={() => importGroupPanelRef.current?.openImport()}>Import Excel</Button>
                 </Stack>}
             </Stack>
 
@@ -353,6 +356,10 @@ export default function HoaDonListPage() {
                     <Tab label="Nhóm import" />
                 </Tabs>
             </Paper>
+
+            {creationPolicy.isBlocked && (
+                <Alert severity="warning">Đã quá {creationPolicy.cutoffTime}. Admin đang bật chế độ khóa tạo mới và import hóa đơn.</Alert>
+            )}
 
             {activeTab === 0 ? <>
             <Paper elevation={0} sx={{ p: 1.5, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3 }}>
@@ -385,9 +392,10 @@ export default function HoaDonListPage() {
                 <Table stickyHeader size="small" sx={{ minWidth: 1420, tableLayout: "fixed" }}>
                     <TableHead>
                         <TableRow>
-                            <TableCell padding="checkbox" sx={{ width: 48 }}>
+                            <TableCell padding="none" align="center" sx={{ width: 58, minWidth: 58 }}>
                                 <Checkbox
                                     size="small"
+                                    sx={{ p: 0.75 }}
                                     checked={allExportableSelected}
                                     indeterminate={someExportableSelected}
                                     disabled={!exportableIds.length}
@@ -428,7 +436,7 @@ export default function HoaDonListPage() {
                             </TableCell>
                             <TableCell sx={{ width: 265 }}>
                                 <TableHeaderFilter
-                                    label="Người mua"
+                                    label="Tên đơn vị mua hàng"
                                     active={Boolean(tableFilters.nguoiMua)}
                                     width={320}
                                     onClear={() => setTableFilter({ nguoiMua: "" })}
@@ -447,20 +455,20 @@ export default function HoaDonListPage() {
                                 </TableHeaderFilter>
                             </TableCell>
                             <TableCell sx={{ width: 105 }}>
-                                <TableHeaderFilter label="Ngày HĐ" active={Boolean(filters.dateFrom || filters.dateTo)} width={280} onClear={() => setFilter({ dateFrom: "", dateTo: "" })}>
+                                <TableHeaderFilter label="Ngày hóa đơn" active={Boolean(filters.dateFrom || filters.dateTo)} width={280} onClear={() => setFilter({ dateFrom: "", dateTo: "" })}>
                                     <TextField size="small" type="date" label="Từ ngày" value={filters.dateFrom} onChange={(event) => setFilter({ dateFrom: event.target.value })} InputLabelProps={{ shrink: true }} />
                                     <TextField size="small" type="date" label="Đến ngày" value={filters.dateTo} onChange={(event) => setFilter({ dateTo: event.target.value })} InputLabelProps={{ shrink: true }} />
                                 </TableHeaderFilter>
                             </TableCell>
                             <TableCell sx={{ width: 125 }}>
-                                <TableHeaderFilter label="Hạn thanh toán" active={Boolean(tableFilters.paymentDateFrom || tableFilters.paymentDateTo)} width={280} onClear={() => setTableFilter({ paymentDateFrom: "", paymentDateTo: "" })}>
+                                <TableHeaderFilter label="Thời hạn thanh toán" active={Boolean(tableFilters.paymentDateFrom || tableFilters.paymentDateTo)} width={280} onClear={() => setTableFilter({ paymentDateFrom: "", paymentDateTo: "" })}>
                                     <TextField size="small" type="date" label="Từ ngày" value={tableFilters.paymentDateFrom} onChange={(event) => setTableFilter({ paymentDateFrom: event.target.value })} InputLabelProps={{ shrink: true }} />
                                     <TextField size="small" type="date" label="Đến ngày" value={tableFilters.paymentDateTo} onChange={(event) => setTableFilter({ paymentDateTo: event.target.value })} InputLabelProps={{ shrink: true }} />
                                 </TableHeaderFilter>
                             </TableCell>
                             <TableCell align="right" sx={{ width: 165 }}>
                                 <TableHeaderFilter
-                                    label="Thanh toán"
+                                    label="Tổng tiền thanh toán"
                                     active={Boolean(tableFilters.amountFrom || tableFilters.amountTo)}
                                     width={300}
                                     onClear={() => setTableFilter({ amountFrom: "", amountTo: "" })}
@@ -511,9 +519,10 @@ export default function HoaDonListPage() {
                     <TableBody>
                         {filteredRows.map((row) => (
                             <TableRow key={row.id} hover sx={{ "&:hover td:last-of-type": { bgcolor: "action.hover" } }}>
-                                <TableCell padding="checkbox">
+                                <TableCell padding="none" align="center" sx={{ width: 58, minWidth: 58 }}>
                                     <Checkbox
                                         size="small"
+                                        sx={{ p: 0.75 }}
                                         checked={selectedIds.includes(row.id)}
                                         disabled={!canConfirmInvoiceExported(row, auth)}
                                         onChange={() => toggleRow(row.id)}
@@ -535,8 +544,8 @@ export default function HoaDonListPage() {
                                         {row.loaiNguoiMua === "CaNhan" ? "CCCD" : row.maSoThue ? "MST" : "MĐVCQHNS"}: {row.loaiNguoiMua === "CaNhan" ? row.soGiayTo || "—" : row.maSoThue || row.maDvcqhns || "—"}
                                     </Typography>
                                 </TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>{formatListDate(row.ngayHoaDon)}</TableCell>
-                                <TableCell sx={{ whiteSpace: "nowrap" }}>{formatListDate(row.hanThanhToan)}</TableCell>
+                                <TableCell sx={{ whiteSpace: "nowrap" }}>{formatInvoiceDate(row.ngayHoaDon)}</TableCell>
+                                <TableCell sx={{ whiteSpace: "nowrap" }}>{formatInvoiceDate(row.hanThanhToan)}</TableCell>
                                 <TableCell align="right" sx={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(row.tongTienThanhToan, currencyAmountScale(row.maLoaiTien), row.maLoaiTien)} {row.maLoaiTien}</TableCell>
                                 <TableCell><StatusChip status={row.maTrangThai} /></TableCell>
                                 <TableCell sx={{ overflow: "hidden" }}>
@@ -583,6 +592,7 @@ export default function HoaDonListPage() {
                     returnTo={listReturnTo}
                     filters={groupFilters}
                     onFilterChange={updateListSearch}
+                    creationBlocked={creationPolicy.isBlocked}
                     onToast={showToast}
                 />
             )}

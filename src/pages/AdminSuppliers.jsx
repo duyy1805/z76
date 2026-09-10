@@ -2,7 +2,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } fro
 import {
     Box, Paper, Table, TableHead, TableRow, TableCell, TableBody, Typography,
     Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip,
-    Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab, MenuItem
+    Snackbar, Alert, IconButton, Stack, CircularProgress, Tabs, Tab, MenuItem, Switch, FormControlLabel
 } from "@mui/material";
 import Autocomplete from "@mui/material/Autocomplete";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -10,7 +10,7 @@ import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { api } from "../lib/api";
+import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import { EXPENSE_LABELS } from "../utils/phieu-sec";
 import DonViDialog from "../components/phieu-sec/DonViDialog";
@@ -891,6 +891,59 @@ function ExpenseReviewerLookup() {
     );
 }
 
+function InvoiceCreationSettings() {
+    const { user } = useAuth();
+    const [policy, setPolicy] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
+
+    const load = useCallback(async () => {
+        try {
+            setPolicy(await hoaDonApi.getCreationCutoff(user));
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không tải được cấu hình hóa đơn." });
+        }
+    }, [user]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const updateEnabled = async (enabled) => {
+        setSaving(true);
+        try {
+            setPolicy(await hoaDonApi.updateCreationCutoff(enabled, user));
+            setToast({ open: true, type: "success", msg: enabled ? "Đã bật khóa tạo hóa đơn sau 16:30." : "Đã tắt khóa tạo hóa đơn sau 16:30." });
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không cập nhật được cấu hình hóa đơn." });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Box>
+            <Typography variant="h5" sx={{ mb: 0.5 }}>Admin · Cấu hình hóa đơn</Typography>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>Kiểm soát thời điểm nhân viên được tạo mới và import hóa đơn.</Typography>
+            <Paper variant="outlined" sx={{ p: 2.5, maxWidth: 760 }}>
+                {!policy ? <CircularProgress size={24} /> : (
+                    <Stack spacing={1}>
+                        <FormControlLabel
+                            control={<Switch checked={policy.enabled} disabled={saving} onChange={(event) => updateEnabled(event.target.checked)} />}
+                            label="Khóa tạo mới và import hóa đơn sau 16:30"
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                            Khi bật, từ 16:30 đến hết ngày theo giờ Việt Nam, người dùng không thể tạo hóa đơn mới hoặc tạo nhóm từ file Excel. Hóa đơn nháp hiện có vẫn được sửa và trình bình thường.
+                        </Typography>
+                        {policy.isBlocked && <Alert severity="warning">Chức năng tạo mới và import hiện đang bị khóa.</Alert>}
+                    </Stack>
+                )}
+            </Paper>
+            <Snackbar open={toast.open} autoHideDuration={3500} onClose={() => setToast((current) => ({ ...current, open: false }))}>
+                <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
+            </Snackbar>
+        </Box>
+    );
+}
+
 export default function AdminSuppliers() {
     const { role, permissions = [] } = useAuth();
     const [tab, setTab] = useState(0);
@@ -902,11 +955,13 @@ export default function AdminSuppliers() {
                 <Tab label="Loại tiền" />
                 <Tab label="Ngân hàng" />
                 {isAdmin && <Tab label="Người phụ trách chi phí" />}
+                {isAdmin && <Tab label="Cấu hình hóa đơn" />}
             </Tabs>
             {tab === 0 && <SupplierLookup />}
             {tab === 1 && <CurrencyLookup />}
             {tab === 2 && <BankLookup />}
             {isAdmin && tab === 3 && <ExpenseReviewerLookup />}
+            {isAdmin && tab === 4 && <InvoiceCreationSettings />}
         </Box>
     );
 }

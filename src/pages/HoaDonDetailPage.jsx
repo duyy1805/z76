@@ -42,6 +42,8 @@ import {
     currencyAmountScale,
     currencyUnitPriceScale,
     fmtMoney,
+    formatInvoiceDate,
+    formatInvoiceDateTime,
     invoiceOrderContractInfo,
     INVOICE_NUMBER_FORMAT,
     INVOICE_TYPE_LABELS,
@@ -409,8 +411,8 @@ export default function HoaDonDetailPage() {
 
                     <SectionCard title="Thông tin hóa đơn">
                         <Stack spacing={1.5}>
-                            <DetailField label="Ngày hóa đơn" value={detail.ngayHoaDon ? String(detail.ngayHoaDon).slice(0, 10) : ""} />
-                            <DetailField label="Thời hạn thanh toán" value={detail.hanThanhToan ? String(detail.hanThanhToan).slice(0, 10) : ""} />
+                            <DetailField label="Ngày hóa đơn" value={formatInvoiceDate(detail.ngayHoaDon)} />
+                            <DetailField label="Thời hạn thanh toán" value={formatInvoiceDate(detail.hanThanhToan)} />
                             <DetailField label="Loại hình doanh thu" value={REVENUE_TYPE_LABELS[detail.loaiHinhDoanhThu] || detail.loaiHinhDoanhThu} />
                             {detail.maLoaiHoaDon !== "QuocPhong" && invoiceOrderContractInfo(detail) && <DetailField label="Đơn hàng/hợp đồng" value={invoiceOrderContractInfo(detail)} />}
                             <DetailField label="Ký hiệu dự kiến" value={detail.kyHieuDuKien} />
@@ -461,8 +463,8 @@ export default function HoaDonDetailPage() {
                                     <Table size="small">
                                         <TableHead>
                                             <TableRow>
-                                                <TableCell>STT</TableCell>
-                                                <TableCell>Tên hàng hóa/Dịch vụ</TableCell>
+                                                <TableCell>Dòng</TableCell>
+                                                <TableCell>Tên hàng hóa/dịch vụ (*)</TableCell>
                                                 <TableCell align="right">Thuế GTGT (%)</TableCell>
                                             </TableRow>
                                         </TableHead>
@@ -522,15 +524,15 @@ export default function HoaDonDetailPage() {
                         <Table size="small">
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>STT</TableCell>
+                                    <TableCell>Dòng</TableCell>
                                     <TableCell>Mã hàng</TableCell>
-                                    <TableCell>Tên hàng hóa/Dịch vụ</TableCell>
+                                    <TableCell>Tên hàng hóa/dịch vụ (*)</TableCell>
                                     <TableCell>ĐVT</TableCell>
                                     <TableCell align="right">Số lượng</TableCell>
                                     <TableCell align="right">Đơn giá</TableCell>
-                                    <TableCell align="right">% thuế</TableCell>
+                                    <TableCell align="right">Thuế suất GTGT (%)</TableCell>
                                     <TableCell align="right">Thành tiền</TableCell>
-                                    {detail.cheDoThue === "NhieuThueSuat" && <TableCell align="right">Tiền thuế</TableCell>}
+                                    {detail.cheDoThue === "NhieuThueSuat" && <TableCell align="right">Tiền thuế GTGT</TableCell>}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -615,7 +617,7 @@ export default function HoaDonDetailPage() {
                                             <TableRow key={taiLieuId} hover>
                                                 <TableCell>{attachment.FileName || attachment.fileName || "Tài liệu"}</TableCell>
                                                 <TableCell>{formatFileSize(attachment.FileSize ?? attachment.fileSize)}</TableCell>
-                                                <TableCell>{attachment.NgayTao || attachment.ngayTao ? new Date(attachment.NgayTao || attachment.ngayTao).toLocaleString("vi-VN") : "—"}</TableCell>
+                                                <TableCell>{formatInvoiceDateTime(attachment.NgayTao || attachment.ngayTao)}</TableCell>
                                                 <TableCell align="right">
                                                     <IconButton
                                                         size="small"

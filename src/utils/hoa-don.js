@@ -3,6 +3,27 @@ export function invoiceOrderContractInfo(invoice) {
         .map((value) => String(value || "").trim()).filter(Boolean))].join("; ");
 }
 
+export function formatInvoiceDate(value) {
+    if (!value) return "—";
+    const normalized = String(value).slice(0, 10);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+export function formatInvoiceDateTime(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
 export const INVOICE_STATUS_LABELS = {
     KhoiTao: "Nháp",
     ChoDuyet_TBP: "Chờ TBP duyệt",

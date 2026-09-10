@@ -80,6 +80,7 @@ export default function HoaDonFormPage() {
     const [currencies, setCurrencies] = useState([]);
     const [loading, setLoading] = useState(Boolean(id));
     const [saving, setSaving] = useState(false);
+    const [creationPolicy, setCreationPolicy] = useState({ isBlocked: false, cutoffTime: "16:30" });
     const [toast, setToast] = useState({ open: false, msg: "", type: "success" });
     const returnTo = safeInvoiceReturnTo(
         new URLSearchParams(location.search).get("returnTo"),
@@ -97,6 +98,11 @@ export default function HoaDonFormPage() {
             .then((rows) => setCurrencies(rows || []))
             .catch(() => setCurrencies([]));
     }, []);
+
+    useEffect(() => {
+        if (isEdit || !user?.id) return;
+        hoaDonApi.getCreationCutoff(user).then(setCreationPolicy).catch(() => {});
+    }, [isEdit, user]);
 
     useEffect(() => {
         if (!id || !user?.id || !user?.idDonVi) return;
@@ -178,6 +184,10 @@ export default function HoaDonFormPage() {
     };
 
     const save = async ({ submit = false } = {}) => {
+        if (!isEdit && creationPolicy.isBlocked) {
+            setToast({ open: true, type: "warning", msg: `Đã quá ${creationPolicy.cutoffTime}. Hệ thống đang khóa tạo hóa đơn mới.` });
+            return;
+        }
         const error = validate();
         if (error) {
             setToast({ open: true, type: "warning", msg: error });
@@ -218,10 +228,14 @@ export default function HoaDonFormPage() {
                         <Typography color="text.secondary" sx={{ mt: 0.5 }}>Nhập đầy đủ dữ liệu bắt buộc để có thể xuất file import hóa đơn.</Typography>
                     </Box>
                     <Stack direction="row" spacing={1}>
-                        <Button startIcon={<SaveIcon />} variant="outlined" disabled={saving} onClick={() => save()}>Lưu nháp</Button>
-                        <Button startIcon={<SendIcon />} variant="contained" disabled={saving} onClick={() => save({ submit: true })}>Lưu & trình</Button>
+                        <Button startIcon={<SaveIcon />} variant="outlined" disabled={saving || (!isEdit && creationPolicy.isBlocked)} onClick={() => save()}>Lưu nháp</Button>
+                        <Button startIcon={<SendIcon />} variant="contained" disabled={saving || (!isEdit && creationPolicy.isBlocked)} onClick={() => save({ submit: true })}>Lưu & trình</Button>
                     </Stack>
                 </Stack>
+
+                {!isEdit && creationPolicy.isBlocked && (
+                    <Alert severity="warning">Đã quá {creationPolicy.cutoffTime}. Admin đang bật chế độ khóa tạo hóa đơn mới.</Alert>
+                )}
 
                 <SectionCard title="Thông tin hóa đơn" subtitle="Nhân viên đăng ký loại nghiệp vụ, ngày hóa đơn dự kiến, thông tin thuế và thông tin nhận diện hồ sơ. Người phụ trách hóa đơn có thể kiểm tra, điều chỉnh trước khi xuất.">
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 1.5 }}>
