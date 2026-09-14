@@ -63,11 +63,25 @@ function localDateKey(value) {
 function downloadImportTemplate() {
     const emptyRows = Array.from({ length: 2 }, () => UPDATED_IMPORT_HEADERS.map(() => ""));
     const worksheet = XLSX.utils.aoa_to_sheet([UPDATED_IMPORT_HEADERS, ...emptyRows]);
+    for (let row = 2; row <= 3; row += 1) {
+        worksheet[`M${row}`] = { t: "n", v: 0, z: "0.##" };
+        worksheet[`N${row}`] = { t: "n", v: 0, f: `IF(OR(S${row}="",T${row}=""),"",ROUND(S${row}*T${row}*M${row}/100,4))`, z: "#,##0.000" };
+        worksheet[`O${row}`] = { t: "n", v: 0, f: `IF(OR(N${row}="",L${row}=""),"",ROUND(N${row}*L${row},0))`, z: "#,##0" };
+        worksheet[`U${row}`] = { t: "n", v: 0, f: `IF(OR(S${row}="",T${row}=""),"",ROUND(S${row}*T${row},4))`, z: "#,##0.000" };
+        worksheet[`V${row}`] = { t: "n", v: 0, f: `IF(OR(S${row}="",T${row}="",L${row}=""),"",ROUND(ROUND(S${row}*T${row},4)*L${row},0))`, z: "#,##0" };
+        worksheet[`L${row}`].z = "#,##0";
+        worksheet[`S${row}`].z = "#,##0.##";
+        worksheet[`T${row}`].z = "#,##0.000";
+    }
     worksheet["!cols"] = UPDATED_IMPORT_HEADERS.map((header) => ({
         wch: Math.min(Math.max(header.length + 2, header.includes("Tên") || header === "Địa chỉ" ? 28 : 14), 42),
     }));
     worksheet["!autofilter"] = { ref: `A1:V3` };
     const workbook = XLSX.utils.book_new();
+    workbook.Workbook = {
+        ...(workbook.Workbook || {}),
+        CalcPr: { calcMode: "auto", fullCalcOnLoad: "1", forceFullCalc: "1" },
+    };
     XLSX.utils.book_append_sheet(workbook, worksheet, "Hóa đơn GTGT");
     XLSX.writeFile(workbook, "mau-import-nhom-hoa-don-22-cot.xlsx");
 }

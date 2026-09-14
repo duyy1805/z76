@@ -15,7 +15,7 @@ PLP review project/
 *.local
 
 # Local test artifacts (Excel samples, temporary imports, etc.)
-local-artifacts/
+# local-artifacts/
 
 .env
 qlvb-501001-debed95641da.json

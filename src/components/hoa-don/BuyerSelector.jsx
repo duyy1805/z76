@@ -267,7 +267,7 @@ function OrganizationFields({ form, disabled, lookupLoading, canLookup, onLookup
                     onChange={(e) => updateSnapshot({ maDvcqhnsSnapshot: e.target.value })} sx={{ gridColumn: { md: "span 2" } }} />
             ) : (
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ gridColumn: { md: "span 2" } }}>
-                    <TextField fullWidth required disabled={disabled} label="Mã số thuế" value={form.maSoThueSnapshot || ""}
+                    <TextField fullWidth required={form.maLoaiHoaDon !== "XuatKhau"} disabled={disabled} label="Mã số thuế" value={form.maSoThueSnapshot || ""}
                         onChange={(e) => updateSnapshot({ maSoThueSnapshot: e.target.value })} />
                     <Button variant="outlined" startIcon={lookupLoading ? <CircularProgress size={18} /> : <PublicIcon />}
                         disabled={disabled || lookupLoading || !canLookup} onClick={onLookup} sx={{ minWidth: 150, whiteSpace: "nowrap" }}>

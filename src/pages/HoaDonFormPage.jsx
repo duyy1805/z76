@@ -143,9 +143,10 @@ export default function HoaDonFormPage() {
         const citizenId = String(form.soGiayToSnapshot || "").replace(/\s/g, "");
         const email = String(form.emailSnapshot || "").trim();
         const phone = String(form.dienThoaiSnapshot || "").replace(/[\s().-]/g, "");
-        if (isCompany && !withoutTaxCode && !taxCode) return "Nhập mã số thuế của tổ chức/doanh nghiệp.";
-        if (isCompany && !withoutTaxCode && !/^\d{10}(?:\d{3})?$/.test(taxCode)) return "Mã số thuế phải gồm 10 hoặc 13 chữ số.";
-        if (isCompany && withoutTaxCode && !budgetRelationCode) return "Nhập MĐVCQHNS của đơn vị.";
+        const identifierOptional = form.maLoaiHoaDon === "XuatKhau";
+        if (isCompany && !identifierOptional && !withoutTaxCode && !taxCode) return "Nhập mã số thuế của tổ chức/doanh nghiệp.";
+        if (isCompany && taxCode && !/^\d{10}(?:\d{3})?$/.test(taxCode)) return "Mã số thuế phải gồm 10 hoặc 13 chữ số.";
+        if (isCompany && !identifierOptional && withoutTaxCode && !budgetRelationCode) return "Nhập MĐVCQHNS của đơn vị.";
         if (isCompany && withoutTaxCode && taxCode) return "Đơn vị không có mã số thuế chỉ được nhập MĐVCQHNS.";
         if (isCompany && !withoutTaxCode && budgetRelationCode) return "Tổ chức/doanh nghiệp chỉ được nhập một trong hai mã: MST hoặc MĐVCQHNS.";
         if (!form.tenNguoiMuaSnapshot?.trim()) return isCompany ? "Nhập tên đơn vị mua hàng." : "Nhập họ tên người mua.";

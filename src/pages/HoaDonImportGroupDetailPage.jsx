@@ -82,7 +82,24 @@ function normalizeSearch(value) {
 
 function formatExcelPreviewCell(header, value) {
     if (value == null) return "";
-    return ["Ngày hóa đơn", "Thời hạn thanh toán"].includes(header) ? formatInvoiceDate(value) : value;
+    if (["Ngày hóa đơn", "Thời hạn thanh toán"].includes(header)) return formatInvoiceDate(value);
+
+    const number = Number(value);
+    if (!Number.isFinite(number)) return value;
+    if (header === "Số lượng") {
+        return number.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+    }
+    if (header === "Tỷ giá") return fmtMoney(number, 0);
+    if (header === "Thuế suất GTGT (%)") {
+        return number.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+    }
+    if (["Tiền thuế GTGT quy đổi", "Thành tiền quy đổi"].includes(header)) {
+        return fmtMoney(number, 0);
+    }
+    if (["Đơn giá", "Tiền thuế GTGT", "Thành tiền"].includes(header)) {
+        return fmtMoney(number, 3);
+    }
+    return value;
 }
 
 function writeUpdatedExcelFile(rows, groupCode) {
