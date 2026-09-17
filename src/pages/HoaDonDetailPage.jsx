@@ -36,7 +36,6 @@ import SectionCard from "../components/hoa-don/SectionCard";
 import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import {
-    canApproveInvoice,
     canEditInvoice,
     canProcessInvoiceExportInfo,
     currencyAmountScale,
@@ -121,16 +120,16 @@ function buildCurrencyOptions(currencies = [], selectedCurrency = "VND") {
 
 function initExportInfo(detail) {
     const lines = detail?.chiTiet || [];
-    const hasExportInfo = Boolean(detail?.hinhThucThanhToan);
+    const savedTaxCode = (line) => String(line?.MaThueSuatGTGT ?? line?.ThueSuatGTGT ?? "0");
     return {
         hinhThucThanhToan: detail?.hinhThucThanhToan || "Chuyển khoản",
         cheDoThue: detail?.cheDoThue || "MotThueSuat",
         maLoaiTien: detail?.maLoaiTien || "VND",
         tyGia: detail?.tyGia || 1,
-        thueSuatChung: hasExportInfo ? String(lines[0]?.MaThueSuatGTGT || lines[0]?.ThueSuatGTGT || "0") : "",
+        thueSuatChung: savedTaxCode(lines[0]),
         chiTiet: lines.map((line) => ({
             soDong: line.SoDong,
-            thueSuatGTGT: hasExportInfo ? String(line.MaThueSuatGTGT || line.ThueSuatGTGT || "0") : "",
+            thueSuatGTGT: savedTaxCode(line),
         })),
     };
 }
@@ -244,9 +243,7 @@ export default function HoaDonDetailPage() {
     const canEditExportInfo = canProcessInvoiceExportInfo(detail, auth);
     const canManageAttachments = canEditInvoice(detail, auth);
     const exportInfoComplete = isInvoiceExportInfoComplete(detail);
-    const approveDisabledReason = detail?.maTrangThai === "ChoXuLy_HoaDon" && canApproveInvoice(detail, auth) && !exportInfoComplete
-        ? "Cần lưu đủ hình thức thanh toán, chế độ thuế, thuế suất, loại tiền và tỷ giá trước khi duyệt."
-        : "";
+    const approveDisabledReason = savingExportInfo ? "Đang lưu thông tin xuất hóa đơn." : "";
     const showTaxPerLine = exportInfo?.cheDoThue === "NhieuThueSuat";
     const currencyOptions = useMemo(() => buildCurrencyOptions(currencies, exportInfo?.maLoaiTien), [currencies, exportInfo?.maLoaiTien]);
     const totalPaymentText = amountToVietnameseText(detail?.tongTienThanhToan, detail?.maLoaiTien || "VND");
@@ -259,14 +256,14 @@ export default function HoaDonDetailPage() {
         }));
     };
 
-    const saveExportInfo = async () => {
+    const buildExportInfoPayload = () => {
         if (!exportInfo?.hinhThucThanhToan) {
             setToast({ open: true, type: "warning", msg: "Chọn hình thức thanh toán." });
-            return;
+            return null;
         }
         if (!exportInfo?.maLoaiTien || Number(exportInfo?.tyGia || 0) <= 0) {
             setToast({ open: true, type: "warning", msg: "Nhập loại tiền và tỷ giá hợp lệ." });
-            return;
+            return null;
         }
         const chiTiet = (detail.chiTiet || []).map((line) => {
             const code = String(showTaxPerLine
@@ -276,23 +273,52 @@ export default function HoaDonDetailPage() {
         });
         if (chiTiet.some((line) => !VAT_RATE_OPTIONS.some((option) => option.value === line.maThueSuatGTGT))) {
             setToast({ open: true, type: "warning", msg: "Chọn thuế GTGT cho đầy đủ các dòng hàng." });
-            return;
+            return null;
         }
+
+        return {
+            ...exportInfo,
+            thueSuatChung: vatRateValue(exportInfo.thueSuatChung),
+            tyGia: exportInfo.maLoaiTien === "VND" ? 1 : Number(exportInfo.tyGia || 1),
+            chiTiet,
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+        };
+    };
+
+    const saveExportInfo = async () => {
+        const payload = buildExportInfoPayload();
+        if (!payload) return;
 
         setSavingExportInfo(true);
         try {
-            await hoaDonApi.updateThongTinXuatHoaDon(detail.id, {
-                ...exportInfo,
-                thueSuatChung: vatRateValue(exportInfo.thueSuatChung),
-                tyGia: exportInfo.maLoaiTien === "VND" ? 1 : Number(exportInfo.tyGia || 1),
-                chiTiet,
-                requesterUserId: user?.id,
-                requesterIdDonVi: user?.idDonVi,
-            });
+            await hoaDonApi.updateThongTinXuatHoaDon(detail.id, payload);
             setToast({ open: true, type: "success", msg: "Đã lưu thông tin xuất hóa đơn." });
             await load();
         } catch (error) {
             setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Lưu thông tin xuất hóa đơn thất bại." });
+        } finally {
+            setSavingExportInfo(false);
+        }
+    };
+
+    const approveInvoice = async () => {
+        if (detail?.maTrangThai !== "ChoXuLy_HoaDon") {
+            await runAction("Duyệt", () => hoaDonApi.approveHoaDon(detail.id, { hanhDong: "Duyet", user }));
+            return;
+        }
+
+        const payload = buildExportInfoPayload();
+        if (!payload) return;
+
+        setSavingExportInfo(true);
+        try {
+            await hoaDonApi.updateThongTinXuatHoaDon(detail.id, payload);
+            await hoaDonApi.approveHoaDon(detail.id, { hanhDong: "Duyet", user });
+            setToast({ open: true, type: "success", msg: "Lưu thông tin xuất và duyệt thành công." });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Duyệt hóa đơn thất bại." });
         } finally {
             setSavingExportInfo(false);
         }
@@ -385,7 +411,7 @@ export default function HoaDonDetailPage() {
                         auth={auth}
                         onEdit={() => navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/${detail.id}/edit`, detailReturnTo))}
                         onSubmit={() => runAction("Trình duyệt", () => hoaDonApi.submitHoaDon(detail.id, user))}
-                        onApprove={() => runAction("Duyệt", () => hoaDonApi.approveHoaDon(detail.id, { hanhDong: "Duyet", user }))}
+                        onApprove={approveInvoice}
                         onReturn={() => openReasonDialog("return")}
                         onReject={() => openReasonDialog("reject")}
                         onDelete={() => setConfirmDeleteOpen(true)}
