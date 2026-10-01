@@ -260,6 +260,8 @@ export default function PhieuSec({ mode = "VND" }) {
     const [qMa, setQMa] = useState("");
     const [qNoiDung, setQNoiDung] = useState("");
     const [qDonVi, setQDonVi] = useState(""); // text input cho đơn vị
+    const [qMaNganHang, setQMaNganHang] = useState("");
+    const [qTenNganHang, setQTenNganHang] = useState("");
     const [qNguoiTao, setQNguoiTao] = useState("");
     const [qDonViNguoiTao, setQDonViNguoiTao] = useState("");
     const [qFrom, setQFrom] = useState(getDefaultDateFrom);
@@ -278,6 +280,8 @@ export default function PhieuSec({ mode = "VND" }) {
     const [anchorMa, setAnchorMa] = useState(null);
     const [anchorNoiDung, setAnchorNoiDung] = useState(null);
     const [anchorDonVi, setAnchorDonVi] = useState(null);
+    const [anchorMaNganHang, setAnchorMaNganHang] = useState(null);
+    const [anchorTenNganHang, setAnchorTenNganHang] = useState(null);
     const [anchorNguoiTao, setAnchorNguoiTao] = useState(null);
     const [anchorDonViNguoiTao, setAnchorDonViNguoiTao] = useState(null);
     const [anchorLoaiChiPhi, setAnchorLoaiChiPhi] = useState(null);
@@ -654,6 +658,8 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasMa = qMa.trim() !== "";
         const hasNd = qNoiDung.trim() !== "";
         const hasDv = qDonVi.trim() !== "";
+        const hasMaNganHang = qMaNganHang.trim() !== "";
+        const hasTenNganHang = qTenNganHang.trim() !== "";
         const hasNguoiTao = qNguoiTao.trim() !== "";
         const hasDonViNguoiTao = qDonViNguoiTao.trim() !== "";
         const hasFrom = !!qFrom;
@@ -668,6 +674,8 @@ export default function PhieuSec({ mode = "VND" }) {
         const qMaNorm = stripVN(qMa.trim().toLowerCase());
         const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
         const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
+        const qMaNganHangNorm = stripVN(qMaNganHang.trim().toLowerCase());
+        const qTenNganHangNorm = stripVN(qTenNganHang.trim().toLowerCase());
         const qNguoiTaoNorm = stripVN(qNguoiTao.trim().toLowerCase());
         const qDonViNguoiTaoNorm = stripVN(qDonViNguoiTao.trim().toLowerCase());
         const qMobileNorm = stripVN(qMobile.trim().toLowerCase());
@@ -747,6 +755,14 @@ export default function PhieuSec({ mode = "VND" }) {
                 okDv = stripVN(searchableDonVi.toLowerCase()).includes(qDvNorm);
             }
 
+            const donVi = donvis.find((d) => d.id === r.donViId);
+            const maNganHang = r.maNganHangHuongThu || donVi?.maNganHang || "";
+            const tenNganHang = getTenNganHang(r) || "";
+            const okMaNganHang = !hasMaNganHang
+                || stripVN(String(maNganHang).toLowerCase()).includes(qMaNganHangNorm);
+            const okTenNganHang = !hasTenNganHang
+                || stripVN(String(tenNganHang).toLowerCase()).includes(qTenNganHangNorm);
+
             let okNguoiTao = true;
             if (hasNguoiTao) {
                 okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
@@ -801,7 +817,7 @@ export default function PhieuSec({ mode = "VND" }) {
                 okMobile = stripVN(String(mobileSearchText).toLowerCase()).includes(qMobileNorm);
             }
 
-            return okDate && okCompletedDate && okGdDate && okStatus && okMa && okNd && okDv && okNguoiTao && okDonViNguoiTao && okLoaiChiPhi && okSoTien && okMobile;
+            return okDate && okCompletedDate && okGdDate && okStatus && okMa && okNd && okDv && okMaNganHang && okTenNganHang && okNguoiTao && okDonViNguoiTao && okLoaiChiPhi && okSoTien && okMobile;
         });
 
         if (activeTab === "pending") return matchedRows;
@@ -817,7 +833,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qNguoiTao, qDonViNguoiTao, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qGdFrom, qGdTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qMaNganHang, qTenNganHang, qNguoiTao, qDonViNguoiTao, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qGdFrom, qGdTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
 
     const visibleAmountSummary = useMemo(() => {
         const summaryRows = filteredRows || [];
@@ -849,6 +865,8 @@ export default function PhieuSec({ mode = "VND" }) {
         if (key === "ma") setQMa("");
         if (key === "nd") setQNoiDung("");
         if (key === "dv") setQDonVi("");
+        if (key === "maNganHang") setQMaNganHang("");
+        if (key === "tenNganHang") setQTenNganHang("");
         if (key === "nguoiTao") setQNguoiTao("");
         if (key === "donViNguoiTao") setQDonViNguoiTao("");
         if (key === "soTien") {
@@ -1542,8 +1560,96 @@ export default function PhieuSec({ mode = "VND" }) {
                                             </TableCell>
 
                                             <TableCell sx={{ whiteSpace: "nowrap" }}>Số tài khoản</TableCell>
-                                            <TableCell sx={{ whiteSpace: "nowrap" }}>Mã ngân hàng</TableCell>
-                                            <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>Tên ngân hàng</TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Mã ngân hàng</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorMaNganHang(e.currentTarget)}
+                                                        aria-label="Lọc theo Mã ngân hàng"
+                                                        color={qMaNganHang ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+                                                <Popover
+                                                    open={Boolean(anchorMaNganHang)}
+                                                    anchorEl={anchorMaNganHang}
+                                                    onClose={() => setAnchorMaNganHang(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Mã ngân hàng"
+                                                            placeholder="Nhập mã ngân hàng…"
+                                                            value={qMaNganHang}
+                                                            onCommit={setQMaNganHang}
+                                                            autoFocus
+                                                            size="small"
+                                                        />
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Tìm không dấu, chứa chuỗi.
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {!!qMaNganHang && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("maNganHang")} size="small">
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorMaNganHang(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
+                                            <TableCell sx={{ whiteSpace: "nowrap", minWidth: 220 }}>
+                                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                                    <span>Tên ngân hàng</span>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => setAnchorTenNganHang(e.currentTarget)}
+                                                        aria-label="Lọc theo Tên ngân hàng"
+                                                        color={qTenNganHang ? "primary" : "default"}
+                                                    >
+                                                        <FilterListRoundedIcon fontSize="inherit" />
+                                                    </IconButton>
+                                                </Stack>
+                                                <Popover
+                                                    open={Boolean(anchorTenNganHang)}
+                                                    anchorEl={anchorTenNganHang}
+                                                    onClose={() => setAnchorTenNganHang(null)}
+                                                    anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                                                    transformOrigin={{ vertical: "top", horizontal: "left" }}
+                                                    PaperProps={{ sx: { p: 1.5, width: 300 } }}
+                                                >
+                                                    <Stack spacing={1}>
+                                                        <BufferedTextField
+                                                            label="Tên ngân hàng"
+                                                            placeholder="Nhập tên ngân hàng…"
+                                                            value={qTenNganHang}
+                                                            onCommit={setQTenNganHang}
+                                                            autoFocus
+                                                            size="small"
+                                                        />
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            Tìm không dấu, chứa chuỗi.
+                                                        </Typography>
+                                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                            {!!qTenNganHang && (
+                                                                <Button startIcon={<ClearIcon />} onClick={() => clearFilter("tenNganHang")} size="small">
+                                                                    Xoá
+                                                                </Button>
+                                                            )}
+                                                            <Button variant="contained" size="small" onClick={() => setAnchorTenNganHang(null)}>
+                                                                OK
+                                                            </Button>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Popover>
+                                            </TableCell>
                                             <TableCell sx={{ whiteSpace: "nowrap" }}>Chi nhánh ngân hàng</TableCell>
                                             <TableCell sx={{ whiteSpace: "nowrap" }}>
                                                 <Stack direction="row" spacing={0.5} alignItems="center">

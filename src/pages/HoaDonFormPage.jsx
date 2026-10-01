@@ -30,6 +30,7 @@ import {
     vatRateValue,
     invoiceToForm,
     normalizeInvoicePayload,
+    canEditInvoiceAllInfo,
 } from "../utils/hoa-don";
 import { invoiceReturnLabel, safeInvoiceReturnTo, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 
@@ -75,8 +76,10 @@ export default function HoaDonFormPage() {
     const isEdit = Boolean(id);
     const navigate = useNavigate();
     const location = useLocation();
-    const { user } = useAuth();
+    const auth = useAuth();
+    const { user } = auth;
     const [form, setForm] = useState(cloneDefaultForm);
+    const [editInvoice, setEditInvoice] = useState(null);
     const [currencies, setCurrencies] = useState([]);
     const [loading, setLoading] = useState(Boolean(id));
     const [saving, setSaving] = useState(false);
@@ -108,7 +111,10 @@ export default function HoaDonFormPage() {
         if (!id || !user?.id || !user?.idDonVi) return;
         setLoading(true);
         hoaDonApi.getHoaDon(id, { userId: user.id, idDonVi: user.idDonVi })
-            .then((detail) => setForm(invoiceToForm(detail)))
+            .then((detail) => {
+                setEditInvoice(detail);
+                setForm(invoiceToForm(detail));
+            })
             .catch((error) => setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không lấy được hồ sơ hóa đơn." }))
             .finally(() => setLoading(false));
     }, [id, user?.id, user?.idDonVi]);
@@ -124,6 +130,8 @@ export default function HoaDonFormPage() {
     }, [kyHieuSuggestion, isEdit]);
 
     const currencyOptions = useMemo(() => buildCurrencyOptions(currencies, form.maLoaiTien), [currencies, form.maLoaiTien]);
+    const canSaveEdit = !isEdit || canEditInvoiceAllInfo(editInvoice, auth);
+    const isProcessingEdit = isEdit && editInvoice?.maTrangThai === "ChoXuLy_HoaDon";
 
     const setField = (patch) => setForm((current) => ({ ...current, ...patch }));
     const setCurrency = (maLoaiTien) => {
@@ -185,6 +193,10 @@ export default function HoaDonFormPage() {
     };
 
     const save = async ({ submit = false } = {}) => {
+        if (!canSaveEdit) {
+            setToast({ open: true, type: "error", msg: "Bạn không có quyền sửa toàn bộ thông tin hóa đơn này." });
+            return;
+        }
         if (!isEdit && creationPolicy.isBlocked) {
             setToast({ open: true, type: "warning", msg: `Đã quá ${creationPolicy.cutoffTime}. Hệ thống đang khóa tạo hóa đơn mới.` });
             return;
@@ -206,7 +218,7 @@ export default function HoaDonFormPage() {
                 navigate(detailTarget(hoaDonId));
                 return;
             }
-            setToast({ open: true, type: "success", msg: "Đã lưu nháp hóa đơn." });
+            setToast({ open: true, type: "success", msg: isProcessingEdit ? "Đã cập nhật thông tin hóa đơn." : "Đã lưu nháp hóa đơn." });
             if (!isEdit && hoaDonId) navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/${hoaDonId}/edit`, returnTo), { replace: true });
         } catch (exception) {
             setToast({ open: true, type: "error", msg: exception?.response?.data?.message || "Lưu hóa đơn thất bại." });
@@ -225,14 +237,18 @@ export default function HoaDonFormPage() {
                 <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1.5}>
                     <Box>
                         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(returnTo)} sx={{ mb: 1 }}>{invoiceReturnLabel(returnTo)}</Button>
-                        <Typography variant="h5">{isEdit ? "Sửa nháp hóa đơn" : "Đăng ký hóa đơn điện tử"}</Typography>
+                        <Typography variant="h5">{isProcessingEdit ? "Sửa toàn bộ thông tin hóa đơn" : isEdit ? "Sửa nháp hóa đơn" : "Đăng ký hóa đơn điện tử"}</Typography>
                         <Typography color="text.secondary" sx={{ mt: 0.5 }}>Nhập đầy đủ dữ liệu bắt buộc để có thể xuất file import hóa đơn.</Typography>
                     </Box>
                     <Stack direction="row" spacing={1}>
-                        <Button startIcon={<SaveIcon />} variant="outlined" disabled={saving || (!isEdit && creationPolicy.isBlocked)} onClick={() => save()}>Lưu nháp</Button>
-                        <Button startIcon={<SendIcon />} variant="contained" disabled={saving || (!isEdit && creationPolicy.isBlocked)} onClick={() => save({ submit: true })}>Lưu & trình</Button>
+                        <Button startIcon={<SaveIcon />} variant="outlined" disabled={saving || !canSaveEdit || (!isEdit && creationPolicy.isBlocked)} onClick={() => save()}>{isProcessingEdit ? "Lưu thay đổi" : "Lưu nháp"}</Button>
+                        {!isProcessingEdit && <Button startIcon={<SendIcon />} variant="contained" disabled={saving || !canSaveEdit || (!isEdit && creationPolicy.isBlocked)} onClick={() => save({ submit: true })}>Lưu & trình</Button>}
                     </Stack>
                 </Stack>
+
+                {isEdit && editInvoice && !canSaveEdit && (
+                    <Alert severity="error">Bạn không có quyền sửa toàn bộ thông tin hóa đơn này.</Alert>
+                )}
 
                 {!isEdit && creationPolicy.isBlocked && (
                     <Alert severity="warning">Đã quá {creationPolicy.cutoffTime}. Admin đang bật chế độ khóa tạo hóa đơn mới.</Alert>

@@ -38,6 +38,7 @@ import { useAuth } from "../store/useAuth";
 import {
     canEditInvoice,
     canProcessInvoiceExportInfo,
+    canUploadInvoiceAttachment,
     currencyAmountScale,
     currencyUnitPriceScale,
     fmtMoney,
@@ -241,7 +242,8 @@ export default function HoaDonDetailPage() {
     };
 
     const canEditExportInfo = canProcessInvoiceExportInfo(detail, auth);
-    const canManageAttachments = canEditInvoice(detail, auth);
+    const canUploadAttachments = canUploadInvoiceAttachment(detail, auth);
+    const canDeleteAttachments = canEditInvoice(detail, auth);
     const exportInfoComplete = isInvoiceExportInfoComplete(detail);
     const approveDisabledReason = savingExportInfo ? "Đang lưu thông tin xuất hóa đơn." : "";
     const showTaxPerLine = exportInfo?.cheDoThue === "NhieuThueSuat";
@@ -447,6 +449,10 @@ export default function HoaDonDetailPage() {
                     </SectionCard>
                 </Box>
 
+                <SectionCard title="Ghi chú nội bộ">
+                    <DetailField label="Nội dung ghi chú" value={detail.ghiChu} />
+                </SectionCard>
+
                 <SectionCard
                     title="Thông tin xuất hóa đơn"
                     subtitle={exportInfoComplete ? "Thông tin thuế, thanh toán và quy đổi đã được lưu để xuất file import." : "Người phụ trách hóa đơn cần chốt thông tin này trước khi duyệt sẵn sàng xuất."}
@@ -594,10 +600,10 @@ export default function HoaDonDetailPage() {
 
                 <SectionCard
                     title="Tài liệu đính kèm"
-                    subtitle={canManageAttachments
+                    subtitle={canUploadAttachments
                         ? "Tối đa 10 file/lần, 30 MB/file; hỗ trợ PDF, Word, Excel và ảnh JPG/PNG."
                         : "Tài liệu thuộc hồ sơ hóa đơn."}
-                    action={canManageAttachments && (
+                    action={canUploadAttachments && (
                         <Button component="label" variant="outlined" startIcon={<AttachFileIcon />} disabled={uploadingAttachments}>
                             Chọn tài liệu
                             <input
@@ -613,7 +619,7 @@ export default function HoaDonDetailPage() {
                         </Button>
                     )}
                 >
-                    {canManageAttachments && attachmentFiles.length > 0 && (
+                    {canUploadAttachments && attachmentFiles.length > 0 && (
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} sx={{ mb: 2 }}>
                             <Typography variant="body2" sx={{ flex: 1 }}>
                                 Đã chọn {attachmentFiles.length} tài liệu: {attachmentFiles.map((file) => file.name).join(", ")}
@@ -652,7 +658,7 @@ export default function HoaDonDetailPage() {
                                                     >
                                                         <OpenInNewIcon fontSize="small" />
                                                     </IconButton>
-                                                    {canManageAttachments && (
+                                                    {canDeleteAttachments && (
                                                         <IconButton
                                                             size="small"
                                                             color="error"

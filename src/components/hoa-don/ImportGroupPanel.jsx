@@ -357,7 +357,7 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                                 </Button>
                             )}
                         >
-                            Nhận file .xlsx mẫu 22 cột có “Thời hạn thanh toán” hoặc mẫu 21 cột cũ. File cũ vẫn tạo được nháp nhưng phải bổ sung thời hạn trước khi trình. Hóa đơn import mặc định là hóa đơn xuất khẩu, loại hình doanh thu xuất khẩu và thuế GTGT 0%.
+                            Nhận file .xlsx với các cột theo tên trong mẫu; không bắt buộc đủ 22 cột. Tối thiểu cần “Số thứ tự hóa đơn (*)” và “Tên hàng hóa/dịch vụ (*)”. Các thông tin còn thiếu được bổ sung sau khi lưu nháp. Hóa đơn import mặc định là hóa đơn xuất khẩu, loại hình doanh thu xuất khẩu và thuế GTGT 0%.
                         </Alert>
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
                             <Button component="label" variant="outlined" startIcon={<FileUploadIcon />}>

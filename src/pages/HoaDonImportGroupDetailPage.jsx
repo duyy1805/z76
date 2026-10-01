@@ -5,6 +5,7 @@ import {
     Alert,
     Box,
     Button,
+    Checkbox,
     Chip,
     CircularProgress,
     Dialog,
@@ -32,13 +33,16 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import PreviewIcon from "@mui/icons-material/Preview";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
 import StatusChip from "../components/StatusChip";
-import { hoaDonApi } from "../lib/api";
+import { api, hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import {
     canApproveInvoice,
     canConfirmInvoiceExported,
-    canEditInvoice,
+    canEditInvoiceAllInfo,
+    canProcessInvoiceExportInfo,
+    canViewExportedInvoice,
     currencyAmountScale,
     fmtMoney,
     formatInvoiceDate,
@@ -47,6 +51,9 @@ import {
     INVOICE_TYPE_LABELS,
     INVOICE_STATUS_OPTIONS,
     issuedInvoiceSymbol,
+    TAX_MODE_LABELS,
+    VAT_RATE_OPTIONS,
+    vatRateValue,
 } from "../utils/hoa-don";
 import { currentInvoicePath, safeInvoiceReturnTo, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import { buildUpdatedImportRows, UPDATED_IMPORT_HEADERS } from "../utils/hoa-don-excel";
@@ -112,6 +119,107 @@ function writeUpdatedExcelFile(rows, groupCode) {
     XLSX.writeFile(workbook, `${safeExcelFileName(groupCode)}-da-cap-nhat.xlsx`);
 }
 
+function initialPreviewInfo(detail) {
+    const taxCode = (line) => String(line?.MaThueSuatGTGT ?? line?.ThueSuatGTGT ?? "0");
+    return {
+        hinhThucThanhToan: detail?.hinhThucThanhToan || "Chuyển khoản",
+        cheDoThue: detail?.cheDoThue || "MotThueSuat",
+        maLoaiTien: detail?.maLoaiTien || "VND",
+        tyGia: detail?.maLoaiTien === "VND" ? 1 : Number(detail?.tyGia || 1),
+        thueSuatChung: taxCode(detail?.chiTiet?.[0]),
+        chiTiet: (detail?.chiTiet || []).map((line) => ({ soDong: line.SoDong, thueSuatGTGT: taxCode(line) })),
+    };
+}
+
+function previewDetailsWithEdits(details, infoById) {
+    return details.map((detail) => {
+        const info = infoById[detail.id];
+        if (!info) return detail;
+        const tyGia = info.maLoaiTien === "VND" ? 1 : Number(info.tyGia || 0);
+        const lines = (detail.chiTiet || []).map((line) => {
+            const code = String(info.cheDoThue === "NhieuThueSuat"
+                ? info.chiTiet.find((item) => Number(item.soDong) === Number(line.SoDong))?.thueSuatGTGT ?? ""
+                : info.thueSuatChung ?? "");
+            const rate = vatRateValue(code);
+            const tax = Number(line.ThanhTien || 0) * rate / 100;
+            return {
+                ...line,
+                MaThueSuatGTGT: code,
+                ThueSuatGTGT: rate,
+                TienThue: tax,
+                TienThueQuyDoi: tax * tyGia,
+                ThanhTienQuyDoi: Number(line.ThanhTien || 0) * tyGia,
+            };
+        });
+        return {
+            ...detail,
+            ...info,
+            tyGia,
+            chiTiet: lines,
+            tongTienThue: lines.reduce((sum, line) => sum + Number(line.TienThue || 0), 0),
+            tongTienThueQuyDoi: lines.reduce((sum, line) => sum + Number(line.TienThueQuyDoi || 0), 0),
+        };
+    });
+}
+
+function EditableExcelPreviewTable({ details, auth, infoById, selectedIds, setSelectedIds, setField, setLineTax, currencies }) {
+    const toggleInvoice = (invoiceId) => setSelectedIds((current) => current.includes(invoiceId)
+        ? current.filter((item) => item !== invoiceId)
+        : [...current, invoiceId]);
+
+    return (
+        <Table stickyHeader size="small" sx={{ minWidth: 3450 }}>
+            <TableHead>
+                <TableRow>
+                    <TableCell padding="checkbox" sx={{ position: "sticky", left: 0, zIndex: 5, bgcolor: "background.paper" }} />
+                    {UPDATED_IMPORT_HEADERS.map((header) => (
+                        <TableCell key={header} sx={{ minWidth: header.includes("Tên") || header === "Địa chỉ" ? 240 : 135, whiteSpace: "nowrap", fontWeight: 750 }}>
+                            {header}
+                        </TableCell>
+                    ))}
+                </TableRow>
+            </TableHead>
+            <TableBody>
+                {details.flatMap((detail) => {
+                    const rows = buildUpdatedImportRows([detail]);
+                    if (rows[0]) rows[0][UPDATED_IMPORT_HEADERS[0]] = detail.soThuTuTrongNhom || rows[0][UPDATED_IMPORT_HEADERS[0]];
+                    const editable = canProcessInvoiceExportInfo(detail, auth);
+                    const selected = selectedIds.includes(detail.id);
+                    const info = infoById[detail.id] || {};
+                    return (detail.chiTiet || []).map((line, lineIndex) => {
+                        const row = rows[lineIndex] || {};
+                        const firstLine = lineIndex === 0;
+                        return (
+                            <TableRow key={`${detail.id}-${line.SoDong ?? lineIndex}`} hover selected={selected}>
+                                <TableCell padding="checkbox" sx={{ position: "sticky", left: 0, zIndex: 2, bgcolor: selected ? "action.selected" : "background.paper" }}>
+                                    {firstLine && <Checkbox size="small" checked={selected} disabled={!editable} onChange={() => toggleInvoice(detail.id)} />}
+                                </TableCell>
+                                {UPDATED_IMPORT_HEADERS.map((header) => {
+                                    const cellSx = { whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" };
+                                    const editableCell = editable && selected && ["Hình thức thanh toán", "Loại tiền", "Tỷ giá", "Thuế suất GTGT (%)"].includes(header);
+                                    if (editableCell) cellSx.bgcolor = "rgba(25, 118, 210, 0.08)";
+                                    let content = formatExcelPreviewCell(header, row[header]);
+                                    if (editable && selected && firstLine && header === "Hình thức thanh toán") {
+                                        content = <TextField select size="small" value={info.hinhThucThanhToan || ""} onChange={(event) => setField(detail.id, { hinhThucThanhToan: event.target.value })} sx={{ minWidth: 145 }}><MenuItem value="Chuyển khoản">Chuyển khoản</MenuItem><MenuItem value="Tiền mặt">Tiền mặt</MenuItem></TextField>;
+                                    } else if (editable && selected && firstLine && header === "Loại tiền") {
+                                        content = <TextField select size="small" value={info.maLoaiTien || "VND"} onChange={(event) => setField(detail.id, { maLoaiTien: event.target.value, tyGia: event.target.value === "VND" ? 1 : info.tyGia })} sx={{ minWidth: 125 }}><MenuItem value="VND">VND</MenuItem>{currencies.filter((item) => item.MaLoaiTien !== "VND").map((item) => <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>{item.MaLoaiTien}</MenuItem>)}</TextField>;
+                                    } else if (editable && selected && firstLine && header === "Tỷ giá") {
+                                        content = <Stack direction="row" spacing={0.5}><TextField size="small" type="number" value={info.maLoaiTien === "VND" ? 1 : info.tyGia} disabled={info.maLoaiTien === "VND"} onChange={(event) => setField(detail.id, { tyGia: event.target.value })} sx={{ minWidth: 115 }} /><TextField select size="small" value={info.cheDoThue || "MotThueSuat"} onChange={(event) => setField(detail.id, { cheDoThue: event.target.value })} sx={{ minWidth: 145 }}>{Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></Stack>;
+                                    } else if (editable && selected && header === "Thuế suất GTGT (%)") {
+                                        const taxValue = info.cheDoThue === "NhieuThueSuat" ? info.chiTiet?.find((item) => Number(item.soDong) === Number(line.SoDong))?.thueSuatGTGT ?? "" : info.thueSuatChung ?? "";
+                                        content = <TextField select size="small" value={taxValue} onChange={(event) => info.cheDoThue === "NhieuThueSuat" ? setLineTax(detail.id, line.SoDong, event.target.value) : setField(detail.id, { thueSuatChung: event.target.value })} sx={{ minWidth: 95 }}>{VAT_RATE_OPTIONS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}</TextField>;
+                                    }
+                                    return <TableCell key={header} sx={cellSx} title={row[header] == null ? "" : String(row[header])}>{content}</TableCell>;
+                                })}
+                            </TableRow>
+                        );
+                    });
+                })}
+            </TableBody>
+        </Table>
+    );
+}
+
 export default function HoaDonImportGroupDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -126,12 +234,21 @@ export default function HoaDonImportGroupDetailPage() {
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
     const [deletingGroup, setDeletingGroup] = useState(false);
     const [exportingUpdated, setExportingUpdated] = useState(false);
+    const [selectedIds, setSelectedIds] = useState([]);
     const [previewingUpdated, setPreviewingUpdated] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
-    const [previewRows, setPreviewRows] = useState([]);
+    const [previewDetails, setPreviewDetails] = useState([]);
+    const [previewInfo, setPreviewInfo] = useState({});
+    const [previewSelectedIds, setPreviewSelectedIds] = useState([]);
+    const [previewResults, setPreviewResults] = useState(null);
+    const [savingPreview, setSavingPreview] = useState(false);
+    const [currencies, setCurrencies] = useState([]);
     const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const [confirmExportInfo, setConfirmExportInfo] = useState({});
     const [confirmingExported, setConfirmingExported] = useState(false);
+    const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+    const [returnReason, setReturnReason] = useState("");
+    const [returningInvoices, setReturningInvoices] = useState(false);
     const [tableFilters, setTableFilters] = useState({ stt: "", code: "", type: "", buyer: "", buyerContact: "", dateFrom: "", dateTo: "", amountFrom: "", amountTo: "", status: "", completion: "" });
     const setTableFilter = (patch) => setTableFilters((current) => ({ ...current, ...patch }));
     const listReturnTo = safeInvoiceReturnTo(
@@ -156,6 +273,10 @@ export default function HoaDonImportGroupDetailPage() {
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        api.listLoaiTien({ tontai: 1 }).then((rows) => setCurrencies(rows || [])).catch(() => setCurrencies([]));
+    }, []);
 
     useEffect(() => {
         if (!location.state?.toast) return;
@@ -186,7 +307,73 @@ export default function HoaDonImportGroupDetailPage() {
     }, [auth, data?.group?.nguoiTaoId, invoices, user?.id]);
     const canApproveGroup = useMemo(() => invoices.some((invoice) => canApproveInvoice(invoice, auth)), [auth, invoices]);
     const exportableInvoices = useMemo(() => invoices.filter((invoice) => canConfirmInvoiceExported(invoice, auth)), [auth, invoices]);
+    const editablePreviewInvoices = useMemo(() => invoices.filter((invoice) => canProcessInvoiceExportInfo(invoice, auth)), [auth, invoices]);
+    const previewableInvoices = useMemo(() => invoices.filter((invoice) => canProcessInvoiceExportInfo(invoice, auth) || canConfirmInvoiceExported(invoice, auth) || canViewExportedInvoice(invoice, auth)), [auth, invoices]);
+    const selectedInvoices = exportableInvoices.filter((invoice) => selectedIds.includes(invoice.id));
+    const selectedReturnableInvoices = editablePreviewInvoices.filter((invoice) => selectedIds.includes(invoice.id));
+    const selectableInvoices = useMemo(() => invoices.filter((invoice) => canProcessInvoiceExportInfo(invoice, auth) || canConfirmInvoiceExported(invoice, auth)), [auth, invoices]);
+    const filteredSelectableIds = filteredInvoices.filter((invoice) => canProcessInvoiceExportInfo(invoice, auth) || canConfirmInvoiceExported(invoice, auth)).map((invoice) => invoice.id);
+    const selectedFilteredCount = filteredSelectableIds.filter((invoiceId) => selectedIds.includes(invoiceId)).length;
+    const allFilteredSelected = filteredSelectableIds.length > 0 && selectedFilteredCount === filteredSelectableIds.length;
+    const someFilteredSelected = selectedFilteredCount > 0 && !allFilteredSelected;
     const canDeleteGroup = hasInvoicePermission(auth, "HD_Admin");
+
+    useEffect(() => {
+        const eligibleIds = new Set(selectableInvoices.map((invoice) => invoice.id));
+        setSelectedIds((current) => {
+            const next = current.filter((invoiceId) => eligibleIds.has(invoiceId));
+            return next.length === current.length ? current : next;
+        });
+    }, [selectableInvoices]);
+
+    const toggleSelectedInvoice = (invoiceId) => {
+        setSelectedIds((current) => current.includes(invoiceId)
+            ? current.filter((idToKeep) => idToKeep !== invoiceId)
+            : [...current, invoiceId]);
+    };
+
+    const toggleFilteredInvoices = () => {
+        setSelectedIds((current) => allFilteredSelected
+            ? current.filter((invoiceId) => !filteredSelectableIds.includes(invoiceId))
+            : [...new Set([...current, ...filteredSelectableIds])]);
+    };
+
+    const returnSelectedInvoices = async () => {
+        const ghiChu = returnReason.trim();
+        if (!ghiChu) {
+            setToast({ open: true, type: "warning", msg: "Nhập lý do trả lại các hóa đơn đã chọn." });
+            return;
+        }
+        setReturningInvoices(true);
+        setResult(null);
+        try {
+            const settled = await Promise.allSettled(selectedReturnableInvoices.map((invoice) => hoaDonApi.approveHoaDon(invoice.id, {
+                hanhDong: "TraLai",
+                user,
+                ghiChu,
+            })));
+            const processed = [];
+            const skipped = [];
+            selectedReturnableInvoices.forEach((invoice, index) => {
+                const item = settled[index];
+                if (item.status === "fulfilled") processed.push({ hoaDonId: invoice.id, maDangKy: invoice.maDangKy });
+                else skipped.push({ hoaDonId: invoice.id, maDangKy: invoice.maDangKy, reason: item.reason?.response?.data?.message || item.reason?.message || "Trả lại thất bại." });
+            });
+            const processedIds = new Set(processed.map((item) => item.hoaDonId));
+            setSelectedIds((current) => current.filter((invoiceId) => !processedIds.has(invoiceId)));
+            setResult({ processed, skipped });
+            setReturnDialogOpen(false);
+            setReturnReason("");
+            setToast({
+                open: true,
+                type: skipped.length ? "warning" : "success",
+                msg: `Đã trả lại ${processed.length} hóa đơn; ${skipped.length} hóa đơn chưa xử lý được.`,
+            });
+            await load();
+        } finally {
+            setReturningInvoices(false);
+        }
+    };
 
     const runBulk = async (action) => {
         setRunning(true);
@@ -210,7 +397,8 @@ export default function HoaDonImportGroupDetailPage() {
     };
 
     const loadUpdatedExcelRows = async () => {
-        const details = await mapWithConcurrency(invoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
+        if (!selectedInvoices.length) throw new Error("Chọn ít nhất một hóa đơn Sẵn sàng xuất.");
+        const details = await mapWithConcurrency(selectedInvoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
                 userId: user.id,
                 idDonVi: user.idDonVi,
         }));
@@ -220,7 +408,7 @@ export default function HoaDonImportGroupDetailPage() {
     };
 
     const downloadUpdatedExcel = async () => {
-        if (!invoices.length) return;
+        if (!selectedInvoices.length) return;
         setExportingUpdated(true);
         try {
             const { details, rows } = await loadUpdatedExcelRows();
@@ -233,12 +421,22 @@ export default function HoaDonImportGroupDetailPage() {
         }
     };
 
+    const previewDisplayDetails = useMemo(() => previewDetailsWithEdits(previewDetails, previewInfo), [previewDetails, previewInfo]);
+    const previewRows = useMemo(() => buildUpdatedImportRows(previewDisplayDetails), [previewDisplayDetails]);
+
     const openUpdatedExcelPreview = async () => {
-        if (!invoices.length) return;
+        if (!previewableInvoices.length) return;
         setPreviewingUpdated(true);
         try {
-            const { rows } = await loadUpdatedExcelRows();
-            setPreviewRows(rows);
+            const details = await mapWithConcurrency(previewableInvoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
+                userId: user.id,
+                idDonVi: user.idDonVi,
+            }));
+            const editableIds = details.filter((detail) => canProcessInvoiceExportInfo(detail, auth)).map((detail) => detail.id);
+            setPreviewDetails(details);
+            setPreviewInfo(Object.fromEntries(details.map((detail) => [detail.id, initialPreviewInfo(detail)])));
+            setPreviewSelectedIds(editableIds);
+            setPreviewResults(null);
             setPreviewOpen(true);
         } catch (error) {
             setToast({ open: true, type: "error", msg: error?.response?.data?.message || error?.message || "Không thể xem trước file Excel." });
@@ -248,13 +446,72 @@ export default function HoaDonImportGroupDetailPage() {
     };
 
     const downloadPreviewedExcel = () => {
-        writeUpdatedExcelFile(previewRows, data?.group?.maNhom);
+        const readyDetails = previewDisplayDetails.filter((detail) => detail.maTrangThai === "SanSangXuat");
+        writeUpdatedExcelFile(buildUpdatedImportRows(readyDetails), data?.group?.maNhom);
         setToast({ open: true, type: "success", msg: "Đã tạo file Excel theo nội dung xem trước." });
+    };
+
+    const setPreviewField = (invoiceId, patch) => setPreviewInfo((current) => {
+        if (Object.prototype.hasOwnProperty.call(patch, "tyGia")) {
+            const selectedSet = new Set(previewSelectedIds.map(Number));
+            return Object.fromEntries(Object.entries(current).map(([id, info]) => [
+                id,
+                selectedSet.has(Number(id)) && info.maLoaiTien !== "VND"
+                    ? { ...info, tyGia: patch.tyGia }
+                    : info,
+            ]));
+        }
+        return {
+            ...current,
+            [invoiceId]: { ...current[invoiceId], ...patch },
+        };
+    });
+
+    const setPreviewLineTax = (invoiceId, soDong, value) => setPreviewInfo((current) => ({
+        ...current,
+        [invoiceId]: {
+            ...current[invoiceId],
+            chiTiet: current[invoiceId].chiTiet.map((line) => Number(line.soDong) === Number(soDong) ? { ...line, thueSuatGTGT: value } : line),
+        },
+    }));
+
+    const savePreview = async (action) => {
+        const selected = previewDetails.filter((detail) => previewSelectedIds.includes(detail.id) && canProcessInvoiceExportInfo(detail, auth));
+        if (!selected.length) {
+            setToast({ open: true, type: "warning", msg: "Chọn ít nhất một hóa đơn đang chờ phụ trách." });
+            return;
+        }
+        setSavingPreview(true);
+        setPreviewResults(null);
+        try {
+            const response = await hoaDonApi.updateNhomImportExportInfo(id, {
+                action,
+                items: selected.map((detail) => ({ hoaDonId: detail.id, ...previewInfo[detail.id] })),
+            }, user);
+            setPreviewResults(response);
+            setToast({
+                open: true,
+                type: response.skipped?.length ? "warning" : "success",
+                msg: `Đã xử lý ${response.processed?.length || 0} hóa đơn; bỏ qua ${response.skipped?.length || 0} hóa đơn.`,
+            });
+            const succeededIds = new Set((response.processed || []).map((item) => Number(item.hoaDonId || item.id)));
+            setPreviewSelectedIds((current) => current.filter((invoiceId) => !succeededIds.has(Number(invoiceId))));
+            setPreviewDetails((current) => current.map((detail) => {
+                if (!succeededIds.has(Number(detail.id))) return detail;
+                const edited = previewDetailsWithEdits([detail], previewInfo)[0];
+                return action === "save_and_approve" ? { ...edited, maTrangThai: "SanSangXuat" } : edited;
+            }));
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không thể cập nhật thông tin xuất hóa đơn." });
+        } finally {
+            setSavingPreview(false);
+        }
     };
 
     const openConfirmExportDialog = () => {
         const today = todayDateInputValue();
-        setConfirmExportInfo(Object.fromEntries(exportableInvoices.map((invoice) => [
+        setConfirmExportInfo(Object.fromEntries(selectedInvoices.map((invoice) => [
             invoice.id,
             {
                 soHoaDon: invoice.soHoaDon || "",
@@ -273,20 +530,19 @@ export default function HoaDonImportGroupDetailPage() {
     };
 
     const confirmGroupExported = async () => {
-        const missingInfo = exportableInvoices.some((invoice) => {
+        const missingInfo = selectedInvoices.some((invoice) => {
             const info = confirmExportInfo[invoice.id] || {};
-            return !String(info.soHoaDon || "").trim() ||
-                !String(info.kyHieuHoaDon || "").trim() ||
+            return !String(info.kyHieuHoaDon || "").trim() ||
                 !String(info.ngayPhatHanh || "").trim();
         });
-        if (!exportableInvoices.length || missingInfo) {
-            setToast({ open: true, type: "warning", msg: "Nhập đủ số hóa đơn, ký hiệu và ngày phát hành cho các hóa đơn sẵn sàng xuất." });
+        if (!selectedInvoices.length || missingInfo) {
+            setToast({ open: true, type: "warning", msg: "Nhập đủ ký hiệu và ngày phát hành cho các hóa đơn đã chọn." });
             return;
         }
 
         setConfirmingExported(true);
         try {
-            const results = await Promise.allSettled(exportableInvoices.map((invoice) => {
+            const results = await Promise.allSettled(selectedInvoices.map((invoice) => {
                 const info = confirmExportInfo[invoice.id];
                 return hoaDonApi.confirmHoaDonExported(invoice.id, {
                     soHoaDon: String(info.soHoaDon).trim(),
@@ -296,6 +552,8 @@ export default function HoaDonImportGroupDetailPage() {
             }));
             const succeeded = results.filter((item) => item.status === "fulfilled").length;
             const failed = results.length - succeeded;
+            const succeededIds = new Set(selectedInvoices.filter((_, index) => results[index].status === "fulfilled").map((invoice) => invoice.id));
+            setSelectedIds((current) => current.filter((invoiceId) => !succeededIds.has(invoiceId)));
             setConfirmExportOpen(false);
             setConfirmExportInfo({});
             setToast({
@@ -349,16 +607,19 @@ export default function HoaDonImportGroupDetailPage() {
                 </Box>
                 <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent={{ md: "flex-end" }}>
                     <Button size="small" startIcon={<DownloadIcon />} variant="outlined" onClick={() => { window.location.href = hoaDonApi.getNhomImportFileUrl(id, user); }}>Tải file gốc</Button>
-                    <Button size="small" startIcon={<PreviewIcon />} color="secondary" variant="outlined" disabled={!invoices.length || previewingUpdated} onClick={openUpdatedExcelPreview}>
-                        {previewingUpdated ? "Đang tải dữ liệu..." : "Xem trước Excel"}
+                    <Button size="small" startIcon={<PreviewIcon />} color="secondary" variant="outlined" disabled={!previewableInvoices.length || previewingUpdated} onClick={openUpdatedExcelPreview}>
+                        {previewingUpdated ? "Đang tải dữ liệu..." : `Xem & cập nhật (${previewableInvoices.length})`}
                     </Button>
-                    <Button size="small" startIcon={<DownloadIcon />} color="secondary" variant="contained" disabled={!invoices.length || exportingUpdated} onClick={downloadUpdatedExcel}>
-                        {exportingUpdated ? "Đang tạo Excel..." : "Tải Excel đã cập nhật"}
+                    <Button size="small" startIcon={<DownloadIcon />} color="secondary" variant="contained" disabled={!selectedInvoices.length || exportingUpdated} onClick={downloadUpdatedExcel}>
+                        {exportingUpdated ? "Đang tạo Excel..." : `Tải Excel đã cập nhật (${selectedInvoices.length})`}
                     </Button>
                     <Button size="small" startIcon={<SendIcon />} variant="contained" disabled={!canSubmitGroup || running} onClick={() => runBulk("submit")}>Trình phần hợp lệ</Button>
+                    <Button size="small" startIcon={<KeyboardReturnIcon />} color="warning" variant="outlined" disabled={!selectedReturnableInvoices.length || running || returningInvoices} onClick={() => setReturnDialogOpen(true)}>
+                        Trả lại đã chọn ({selectedReturnableInvoices.length})
+                    </Button>
                     <Button size="small" startIcon={<CheckCircleIcon />} color="success" variant="contained" disabled={!canApproveGroup || running} onClick={() => runBulk("approve")}>Duyệt phần hợp lệ</Button>
-                    <Button size="small" startIcon={<CheckCircleIcon />} color="success" variant="contained" disabled={!exportableInvoices.length || running || confirmingExported} onClick={openConfirmExportDialog}>
-                        Xác nhận đã xuất ({exportableInvoices.length})
+                    <Button size="small" startIcon={<CheckCircleIcon />} color="success" variant="contained" disabled={!selectedInvoices.length || running || confirmingExported} onClick={openConfirmExportDialog}>
+                        Xác nhận đã xuất ({selectedInvoices.length})
                     </Button>
                     {canDeleteGroup && (
                         <Button size="small" startIcon={<DeleteOutlineIcon />} color="error" variant="outlined" disabled={running} onClick={() => setConfirmDeleteOpen(true)}>
@@ -372,7 +633,7 @@ export default function HoaDonImportGroupDetailPage() {
                 <Alert severity={result.skipped?.length ? "warning" : "success"} onClose={() => setResult(null)}>
                     <Typography sx={{ fontWeight: 700 }}>Đã xử lý {result.processed?.length || 0}, bỏ qua {result.skipped?.length || 0} hóa đơn.</Typography>
                     {(result.skipped || []).slice(0, 10).map((item) => (
-                        <Typography key={item.hoaDonId} variant="body2">Hóa đơn #{item.hoaDonId}: {item.reason}</Typography>
+                        <Typography key={item.hoaDonId} variant="body2">Hóa đơn {item.maDangKy || `#${item.hoaDonId}`}: {item.reason}</Typography>
                     ))}
                 </Alert>
             )}
@@ -381,6 +642,9 @@ export default function HoaDonImportGroupDetailPage() {
                 <Table size="small" sx={{ minWidth: 1240 }}>
                     <TableHead>
                         <TableRow>
+                            <TableCell padding="none" align="center" sx={{ width: 58, minWidth: 58 }}>
+                                <Checkbox size="small" sx={{ p: 0.75 }} checked={allFilteredSelected} indeterminate={someFilteredSelected} disabled={!filteredSelectableIds.length} onChange={toggleFilteredInvoices} inputProps={{ "aria-label": "Chọn tất cả hóa đơn có thể xử lý đang hiển thị" }} />
+                            </TableCell>
                             <TableCell align="center" sx={{ width: 90 }} title="Số thứ tự hóa đơn (*)"><TableHeaderFilter label="STT" align="center" active={Boolean(tableFilters.stt)} onClear={() => setTableFilter({ stt: "" })}><TextField autoFocus size="small" label="Số thứ tự hóa đơn" value={tableFilters.stt} onChange={(event) => setTableFilter({ stt: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Mã đăng ký" active={Boolean(tableFilters.code)} onClear={() => setTableFilter({ code: "" })}><TextField autoFocus size="small" label="Mã đăng ký" value={tableFilters.code} onChange={(event) => setTableFilter({ code: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Loại hóa đơn" active={Boolean(tableFilters.type)} onClear={() => setTableFilter({ type: "" })}><TextField select size="small" label="Loại hóa đơn" value={tableFilters.type} onChange={(event) => setTableFilter({ type: event.target.value })}><MenuItem value="">Tất cả</MenuItem>{Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField></TableHeaderFilter></TableCell>
@@ -396,6 +660,9 @@ export default function HoaDonImportGroupDetailPage() {
                     <TableBody>
                         {filteredInvoices.map((invoice) => (
                             <TableRow key={invoice.id} hover>
+                                <TableCell padding="none" align="center" sx={{ width: 58, minWidth: 58 }}>
+                                    <Checkbox size="small" sx={{ p: 0.75 }} checked={selectedIds.includes(invoice.id)} disabled={!canProcessInvoiceExportInfo(invoice, auth) && !canConfirmInvoiceExported(invoice, auth)} onChange={() => toggleSelectedInvoice(invoice.id)} inputProps={{ "aria-label": `Chọn hóa đơn ${invoice.maDangKy}` }} />
+                                </TableCell>
                                 <TableCell align="center">{invoice.soThuTuTrongNhom}</TableCell>
                                 <TableCell sx={{ fontWeight: 750 }}>{invoice.maDangKy}</TableCell>
                                 <TableCell>{INVOICE_TYPE_LABELS[invoice.maLoaiHoaDon] || invoice.maLoaiHoaDon || "Chưa bổ sung"}</TableCell>
@@ -410,11 +677,11 @@ export default function HoaDonImportGroupDetailPage() {
                                 <TableCell><Chip size="small" color={invoice.isImportIncomplete ? "warning" : "success"} label={invoice.isImportIncomplete ? "Cần bổ sung" : "Đủ thông tin"} /></TableCell>
                                 <TableCell align="right">
                                     <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigateFromGroup(`/hoa-don-dien-tu/${invoice.id}`)}>Xem</Button>
-                                    {canEditInvoice(invoice, auth) && <Button size="small" startIcon={<EditIcon />} onClick={() => navigateFromGroup(`/hoa-don-dien-tu/${invoice.id}/edit`)}>Sửa</Button>}
+                                    {canEditInvoiceAllInfo(invoice, auth) && <Button size="small" startIcon={<EditIcon />} onClick={() => navigateFromGroup(`/hoa-don-dien-tu/${invoice.id}/edit`)}>Sửa</Button>}
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {!filteredInvoices.length && <TableRow><TableCell colSpan={10} align="center" sx={{ py: 6 }}>{invoices.length ? "Không có hóa đơn phù hợp bộ lọc." : "Không có hóa đơn bạn được phép xem trong nhóm này."}</TableCell></TableRow>}
+                        {!filteredInvoices.length && <TableRow><TableCell colSpan={11} align="center" sx={{ py: 6 }}>{invoices.length ? "Không có hóa đơn phù hợp bộ lọc." : "Không có hóa đơn bạn được phép xem trong nhóm này."}</TableCell></TableRow>}
                     </TableBody>
                 </Table>
             </TableContainer>
@@ -423,43 +690,74 @@ export default function HoaDonImportGroupDetailPage() {
                 <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
             </Snackbar>
 
-            <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth={false} fullWidth PaperProps={{ sx: { width: "calc(100vw - 48px)", height: "calc(100vh - 48px)", maxWidth: "none" } }}>
+            <Dialog open={previewOpen} onClose={() => !savingPreview && setPreviewOpen(false)} maxWidth={false} fullWidth PaperProps={{ sx: { width: "calc(100vw - 48px)", height: "calc(100vh - 48px)", maxWidth: "none" } }}>
                 <DialogTitle>
-                    Xem trước Excel đã cập nhật
+                    Xem và cập nhật thông tin xuất hóa đơn
                     <Typography variant="body2" color="text.secondary">
-                        {UPDATED_IMPORT_HEADERS.length} cột · {previewRows.length} dòng dữ liệu
+                        {UPDATED_IMPORT_HEADERS.length} cột · {previewRows.length} dòng dữ liệu · ô nền xanh có thể chỉnh sửa
                     </Typography>
                 </DialogTitle>
                 <DialogContent dividers sx={{ p: 0, display: "flex", minHeight: 0 }}>
-                    <TableContainer sx={{ flex: 1 }}>
-                        <Table stickyHeader size="small" sx={{ minWidth: 3300 }}>
-                            <TableHead>
-                                <TableRow>
-                                    {UPDATED_IMPORT_HEADERS.map((header) => (
-                                        <TableCell key={header} sx={{ minWidth: header.includes("Tên") || header === "Địa chỉ" ? 240 : 135, whiteSpace: "nowrap", fontWeight: 750 }}>
-                                            {header}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {previewRows.map((row, rowIndex) => (
-                                    <TableRow key={rowIndex} hover>
-                                        {UPDATED_IMPORT_HEADERS.map((header) => (
-                                            <TableCell key={header} sx={{ whiteSpace: "nowrap", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }} title={row[header] == null ? "" : String(row[header])}>
-                                                {formatExcelPreviewCell(header, row[header])}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                    <Stack sx={{ flex: 1, minWidth: 0 }}>
+                        {previewResults && (
+                            <Alert severity={previewResults.skipped?.length ? "warning" : "success"} sx={{ borderRadius: 0 }}>
+                                Đã xử lý {previewResults.processed?.length || 0}, bỏ qua {previewResults.skipped?.length || 0} hóa đơn.
+                                {(previewResults.skipped || []).map((item) => <Typography key={item.hoaDonId} variant="body2">{item.maDangKy || `#${item.hoaDonId}`}: {item.reason}</Typography>)}
+                            </Alert>
+                        )}
+                        <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: "divider" }}>
+                            <Checkbox
+                                size="small"
+                                checked={editablePreviewInvoices.length > 0 && editablePreviewInvoices.every((invoice) => previewSelectedIds.includes(invoice.id))}
+                                indeterminate={previewSelectedIds.length > 0 && !editablePreviewInvoices.every((invoice) => previewSelectedIds.includes(invoice.id))}
+                                onChange={(event) => setPreviewSelectedIds(event.target.checked ? editablePreviewInvoices.map((invoice) => invoice.id) : [])}
+                            />
+                            <Typography component="span" variant="body2">Chọn tất cả hóa đơn đang chờ phụ trách ({editablePreviewInvoices.length})</Typography>
+                        </Box>
+                        <TableContainer sx={{ flex: 1 }}>
+                            <EditableExcelPreviewTable
+                                details={previewDisplayDetails}
+                                auth={auth}
+                                infoById={previewInfo}
+                                selectedIds={previewSelectedIds}
+                                setSelectedIds={setPreviewSelectedIds}
+                                setField={setPreviewField}
+                                setLineTax={setPreviewLineTax}
+                                currencies={currencies}
+                            />
+                        </TableContainer>
+                    </Stack>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setPreviewOpen(false)}>Đóng</Button>
-                    <Button startIcon={<DownloadIcon />} color="secondary" variant="contained" disabled={!previewRows.length} onClick={downloadPreviewedExcel}>
-                        Tải file này
+                    <Button onClick={() => setPreviewOpen(false)} disabled={savingPreview}>Đóng</Button>
+                    <Button variant="outlined" disabled={savingPreview || !previewSelectedIds.length} onClick={() => savePreview("save")}>Lưu thay đổi</Button>
+                    <Button color="success" variant="contained" disabled={savingPreview || !previewSelectedIds.length} onClick={() => savePreview("save_and_approve")}>{savingPreview ? "Đang xử lý..." : "Lưu & duyệt đã chọn"}</Button>
+                    <Button startIcon={<DownloadIcon />} color="secondary" variant="contained" disabled={!previewDetails.some((detail) => detail.maTrangThai === "SanSangXuat")} onClick={downloadPreviewedExcel}>Tải Excel sẵn sàng xuất</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={returnDialogOpen} onClose={() => !returningInvoices && setReturnDialogOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Trả lại {selectedReturnableInvoices.length} hóa đơn đã chọn?</DialogTitle>
+                <DialogContent>
+                    <Typography color="text.secondary" sx={{ mb: 2 }}>
+                        Các hóa đơn sẽ được chuyển về trạng thái Nháp để người đăng ký chỉnh sửa. Một lý do chung sẽ được ghi nhận cho toàn bộ hóa đơn đã chọn.
+                    </Typography>
+                    <TextField
+                        autoFocus
+                        required
+                        multiline
+                        minRows={3}
+                        fullWidth
+                        label="Lý do trả lại"
+                        value={returnReason}
+                        onChange={(event) => setReturnReason(event.target.value)}
+                        disabled={returningInvoices}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setReturnDialogOpen(false)} disabled={returningInvoices}>Đóng</Button>
+                    <Button color="warning" variant="contained" startIcon={<KeyboardReturnIcon />} onClick={returnSelectedInvoices} disabled={returningInvoices || !returnReason.trim() || !selectedReturnableInvoices.length}>
+                        {returningInvoices ? "Đang trả lại..." : "Trả lại đã chọn"}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -483,10 +781,10 @@ export default function HoaDonImportGroupDetailPage() {
                 <DialogTitle>Xác nhận hóa đơn trong nhóm đã xuất?</DialogTitle>
                 <DialogContent>
                     <Typography color="text.secondary">
-                        Nhập thông tin phát hành để chuyển {exportableInvoices.length} hóa đơn từ Sẵn sàng xuất sang Đã xuất.
+                        Nhập thông tin phát hành để chuyển {selectedInvoices.length} hóa đơn đã chọn từ Sẵn sàng xuất sang Đã xuất.
                     </Typography>
                     <Stack spacing={1.5} sx={{ mt: 2, maxHeight: 460, overflow: "auto", pr: 0.5 }}>
-                        {exportableInvoices.map((invoice) => {
+                        {selectedInvoices.map((invoice) => {
                             const info = confirmExportInfo[invoice.id] || {};
                             return (
                                 <Box
@@ -507,7 +805,7 @@ export default function HoaDonImportGroupDetailPage() {
                                             {invoice.tenNguoiMua || "—"}
                                         </Typography>
                                     </Box>
-                                    <TextField size="small" required label="Số hóa đơn" value={info.soHoaDon || ""} onChange={(event) => setConfirmExportField(invoice.id, { soHoaDon: event.target.value })} />
+                                    <TextField size="small" label="Số hóa đơn (không bắt buộc)" value={info.soHoaDon || ""} onChange={(event) => setConfirmExportField(invoice.id, { soHoaDon: event.target.value })} />
                                     <TextField size="small" required label="Ký hiệu" value={info.kyHieuHoaDon || ""} onChange={(event) => setConfirmExportField(invoice.id, { kyHieuHoaDon: event.target.value })} />
                                     <TextField size="small" required type="date" label="Ngày phát hành" value={info.ngayPhatHanh || ""} onChange={(event) => setConfirmExportField(invoice.id, { ngayPhatHanh: event.target.value })} InputLabelProps={{ shrink: true }} />
                                 </Box>
@@ -517,7 +815,7 @@ export default function HoaDonImportGroupDetailPage() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setConfirmExportOpen(false)} disabled={confirmingExported}>Đóng</Button>
-                    <Button color="success" variant="contained" onClick={confirmGroupExported} disabled={confirmingExported || !exportableInvoices.length}>
+                    <Button color="success" variant="contained" onClick={confirmGroupExported} disabled={confirmingExported || !selectedInvoices.length}>
                         {confirmingExported ? "Đang xác nhận..." : "Xác nhận đã xuất"}
                     </Button>
                 </DialogActions>

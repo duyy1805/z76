@@ -383,6 +383,11 @@ export function canEditInvoice(invoice, auth) {
         (Number(invoice?.nguoiDangKyId) === Number(auth?.user?.id) || hasInvoicePermission(auth, "HD_Admin"));
 }
 
+export function canUploadInvoiceAttachment(invoice, auth) {
+    return Boolean(invoice) &&
+        (Number(invoice?.nguoiDangKyId) === Number(auth?.user?.id) || hasInvoicePermission(auth, "HD_Admin"));
+}
+
 export function canSubmitInvoice(invoice, auth) {
     return canEditInvoice(invoice, auth);
 }
@@ -408,6 +413,10 @@ export function canProcessInvoiceExportInfo(invoice, auth) {
     return invoice?.maTrangThai === "ChoXuLy_HoaDon" && canApproveInvoice(invoice, auth);
 }
 
+export function canEditInvoiceAllInfo(invoice, auth) {
+    return canEditInvoice(invoice, auth) || canProcessInvoiceExportInfo(invoice, auth);
+}
+
 export function canConfirmInvoiceExported(invoice, auth) {
     return invoice?.maTrangThai === "SanSangXuat" &&
         (
@@ -415,6 +424,11 @@ export function canConfirmInvoiceExported(invoice, auth) {
             hasInvoicePermission(auth, "HD_XuatHoaDon") ||
             (auth?.invoiceTypeCodes || []).includes(invoice.maLoaiHoaDon)
         );
+}
+
+export function canViewExportedInvoice(invoice, auth) {
+    return invoice?.maTrangThai === "DaXuat" &&
+        (hasInvoicePermission(auth, "HD_Admin") || hasInvoicePermission(auth, "HD_XemHoaDonDaXuat"));
 }
 
 export function isInvoiceExportInfoComplete(invoice) {

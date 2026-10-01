@@ -5,7 +5,7 @@ import SendIcon from "@mui/icons-material/Send";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import KeyboardReturnIcon from "@mui/icons-material/KeyboardReturn";
 import CancelIcon from "@mui/icons-material/Cancel";
-import { canApproveInvoice, canDeleteInvoice, canEditInvoice, canSubmitInvoice } from "../../utils/hoa-don";
+import { canApproveInvoice, canDeleteInvoice, canEditInvoiceAllInfo, canSubmitInvoice } from "../../utils/hoa-don";
 
 function ButtonWithReason({ disabled, reason, children }) {
     return (
@@ -26,7 +26,7 @@ export default function HoaDonWorkflowActions({
     onDelete,
     approveDisabledReason = "",
 }) {
-    const canEdit = canEditInvoice(invoice, auth);
+    const canEdit = canEditInvoiceAllInfo(invoice, auth);
     const canSubmit = canSubmitInvoice(invoice, auth);
     const canApprove = canApproveInvoice(invoice, auth);
     const approveDisabled = !canApprove || Boolean(approveDisabledReason);
@@ -36,10 +36,10 @@ export default function HoaDonWorkflowActions({
 
     return (
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {isDraft && (
-                <ButtonWithReason disabled={!canEdit} reason="Bạn chỉ được sửa hóa đơn nháp do mình tạo hoặc có quyền HD_Admin.">
+            {canEdit && (
+                <ButtonWithReason disabled={false} reason="">
                     <Button startIcon={<EditIcon />} variant="outlined" disabled={!canEdit} onClick={onEdit}>
-                        Sửa nháp
+                        {isDraft ? "Sửa nháp" : "Sửa toàn bộ thông tin"}
                     </Button>
                 </ButtonWithReason>
             )}

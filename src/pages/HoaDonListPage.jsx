@@ -36,7 +36,7 @@ import FileUploadIcon from "@mui/icons-material/FileUpload";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canConfirmInvoiceExported, canDeleteInvoice, canEditInvoice, currencyAmountScale, fmtMoney, formatInvoiceDate, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canDeleteInvoice, canEditInvoiceAllInfo, canProcessInvoiceExportInfo, currencyAmountScale, fmtMoney, formatInvoiceDate, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
 import { currentInvoicePath, readInvoiceListSearch, updateInvoiceListSearch, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
@@ -62,6 +62,24 @@ const COMPACT_INVOICE_TYPE_LABELS = {
     XuatKhau: "Xuất khẩu",
     QuocPhong: "Hàng quốc phòng",
 };
+
+const INVOICE_STATUS_SORT_PRIORITY = {
+    TuChoi: 0,
+    KhoiTao: 1,
+    ChoDuyet_TBP: 2,
+    ChoXuLy_HoaDon: 3,
+    SanSangXuat: 4,
+    DaXuat: 5,
+};
+
+function compareInvoiceDateAscending(left, right) {
+    const leftDate = String(left?.ngayHoaDon || "").slice(0, 10);
+    const rightDate = String(right?.ngayHoaDon || "").slice(0, 10);
+    if (!leftDate && rightDate) return 1;
+    if (leftDate && !rightDate) return -1;
+    if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
+    return String(right?.maDangKy || "").localeCompare(String(left?.maDangKy || ""), "vi", { numeric: true });
+}
 
 const stickyActionCellSx = {
     position: "sticky",
@@ -160,6 +178,7 @@ export default function HoaDonListPage() {
         const paymentDateFrom = tableFilters.paymentDateFrom || "";
         const paymentDateTo = tableFilters.paymentDateTo || "";
 
+        const responsibleTypeCodes = new Set(auth.invoiceTypeCodes || []);
         return rows.filter((row) => {
             const okMa = !qMa || normalizeSearch([row.maDangKy, row.maNhomImport].filter(Boolean).join(" ")).includes(qMa);
             const okNguoiMua = !qNguoiMua || normalizeSearch([row.tenNguoiMua, row.maSoThue, row.soGiayTo, row.maDvcqhns].filter(Boolean).join(" ")).includes(qNguoiMua);
@@ -177,8 +196,18 @@ export default function HoaDonListPage() {
             const okPaymentFrom = !paymentDateFrom || paymentDate >= paymentDateFrom;
             const okPaymentTo = !paymentDateTo || paymentDate <= paymentDateTo;
             return okMa && okNguoiMua && okNguoiTao && okAmountFrom && okAmountTo && okRevenue && okPaymentFrom && okPaymentTo;
+        }).sort((left, right) => {
+            const leftIsAssignedWork = responsibleTypeCodes.has(left.maLoaiHoaDon) && canProcessInvoiceExportInfo(left, auth);
+            const rightIsAssignedWork = responsibleTypeCodes.has(right.maLoaiHoaDon) && canProcessInvoiceExportInfo(right, auth);
+            if (leftIsAssignedWork !== rightIsAssignedWork) return leftIsAssignedWork ? -1 : 1;
+
+            const leftStatusPriority = INVOICE_STATUS_SORT_PRIORITY[left.maTrangThai] ?? Number.MAX_SAFE_INTEGER;
+            const rightStatusPriority = INVOICE_STATUS_SORT_PRIORITY[right.maTrangThai] ?? Number.MAX_SAFE_INTEGER;
+            if (leftStatusPriority !== rightStatusPriority) return leftStatusPriority - rightStatusPriority;
+
+            return compareInvoiceDateAscending(left, right);
         });
-    }, [rows, tableFilters]);
+    }, [auth, rows, tableFilters]);
 
     const exportableRows = filteredRows.filter((row) => canConfirmInvoiceExported(row, auth));
     const exportableIds = exportableRows.map((row) => row.id);
@@ -274,12 +303,11 @@ export default function HoaDonListPage() {
         }
         const missingInfo = selectedExportableRows.some((row) => {
             const info = confirmExportInfo[row.id] || {};
-            return !String(info.soHoaDon || "").trim() ||
-                !String(info.kyHieuHoaDon || "").trim() ||
+            return !String(info.kyHieuHoaDon || "").trim() ||
                 !String(info.ngayPhatHanh || "").trim();
         });
         if (missingInfo) {
-            setToast({ open: true, type: "warning", msg: "Nhập đủ số hóa đơn, ký hiệu và ngày phát hành cho các hóa đơn đã chọn." });
+            setToast({ open: true, type: "warning", msg: "Nhập đủ ký hiệu và ngày phát hành cho các hóa đơn đã chọn." });
             return;
         }
 
@@ -556,7 +584,7 @@ export default function HoaDonListPage() {
                                 </TableCell>
                                 <TableCell align="center" sx={{ ...stickyActionCellSx, zIndex: 1, whiteSpace: "nowrap" }}>
                                     <IconButton size="small" onClick={() => navigateFromList(`/hoa-don-dien-tu/${row.id}`)}><VisibilityIcon fontSize="small" /></IconButton>
-                                    {canEditInvoice(row, auth) && (
+                                    {canEditInvoiceAllInfo(row, auth) && (
                                         <IconButton size="small" color="primary" onClick={() => navigateFromList(`/hoa-don-dien-tu/${row.id}/edit`)}><EditIcon fontSize="small" /></IconButton>
                                     )}
                                     {canDeleteInvoice(row, auth) && (
@@ -634,10 +662,9 @@ export default function HoaDonListPage() {
                                         </Box>
                                         <TextField
                                             size="small"
-                                            label="Số hóa đơn"
+                                            label="Số hóa đơn (không bắt buộc)"
                                             value={info.soHoaDon || ""}
                                             onChange={(event) => setConfirmExportField(row.id, { soHoaDon: event.target.value })}
-                                            required
                                         />
                                         <TextField
                                             size="small"

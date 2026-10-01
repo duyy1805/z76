@@ -55,7 +55,6 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
         try {
             const detail = await hoaDonApi.getNguoiMua(buyer.NguoiMuaId);
             const diaChi = detail.diaChi?.find((item) => item.IsDefault) || detail.diaChi?.[0] || {};
-            const lienHe = detail.lienHe?.find((item) => item.IsDefault) || detail.lienHe?.[0] || {};
             const loaiNguoiMua = normalizeBuyerType(detail.LoaiNguoiMua || (detail.MaSoThue || detail.MaDVCQHNS ? COMPANY : PERSON));
             const isOrganization = loaiNguoiMua !== PERSON;
             updateSnapshot({
@@ -63,16 +62,16 @@ export default function BuyerSelector({ form, setForm, disabled = false, setToas
                 khongCoMaSoThue: isOrganization && !detail.MaSoThue && Boolean(detail.MaDVCQHNS),
                 nguoiMuaId: detail.NguoiMuaId,
                 diaChiId: diaChi.DiaChiId || null,
-                lienHeId: lienHe.LienHeId || null,
+                lienHeId: null,
                 tenNguoiMuaSnapshot: detail.TenPhapLy || "",
                 maSoThueSnapshot: isOrganization ? detail.MaSoThue || "" : "",
                 soGiayToSnapshot: loaiNguoiMua === PERSON ? detail.SoGiayTo || "" : "",
                 maDvcqhnsSnapshot: isOrganization ? detail.MaDVCQHNS || "" : "",
                 maDonViSnapshot: isOrganization ? detail.MaDonVi || "" : "",
                 diaChiSnapshot: diaChi.DiaChi || "",
-                nguoiLienHeSnapshot: isOrganization ? lienHe.HoTen || "" : "",
-                emailSnapshot: lienHe.Email || "",
-                dienThoaiSnapshot: lienHe.DienThoai || "",
+                nguoiLienHeSnapshot: "",
+                emailSnapshot: "",
+                dienThoaiSnapshot: "",
             });
             setLastLookedUpTaxCode(normalizeTaxCode(detail.MaSoThue));
         } catch (error) {

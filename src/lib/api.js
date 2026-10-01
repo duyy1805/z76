@@ -477,6 +477,15 @@ export const hoaDonApi = {
         });
         return data;
     },
+    async updateNhomImportExportInfo(id, payload, user) {
+        const { data } = await httpHd.put(`/nhom-import/${id}/thong-tin-xuat`, {
+            ...payload,
+            requesterUserId: user?.id,
+            requesterIdDonVi: user?.idDonVi,
+            tenNguoiThucHien: user?.fullName || user?.name || user?.username,
+        });
+        return data;
+    },
 };
 
 // Nếu muốn tự động gắn token vào http:

@@ -27,22 +27,29 @@ function dateOnly(value) {
     return value ? String(value).slice(0, 10) : null;
 }
 
-function round4(value) {
-    return Math.round((Number(value || 0) + Number.EPSILON) * 10000) / 10000;
+function roundConvertedAmount(value) {
+    return Math.round(Number(value || 0) + Number.EPSILON);
+}
+
+function roundCurrencyAmount(value, currency) {
+    const fraction = String(currency || "VND").toUpperCase() === "VND" ? 0 : 3;
+    const factor = 10 ** fraction;
+    return Math.round((Number(value || 0) + Number.EPSILON) * factor) / factor;
 }
 
 function convertedTaxTotal(invoice, lines) {
-    if (invoice.tongTienThueQuyDoi != null) return invoice.tongTienThueQuyDoi;
+    if (invoice.tongTienThueQuyDoi != null) return roundConvertedAmount(invoice.tongTienThueQuyDoi);
     if (invoice.cheDoThue === "MotThueSuat") {
-        return round4(Number(invoice.tongTienThue || 0) * Number(invoice.tyGia || 1));
+        return roundConvertedAmount(Number(invoice.tongTienThue || 0) * Number(invoice.tyGia || 1));
     }
-    return round4(lines.reduce((total, line) => total + Number(line.TienThueQuyDoi || 0), 0));
+    return roundConvertedAmount(lines.reduce((total, line) => total + Number(line.TienThueQuyDoi || 0), 0));
 }
 
 export function buildUpdatedImportRows(invoices = []) {
     const rows = [];
     invoices.forEach((invoice, invoiceIndex) => {
         const lines = invoice?.chiTiet || [];
+        const currency = invoice.maLoaiTien || "VND";
         const taxConverted = convertedTaxTotal(invoice, lines);
         lines.forEach((line, lineIndex) => {
             const firstLine = lineIndex === 0;
@@ -60,15 +67,15 @@ export function buildUpdatedImportRows(invoices = []) {
                 [UPDATED_IMPORT_HEADERS[10]]: firstLine ? invoice.maLoaiTien || "VND" : null,
                 [UPDATED_IMPORT_HEADERS[11]]: firstLine ? Number(invoice.tyGia || 1) : null,
                 [UPDATED_IMPORT_HEADERS[12]]: line.ThueSuatGTGT ?? null,
-                [UPDATED_IMPORT_HEADERS[13]]: firstLine ? invoice.tongTienThue ?? null : null,
+                [UPDATED_IMPORT_HEADERS[13]]: firstLine && invoice.tongTienThue != null ? roundCurrencyAmount(invoice.tongTienThue, currency) : null,
                 [UPDATED_IMPORT_HEADERS[14]]: firstLine ? taxConverted : null,
                 [UPDATED_IMPORT_HEADERS[15]]: line.MaHang || null,
                 [UPDATED_IMPORT_HEADERS[16]]: line.TenHangHoaDichVu || null,
                 [UPDATED_IMPORT_HEADERS[17]]: line.DonViTinh || null,
                 [UPDATED_IMPORT_HEADERS[18]]: line.SoLuong ?? null,
                 [UPDATED_IMPORT_HEADERS[19]]: line.DonGia ?? null,
-                [UPDATED_IMPORT_HEADERS[20]]: line.ThanhTien ?? null,
-                [UPDATED_IMPORT_HEADERS[21]]: line.ThanhTienQuyDoi ?? null,
+                [UPDATED_IMPORT_HEADERS[20]]: line.ThanhTien == null ? null : roundCurrencyAmount(line.ThanhTien, currency),
+                [UPDATED_IMPORT_HEADERS[21]]: line.ThanhTienQuyDoi == null ? null : roundConvertedAmount(line.ThanhTienQuyDoi),
             });
         });
     });
