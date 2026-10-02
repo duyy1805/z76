@@ -30,7 +30,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ClearIcon from "@mui/icons-material/Clear";
 import DownloadIcon from "@mui/icons-material/Download";
 import { hoaDonApi } from "../../lib/api";
-import { formatInvoiceDate, formatInvoiceDateTime, hasInvoicePermission } from "../../utils/hoa-don";
+import { formatInvoiceDate, formatInvoiceDateTime, hasInvoicePermission, invoiceDateTimeKey } from "../../utils/hoa-don";
 import { UPDATED_IMPORT_HEADERS } from "../../utils/hoa-don-excel";
 import { withInvoiceReturnTo } from "../../utils/hoa-don-navigation";
 import TableHeaderFilter from "./TableHeaderFilter";
@@ -51,13 +51,6 @@ function normalizeSearch(value) {
         .replace(/Đ/g, "D")
         .toLowerCase()
         .trim();
-}
-
-function localDateKey(value) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    const offsetMs = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
 }
 
 function downloadImportTemplate() {
@@ -167,7 +160,8 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
         setCreating(true);
         try {
             const result = await hoaDonApi.createNhomImport(file, user, note);
-            onToast("success", `Đã tạo nhóm ${result.group?.maNhom} gồm ${result.group?.soHoaDon} hóa đơn nháp.`);
+            const skippedText = result.skippedRowCount ? ` Đã bỏ qua ${result.skippedRowCount} dòng tổng, tiêu đề phụ hoặc chữ ký.` : "";
+            onToast("success", `Đã tạo nhóm ${result.group?.maNhom} gồm ${result.group?.soHoaDon} hóa đơn nháp.${skippedText}`);
             closeDialog();
             navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${result.group?.nhomImportId}`, returnTo));
         } catch (error) {
@@ -195,7 +189,11 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
         loading,
     }), [creationBlocked, load, loading, onToast]);
     const previewInvoices = useMemo(() => preview?.invoices || [], [preview]);
-    const canDeleteGroups = hasInvoicePermission(auth, "HD_Admin");
+    const isAdmin = hasInvoicePermission(auth, "HD_Admin");
+    const canDeleteGroup = (group) => isAdmin || (
+        Number(group.nguoiTaoId) === Number(user?.id)
+        && Number(group.soNhap || 0) + Number(group.soDaXoa || 0) === Number(group.soHoaDon || 0)
+    );
     const filteredGroups = useMemo(() => {
         const keyword = normalizeSearch(filters?.keyword);
         const creator = normalizeSearch(filters?.creator);
@@ -207,7 +205,7 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
         const countTo = Number(columnFilters.countTo);
         return groups.filter((group) => {
             const status = groupStatus(group).value;
-            const createdDate = localDateKey(group.ngayTao);
+            const createdDate = invoiceDateTimeKey(group.ngayTao);
             const matchesKeyword = !keyword || normalizeSearch([
                 group.maNhom,
                 group.fileName,
@@ -234,9 +232,9 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
         if (!groupToDelete?.nhomImportId) return;
         setDeletingGroup(true);
         try {
-            await hoaDonApi.deleteNhomImport(groupToDelete.nhomImportId, user);
+            const response = await hoaDonApi.deleteNhomImport(groupToDelete.nhomImportId, user);
             setGroupToDelete(null);
-            onToast("success", `Đã xóa nhóm ${groupToDelete.maNhom} và file Excel gốc. Các hóa đơn trong nhóm vẫn được giữ nguyên.`);
+            onToast("success", `Đã xóa nhóm ${groupToDelete.maNhom}, ${response.deletedInvoiceCount || 0} hóa đơn và các file liên quan.`);
             await load();
         } catch (error) {
             onToast("error", error?.response?.data?.message || "Xóa nhóm import thất bại.");
@@ -320,7 +318,7 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                                     <TableCell><Chip size="small" label={status.label} color={status.color} /></TableCell>
                                     <TableCell align="right">
                                         <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigate(withInvoiceReturnTo(`/hoa-don-dien-tu/nhom-import/${group.nhomImportId}`, returnTo))}>Xem</Button>
-                                        {canDeleteGroups && (
+                                        {canDeleteGroup(group) && (
                                             <IconButton
                                                 size="small"
                                                 color="error"
@@ -357,7 +355,7 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                                 </Button>
                             )}
                         >
-                            Nhận file .xlsx với các cột theo tên trong mẫu; không bắt buộc đủ 22 cột. Tối thiểu cần “Số thứ tự hóa đơn (*)” và “Tên hàng hóa/dịch vụ (*)”. Các thông tin còn thiếu được bổ sung sau khi lưu nháp. Hóa đơn import mặc định là hóa đơn xuất khẩu, loại hình doanh thu xuất khẩu và thuế GTGT 0%.
+                            Nhận file .xlsx với các cột theo tên trong mẫu; không bắt buộc đủ 22 cột. Tối thiểu cần “Số thứ tự hóa đơn (*)” và “Tên hàng hóa/dịch vụ (*)”. Hệ thống tự tìm dòng tiêu đề và bỏ qua dòng tổng, tiêu đề phụ, ghi chú hoặc chữ ký không có dữ liệu hàng hóa. Các thông tin còn thiếu được bổ sung sau khi lưu nháp. Hóa đơn import mặc định là hóa đơn xuất khẩu, loại hình doanh thu xuất khẩu và thuế GTGT 0%.
                         </Alert>
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
                             <Button component="label" variant="outlined" startIcon={<FileUploadIcon />}>
@@ -384,6 +382,17 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                                         {error.row ? `Dòng ${error.row}${error.column ? `, cột ${error.column}` : ""}: ` : ""}{error.message}
                                     </Typography>
                                 ))}
+                            </Alert>
+                        )}
+                        {!!preview?.skippedRowCount && (
+                            <Alert severity="info">
+                                <Typography sx={{ fontWeight: 700 }}>Đã tự động bỏ qua {preview.skippedRowCount} dòng không phải dữ liệu hóa đơn.</Typography>
+                                {(preview.skippedRows || []).slice(0, 20).map((item) => (
+                                    <Typography key={`${item.row}-${item.reason}`} variant="body2">
+                                        Dòng {item.row}: {item.reason}
+                                    </Typography>
+                                ))}
+                                {preview.skippedRowCount > 20 && <Typography variant="body2">Và {preview.skippedRowCount - 20} dòng khác.</Typography>}
                             </Alert>
                         )}
                         {!!preview?.warnings?.length && (
@@ -427,7 +436,9 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                 <DialogTitle>Xóa nhóm import?</DialogTitle>
                 <DialogContent>
                     <Typography color="text.secondary">
-                        Nhóm {groupToDelete?.maNhom || "này"} sẽ không còn hiển thị và file Excel gốc sẽ bị xóa thật khỏi Google Drive hoặc vùng lưu trữ local cũ. Các hóa đơn trong nhóm vẫn được giữ nguyên.
+                        {isAdmin
+                            ? `Nhóm ${groupToDelete?.maNhom || "này"}, toàn bộ hóa đơn trong nhóm (kể cả hóa đơn đã trình hoặc Đã xuất), file Excel gốc và mọi file đính kèm sẽ bị xóa.`
+                            : `Nhóm ${groupToDelete?.maNhom || "này"}, toàn bộ hóa đơn Nháp, file Excel gốc và mọi file đính kèm sẽ bị xóa.`}
                     </Typography>
                 </DialogContent>
                 <DialogActions>

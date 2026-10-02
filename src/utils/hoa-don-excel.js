@@ -23,6 +23,37 @@ export const UPDATED_IMPORT_HEADERS = [
     "Thành tiền quy đổi",
 ];
 
+const UPDATED_IMPORT_DATE_HEADERS = [UPDATED_IMPORT_HEADERS[1], UPDATED_IMPORT_HEADERS[2]];
+const UPDATED_IMPORT_DATE_COLUMNS = ["B", "C"];
+
+export function toExcelDateSerial(value) {
+    if (!value) return null;
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const utcDate = new Date(Date.UTC(year, month - 1, day));
+    if (utcDate.getUTCFullYear() !== year || utcDate.getUTCMonth() !== month - 1 || utcDate.getUTCDate() !== day) return null;
+    return (utcDate.getTime() - Date.UTC(1899, 11, 30)) / 86400000;
+}
+
+export function applyUpdatedImportDateFormats(worksheet, rows = []) {
+    rows.forEach((row, rowIndex) => {
+        UPDATED_IMPORT_DATE_HEADERS.forEach((header, dateIndex) => {
+            const serial = toExcelDateSerial(row?.[header]);
+            if (serial == null) return;
+            worksheet[`${UPDATED_IMPORT_DATE_COLUMNS[dateIndex]}${rowIndex + 2}`] = {
+                t: "n",
+                v: serial,
+                z: "dd/mm/yyyy",
+            };
+        });
+    });
+    return worksheet;
+}
+
 function dateOnly(value) {
     return value ? String(value).slice(0, 10) : null;
 }

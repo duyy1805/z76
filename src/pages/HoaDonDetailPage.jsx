@@ -686,7 +686,7 @@ export default function HoaDonDetailPage() {
                         {(detail.lichSuDuyet || []).map((item) => (
                             <Box key={item.PheDuyetId}>
                                 <Typography sx={{ fontWeight: 750 }}>{item.HanhDong} · {item.TenNguoiThucHien || item.NguoiThucHienId}</Typography>
-                                <Typography variant="caption" color="text.secondary">{item.TuTrangThai} → {item.DenTrangThai} · {item.ThoiDiem}</Typography>
+                                <Typography variant="caption" color="text.secondary">{item.TuTrangThai} → {item.DenTrangThai} · {formatInvoiceDateTime(item.ThoiDiem)}</Typography>
                                 {item.GhiChu && <Typography sx={{ mt: 0.5 }}>{item.GhiChu}</Typography>}
                             </Box>
                         ))}

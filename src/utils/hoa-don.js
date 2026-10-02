@@ -12,16 +12,39 @@ export function formatInvoiceDate(value) {
     return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export function formatInvoiceDateTime(value) {
-    if (!value) return "—";
+function invoiceDateTimeParts(value) {
+    if (!value) return null;
+    const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(value));
+    if (match) {
+        return {
+            year: match[1],
+            month: match[2],
+            day: match[3],
+            hour: match[4],
+            minute: match[5],
+        };
+    }
+
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
+    if (Number.isNaN(date.getTime())) return null;
+    const pad = (part) => String(part).padStart(2, "0");
+    return {
+        year: String(date.getFullYear()),
+        month: pad(date.getMonth() + 1),
+        day: pad(date.getDate()),
+        hour: pad(date.getHours()),
+        minute: pad(date.getMinutes()),
+    };
+}
+
+export function formatInvoiceDateTime(value) {
+    const parts = invoiceDateTimeParts(value);
+    return parts ? `${parts.hour}:${parts.minute} ${parts.day}/${parts.month}/${parts.year}` : "—";
+}
+
+export function invoiceDateTimeKey(value) {
+    const parts = invoiceDateTimeParts(value);
+    return parts ? `${parts.year}-${parts.month}-${parts.day}` : "";
 }
 
 export const INVOICE_STATUS_LABELS = {
@@ -429,6 +452,16 @@ export function canConfirmInvoiceExported(invoice, auth) {
 export function canViewExportedInvoice(invoice, auth) {
     return invoice?.maTrangThai === "DaXuat" &&
         (hasInvoicePermission(auth, "HD_Admin") || hasInvoicePermission(auth, "HD_XemHoaDonDaXuat"));
+}
+
+export function canDownloadUpdatedInvoice(invoice, auth) {
+    if (!invoice) return false;
+    if (invoice.maTrangThai === "SanSangXuat") return canConfirmInvoiceExported(invoice, auth);
+    if (invoice.maTrangThai !== "DaXuat") return false;
+    return hasInvoicePermission(auth, "HD_Admin") ||
+        hasInvoicePermission(auth, "HD_XuatHoaDon") ||
+        hasInvoicePermission(auth, "HD_XemHoaDonDaXuat") ||
+        (auth?.invoiceTypeCodes || []).includes(invoice.maLoaiHoaDon);
 }
 
 export function isInvoiceExportInfoComplete(invoice) {
