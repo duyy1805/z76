@@ -182,7 +182,9 @@ function EditableExcelPreviewTable({ details, auth, infoById, selectedIds, setSe
             <TableBody>
                 {details.flatMap((detail) => {
                     const rows = buildUpdatedImportRows([detail]);
-                    if (rows[0]) rows[0][UPDATED_IMPORT_HEADERS[0]] = detail.soThuTuTrongNhom || rows[0][UPDATED_IMPORT_HEADERS[0]];
+                    rows.forEach((row) => {
+                        row[UPDATED_IMPORT_HEADERS[0]] = detail.soThuTuTrongNhom || row[UPDATED_IMPORT_HEADERS[0]];
+                    });
                     const editable = canProcessInvoiceExportInfo(detail, auth);
                     const selected = selectedIds.includes(detail.id);
                     const info = infoById[detail.id] || {};
@@ -552,15 +554,21 @@ export default function HoaDonImportGroupDetailPage() {
             }));
             const succeeded = results.filter((item) => item.status === "fulfilled").length;
             const failed = results.length - succeeded;
+            const firstFailureIndex = results.findIndex((item) => item.status === "rejected");
+            const firstFailure = firstFailureIndex >= 0 ? results[firstFailureIndex] : null;
+            const firstFailureInvoice = firstFailureIndex >= 0 ? selectedInvoices[firstFailureIndex] : null;
+            const firstFailureReason = firstFailure?.reason?.response?.data?.message || firstFailure?.reason?.message || "Không xác định được nguyên nhân.";
             const succeededIds = new Set(selectedInvoices.filter((_, index) => results[index].status === "fulfilled").map((invoice) => invoice.id));
             setSelectedIds((current) => current.filter((invoiceId) => !succeededIds.has(invoiceId)));
-            setConfirmExportOpen(false);
-            setConfirmExportInfo({});
+            if (!failed) {
+                setConfirmExportOpen(false);
+                setConfirmExportInfo({});
+            }
             setToast({
                 open: true,
                 type: failed ? "warning" : "success",
                 msg: failed
-                    ? `Đã xác nhận ${succeeded} hóa đơn; ${failed} hóa đơn chưa chuyển được trạng thái.`
+                    ? `Đã xác nhận ${succeeded} hóa đơn; ${failed} hóa đơn chưa chuyển được trạng thái. ${firstFailureInvoice?.maDangKy || "Hóa đơn đầu tiên lỗi"}: ${firstFailureReason}`
                     : `Đã xác nhận ${succeeded} hóa đơn đã xuất; trạng thái nhóm đã được cập nhật.`,
             });
             await load();

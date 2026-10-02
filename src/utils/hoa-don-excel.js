@@ -54,7 +54,7 @@ export function buildUpdatedImportRows(invoices = []) {
         lines.forEach((line, lineIndex) => {
             const firstLine = lineIndex === 0;
             rows.push({
-                [UPDATED_IMPORT_HEADERS[0]]: firstLine ? invoiceIndex + 1 : null,
+                [UPDATED_IMPORT_HEADERS[0]]: invoiceIndex + 1,
                 [UPDATED_IMPORT_HEADERS[1]]: firstLine ? dateOnly(invoice.ngayHoaDon) : null,
                 [UPDATED_IMPORT_HEADERS[2]]: firstLine ? dateOnly(invoice.hanThanhToan) : null,
                 [UPDATED_IMPORT_HEADERS[3]]: firstLine ? invoice.tenNguoiMua || null : null,
