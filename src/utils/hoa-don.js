@@ -66,6 +66,15 @@ export const INVOICE_TYPE_LABELS = {
 
 export const EXPORT_INVOICE_SYMBOL = "1C26TXK";
 
+export const PAYMENT_METHOD_OPTIONS = [
+    "Tiền mặt",
+    "Chuyển khoản",
+    "TM/CK",
+    "Đối trừ công nợ",
+    "Không thu tiền",
+    "Thẻ quốc tế",
+];
+
 export function issuedInvoiceSymbol(invoice) {
     return invoice?.kyHieuHoaDon
         || invoice?.kyHieuDuKien

@@ -80,6 +80,7 @@ export default function Shell({ children }) {
         TBP: "Trưởng bộ phận",
         NhanVien: "Nhân viên",
     }[roleCode] || roleCode || "Nhân viên";
+    const departmentLabel = user?.tenBoPhan || user?.departmentName || roleLabel;
 
     const drawer = (
         <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "#0B1739", color: "white" }}>
@@ -235,7 +236,7 @@ export default function Shell({ children }) {
                                             noWrap
                                             sx={{ display: "block", maxWidth: 180, color: "text.secondary", lineHeight: 1.35 }}
                                         >
-                                            {roleLabel}
+                                            {departmentLabel}
                                         </Typography>
                                     </Box>
                                 )}

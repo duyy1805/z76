@@ -53,6 +53,7 @@ import {
     INVOICE_TYPE_LABELS,
     INVOICE_STATUS_OPTIONS,
     issuedInvoiceSymbol,
+    PAYMENT_METHOD_OPTIONS,
     TAX_MODE_LABELS,
     VAT_RATE_OPTIONS,
     vatRateValue,
@@ -205,7 +206,7 @@ function EditableExcelPreviewTable({ details, auth, infoById, selectedIds, setSe
                                     if (editableCell) cellSx.bgcolor = "rgba(25, 118, 210, 0.08)";
                                     let content = formatExcelPreviewCell(header, row[header]);
                                     if (editable && selected && firstLine && header === "Hình thức thanh toán") {
-                                        content = <TextField select size="small" value={info.hinhThucThanhToan || ""} onChange={(event) => setField(detail.id, { hinhThucThanhToan: event.target.value })} sx={{ minWidth: 145 }}><MenuItem value="Chuyển khoản">Chuyển khoản</MenuItem><MenuItem value="Tiền mặt">Tiền mặt</MenuItem></TextField>;
+                                        content = <TextField select size="small" value={info.hinhThucThanhToan || ""} onChange={(event) => setField(detail.id, { hinhThucThanhToan: event.target.value })} sx={{ minWidth: 165 }}>{PAYMENT_METHOD_OPTIONS.map((method) => <MenuItem key={method} value={method}>{method}</MenuItem>)}</TextField>;
                                     } else if (editable && selected && firstLine && header === "Loại tiền") {
                                         content = <TextField select size="small" value={info.maLoaiTien || "VND"} onChange={(event) => setField(detail.id, { maLoaiTien: event.target.value, tyGia: event.target.value === "VND" ? 1 : info.tyGia })} sx={{ minWidth: 125 }}><MenuItem value="VND">VND</MenuItem>{currencies.filter((item) => item.MaLoaiTien !== "VND").map((item) => <MenuItem key={item.MaLoaiTien} value={item.MaLoaiTien}>{item.MaLoaiTien}</MenuItem>)}</TextField>;
                                     } else if (editable && selected && firstLine && header === "Tỷ giá") {

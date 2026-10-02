@@ -47,6 +47,7 @@ import {
     invoiceOrderContractInfo,
     INVOICE_NUMBER_FORMAT,
     INVOICE_TYPE_LABELS,
+    PAYMENT_METHOD_OPTIONS,
     REVENUE_TYPE_LABELS,
     isInvoiceExportInfoComplete,
     TAX_MODE_LABELS,
@@ -466,8 +467,7 @@ export default function HoaDonDetailPage() {
                         <Stack spacing={2}>
                             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(5, 1fr)" }, gap: 1.5 }}>
                                 <TextField select label="Hình thức thanh toán" value={exportInfo?.hinhThucThanhToan || ""} onChange={(event) => setExportField({ hinhThucThanhToan: event.target.value })}>
-                                    <MenuItem value="Chuyển khoản">Chuyển khoản</MenuItem>
-                                    <MenuItem value="Tiền mặt">Tiền mặt</MenuItem>
+                                    {PAYMENT_METHOD_OPTIONS.map((method) => <MenuItem key={method} value={method}>{method}</MenuItem>)}
                                 </TextField>
                                 <TextField select label="Chế độ thuế" value={exportInfo?.cheDoThue || "MotThueSuat"} onChange={(event) => setExportField({ cheDoThue: event.target.value })}>
                                     {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
