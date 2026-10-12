@@ -35,7 +35,7 @@ function NumericTextField({ value, onChange, inputProps, isMoney = false, isQuan
             thousandSeparator={useVietnameseFormat ? "." : ","}
             decimalSeparator={useVietnameseFormat ? "," : "."}
             allowedDecimalSeparators={[",", "."]}
-            allowNegative={false}
+            allowNegative
             value={value ?? ""}
             onValueChange={(values) => onChange(values.value)}
             inputProps={{ ...inputProps, inputMode: "decimal" }}

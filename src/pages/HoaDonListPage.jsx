@@ -36,7 +36,7 @@ import FileUploadIcon from "@mui/icons-material/FileUpload";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canConfirmInvoiceExported, canDeleteInvoice, canEditInvoiceAllInfo, canProcessInvoiceExportInfo, currencyAmountScale, fmtMoney, formatInvoiceDate, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canDeleteInvoice, canDownloadUpdatedInvoice, canEditInvoiceAllInfo, canProcessInvoiceExportInfo, currencyAmountScale, fmtMoney, formatInvoiceDate, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
 import { currentInvoicePath, readInvoiceListSearch, updateInvoiceListSearch, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
@@ -213,8 +213,11 @@ export default function HoaDonListPage() {
     const exportableIds = exportableRows.map((row) => row.id);
     const selectedExportableIds = selectedIds.filter((id) => exportableIds.includes(id));
     const selectedExportableRows = exportableRows.filter((row) => selectedExportableIds.includes(row.id));
-    const allExportableSelected = exportableIds.length > 0 && selectedExportableIds.length === exportableIds.length;
-    const someExportableSelected = selectedExportableIds.length > 0 && !allExportableSelected;
+    const downloadableRows = filteredRows.filter((row) => canDownloadUpdatedInvoice(row, auth));
+    const downloadableIds = downloadableRows.map((row) => row.id);
+    const selectedDownloadableIds = selectedIds.filter((id) => downloadableIds.includes(id));
+    const allDownloadableSelected = downloadableIds.length > 0 && selectedDownloadableIds.length === downloadableIds.length;
+    const someDownloadableSelected = selectedDownloadableIds.length > 0 && !allDownloadableSelected;
 
     const toggleRow = (id) => {
         setSelectedIds((current) => (
@@ -224,12 +227,12 @@ export default function HoaDonListPage() {
         ));
     };
 
-    const toggleAllExportable = () => {
+    const toggleAllDownloadable = () => {
         setSelectedIds((current) => {
-            if (allExportableSelected) {
-                return current.filter((id) => !exportableIds.includes(id));
+            if (allDownloadableSelected) {
+                return current.filter((id) => !downloadableIds.includes(id));
             }
-            return [...new Set([...current, ...exportableIds])];
+            return [...new Set([...current, ...downloadableIds])];
         });
     };
 
@@ -249,15 +252,15 @@ export default function HoaDonListPage() {
     };
 
     const exportSelected = async () => {
-        if (!selectedExportableIds.length) {
-            setToast({ open: true, type: "warning", msg: "Chọn ít nhất một hóa đơn ở trạng thái Sẵn sàng xuất." });
+        if (!selectedDownloadableIds.length) {
+            setToast({ open: true, type: "warning", msg: "Chọn ít nhất một hóa đơn có thể xuất Excel." });
             return;
         }
 
         setExporting(true);
         try {
             const result = await hoaDonApi.createDotXuatFile({
-                hoaDonIds: selectedExportableIds,
+                hoaDonIds: selectedDownloadableIds,
                 requesterUserId: user?.id,
                 requesterIdDonVi: user?.idDonVi,
             });
@@ -356,9 +359,9 @@ export default function HoaDonListPage() {
                         startIcon={<DownloadIcon />}
                         variant="outlined"
                         onClick={exportSelected}
-                        disabled={exporting || !selectedExportableIds.length}
+                        disabled={exporting || !selectedDownloadableIds.length}
                     >
-                        Xuất file import ({selectedExportableIds.length})
+                        Xuất file import ({selectedDownloadableIds.length})
                     </Button>
                     <Button
                         startIcon={<CheckCircleIcon />}
@@ -424,10 +427,10 @@ export default function HoaDonListPage() {
                                 <Checkbox
                                     size="small"
                                     sx={{ p: 0.75 }}
-                                    checked={allExportableSelected}
-                                    indeterminate={someExportableSelected}
-                                    disabled={!exportableIds.length}
-                                    onChange={toggleAllExportable}
+                                    checked={allDownloadableSelected}
+                                    indeterminate={someDownloadableSelected}
+                                    disabled={!downloadableIds.length}
+                                    onChange={toggleAllDownloadable}
                                 />
                             </TableCell>
                             <TableCell sx={{ width: 165 }}>
@@ -552,7 +555,7 @@ export default function HoaDonListPage() {
                                         size="small"
                                         sx={{ p: 0.75 }}
                                         checked={selectedIds.includes(row.id)}
-                                        disabled={!canConfirmInvoiceExported(row, auth)}
+                                        disabled={!canDownloadUpdatedInvoice(row, auth)}
                                         onChange={() => toggleRow(row.id)}
                                     />
                                 </TableCell>

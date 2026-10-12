@@ -134,18 +134,19 @@ function readVietnameseInteger(value) {
 }
 
 export function amountToVietnameseText(value, currencyCode = "VND") {
-    if (value === "" || value == null || Number(value) <= 0) return "";
+    if (value === "" || value == null) return "";
     const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return "";
+    if (!Number.isFinite(numeric) || numeric === 0) return "";
 
-    const [integerText, decimalText = ""] = String(value).split(".");
+    const [integerText, decimalText = ""] = String(Math.abs(numeric)).split(".");
     const integerWords = readVietnameseInteger(integerText);
     const fractionWords = decimalText.replace(/0+$/, "")
         ? ` phẩy ${decimalText.replace(/0+$/, "").split("").map((digit) => VN_NUMBER_WORDS[Number(digit)]).join(" ")}`
         : "";
     const suffix = currencyCode === "VND" ? "đồng" : currencyCode;
+    const sign = numeric < 0 ? "âm " : "";
 
-    return `${capitalizeFirst(integerWords)}${fractionWords} ${suffix}`.replace(/\s+/g, " ").trim();
+    return capitalizeFirst(`${sign}${integerWords}${fractionWords} ${suffix}`.replace(/\s+/g, " ").trim());
 }
 
 export function isoToDisplay(value) {
