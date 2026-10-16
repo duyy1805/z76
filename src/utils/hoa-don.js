@@ -221,14 +221,15 @@ export function toNumber(value, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-export function calculateLine(line, tyGia = 1) {
+export function calculateLine(line, tyGia = 1, currency = "VND") {
     const soLuong = toNumber(line.soLuong, 0);
     const donGia = toNumber(line.donGia, 0);
     const tyLeChietKhau = toNumber(line.tyLeChietKhau, 0);
     const thueSuatGTGT = toNumber(line.thueSuatGTGT, 0);
     const truocCK = roundInvoiceNumber(soLuong * donGia, INVOICE_NUMBER_FORMAT.storageAmount);
     const tienCK = roundInvoiceNumber(soLuong * donGia * tyLeChietKhau / 100, INVOICE_NUMBER_FORMAT.storageAmount);
-    const thanhTien = roundInvoiceNumber(soLuong * donGia * (100 - tyLeChietKhau) / 100, INVOICE_NUMBER_FORMAT.storageAmount);
+    const thanhTien = roundInvoiceNumber(soLuong * donGia * (100 - tyLeChietKhau) / 100,
+        String(currency).toUpperCase() === "VND" ? 0 : INVOICE_NUMBER_FORMAT.storageAmount);
     const tienThue = roundInvoiceNumber(thanhTien * thueSuatGTGT / 100, INVOICE_NUMBER_FORMAT.storageAmount);
     return {
         truocCK,
@@ -240,9 +241,9 @@ export function calculateLine(line, tyGia = 1) {
     };
 }
 
-export function calculateTotals(lines = [], tyGia = 1, cheDoThue = "NhieuThueSuat", thueSuatChung = null) {
+export function calculateTotals(lines = [], tyGia = 1, cheDoThue = "NhieuThueSuat", thueSuatChung = null, currency = "VND") {
     const totals = lines.reduce((acc, line) => {
-        const calc = calculateLine(line, tyGia);
+        const calc = calculateLine(line, tyGia, currency);
         acc.tongTienHang += calc.thanhTien;
         acc.tongTienThue += calc.tienThue;
         acc.tongTienThanhToan += calc.thanhTien + calc.tienThue;
@@ -272,6 +273,27 @@ export function calculateTotals(lines = [], tyGia = 1, cheDoThue = "NhieuThueSua
 
     for (const key of Object.keys(totals)) {
         totals[key] = roundInvoiceNumber(totals[key], INVOICE_NUMBER_FORMAT.storageAmount);
+    }
+
+    if (String(currency).toUpperCase() === "VND") {
+        // Làm tròn tiền hàng trước khi tính thuế, sau đó cộng hai khoản đã làm tròn.
+        totals.tongTienHang = roundInvoiceNumber(totals.tongTienHang, 0);
+        if (cheDoThue === "MotThueSuat") {
+            const rate = toNumber(thueSuatChung ?? lines[0]?.thueSuatGTGT, 0);
+            totals.tongTienThue = roundInvoiceNumber(totals.tongTienHang * rate / 100, 0);
+        } else {
+            const byRate = new Map();
+            for (const line of lines) {
+                const rate = toNumber(line.thueSuatGTGT, 0);
+                byRate.set(rate, (byRate.get(rate) || 0) + calculateLine(line, tyGia, currency).thanhTien);
+            }
+            totals.tongTienThue = [...byRate].reduce((sum, [rate, amount]) =>
+                sum + roundInvoiceNumber(roundInvoiceNumber(amount, 0) * rate / 100, 0), 0);
+        }
+        totals.tongTienThanhToan = totals.tongTienHang + totals.tongTienThue;
+        totals.tongTienHangQuyDoi = totals.tongTienHang;
+        totals.tongTienThueQuyDoi = totals.tongTienThue;
+        totals.tongQuyDoi = totals.tongTienThanhToan;
     }
 
     return totals;

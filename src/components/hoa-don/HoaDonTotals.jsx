@@ -3,7 +3,7 @@ import { calculateTotals, currencyAmountScale, fmtMoney, INVOICE_NUMBER_FORMAT }
 import { amountToVietnameseText } from "../../utils/phieu-sec";
 
 export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND", cheDoThue, thueSuatChung }) {
-    const totals = calculateTotals(lines, tyGia, cheDoThue, thueSuatChung);
+    const totals = calculateTotals(lines, tyGia, cheDoThue, thueSuatChung, currency);
     const totalText = amountToVietnameseText(totals.tongTienThanhToan, currency);
     const Row = ({ label, value, strong, displayCurrency = currency }) => (
         <Box

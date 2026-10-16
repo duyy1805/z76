@@ -1,4 +1,6 @@
+import { useRef, useState } from "react";
 import {
+    Alert,
     Box,
     Button,
     IconButton,
@@ -14,6 +16,8 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import FileUploadIcon from "@mui/icons-material/FileUpload";
+import DownloadIcon from "@mui/icons-material/Download";
 import { NumericFormat } from "react-number-format";
 import {
     calculateLine,
@@ -25,6 +29,7 @@ import {
     VAT_RATE_OPTIONS,
     vatRateValue,
 } from "../../utils/hoa-don";
+import { downloadInvoiceItemTemplate, parseInvoiceItemWorkbook } from "../../utils/hoa-don-item-import";
 
 function NumericTextField({ value, onChange, inputProps, isMoney = false, isQuantity = false, currency = "VND", ...props }) {
     const useVietnameseFormat = isQuantity || isMoney || String(currency || "VND").toUpperCase() === "VND";
@@ -59,6 +64,31 @@ export default function HoaDonItemGrid({
 }) {
     const showTaxPerLine = cheDoThue === "NhieuThueSuat";
     const showDefense = maLoaiHoaDon === "QuocPhong";
+    const fileInput = useRef(null);
+    const [importMessage, setImportMessage] = useState(null);
+
+    const importExcel = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        setImportMessage(null);
+        if (!/\.xlsx?$/i.test(file.name)) {
+            setImportMessage({ severity: "error", text: "Chỉ hỗ trợ file Excel .xlsx hoặc .xls." });
+            return;
+        }
+        try {
+            const rows = parseInvoiceItemWorkbook(await file.arrayBuffer(), {
+                currency,
+                multipleTaxRates: showTaxPerLine,
+            });
+            const populated = lines.some((line) => line.tenHangHoaDichVu || line.maHang || line.soLuong || line.donGia);
+            if (populated && !window.confirm(`Thay thế ${lines.length} dòng hiện tại bằng ${rows.length} dòng từ Excel? Dữ liệu chưa lưu sẽ bị thay thế.`)) return;
+            setLines(rows);
+            setImportMessage({ severity: "success", text: `Đã nhập ${rows.length} dòng hàng hóa từ Excel. Kiểm tra lại trước khi lưu hóa đơn.` });
+        } catch (error) {
+            setImportMessage({ severity: "error", text: error.message || "Không đọc được file Excel." });
+        }
+    };
 
     const updateLine = (index, patch) => {
         setLines((current) => current.map((line, i) => i === index ? { ...line, ...patch } : line));
@@ -137,7 +167,8 @@ export default function HoaDonItemGrid({
                                             : thueSuatChung
                                     ),
                                 },
-                                tyGia
+                                tyGia,
+                                currency
                             );
                             if (showDefense) {
                                 const soLuongThucHien = line.soLuongThucHien || line.soLuong || "";
@@ -238,10 +269,18 @@ export default function HoaDonItemGrid({
                 </Table>
             </TableContainer>
             {!readOnly && (
-                <Button sx={{ mt: 1.25 }} startIcon={<AddIcon />} variant="outlined" onClick={addLine}>
-                    Thêm dòng
-                </Button>
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 1.25 }}>
+                    <Button startIcon={<AddIcon />} variant="outlined" onClick={addLine}>Thêm dòng</Button>
+                    {!showDefense && (
+                        <>
+                            <input ref={fileInput} type="file" accept=".xlsx,.xls" hidden onChange={importExcel} />
+                            <Button startIcon={<FileUploadIcon />} variant="outlined" onClick={() => fileInput.current?.click()}>Nhập Excel</Button>
+                            <Button startIcon={<DownloadIcon />} variant="text" onClick={downloadInvoiceItemTemplate}>Tải file mẫu</Button>
+                        </>
+                    )}
+                </Box>
             )}
+            {importMessage && <Alert sx={{ mt: 1.5 }} severity={importMessage.severity} onClose={() => setImportMessage(null)}>{importMessage.text}</Alert>}
         </Box>
     );
 }
