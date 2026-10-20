@@ -125,6 +125,7 @@ export const INVOICE_NUMBER_FORMAT = {
 };
 
 export const DEFAULT_INVOICE_FORM = {
+    tienThueDieuChinh: null,
     maLoaiHoaDon: "TrongNuoc",
     cheDoThue: "MotThueSuat",
     loaiHinhDoanhThu: "",
@@ -299,6 +300,23 @@ export function calculateTotals(lines = [], tyGia = 1, cheDoThue = "NhieuThueSua
     return totals;
 }
 
+export function totalsWithTaxAdjustment(totals, adjustment, currency = "VND", tyGia = 1) {
+    if (adjustment === null || adjustment === undefined || adjustment === "") return totals;
+    const tax = Number(adjustment);
+    if (!Number.isFinite(tax) || tax < 0) return totals;
+    const scale = currency === "VND" ? 0 : INVOICE_NUMBER_FORMAT.storageAmount;
+    const tongTienThue = roundInvoiceNumber(tax, scale);
+    const tongTienThanhToan = roundInvoiceNumber(totals.tongTienHang + tongTienThue, scale);
+    const tongTienThueQuyDoi = currency === "VND" ? tongTienThue : roundInvoiceNumber(tongTienThue * toNumber(tyGia, 1), INVOICE_NUMBER_FORMAT.storageAmount);
+    return {
+        ...totals,
+        tongTienThue,
+        tongTienThanhToan,
+        tongTienThueQuyDoi,
+        tongQuyDoi: roundInvoiceNumber(totals.tongTienHangQuyDoi + tongTienThueQuyDoi, INVOICE_NUMBER_FORMAT.storageAmount),
+    };
+}
+
 export function normalizeInvoicePayload(form, user) {
     const isOneTax = form.cheDoThue === "MotThueSuat";
     const isCompany = form.loaiNguoiMua !== "CaNhan";
@@ -322,6 +340,8 @@ export function normalizeInvoicePayload(form, user) {
 
     return {
         ...form,
+        tienThueDieuChinh: form.tienThueDieuChinh === null || form.tienThueDieuChinh === "" || form.tienThueDieuChinh === undefined
+            ? null : roundInvoiceNumber(form.tienThueDieuChinh, form.maLoaiTien === "VND" ? 0 : INVOICE_NUMBER_FORMAT.storageAmount),
         thongTinHoaDon: "",
         thongTinDonHang: form.maLoaiHoaDon === "QuocPhong" ? "" : String(form.thongTinDonHang || "").trim(),
         loaiNguoiMua: isCompany ? "DoanhNghiep" : "CaNhan",
@@ -390,8 +410,15 @@ export function invoiceToForm(detail) {
         };
     });
 
+    const computed = calculateTotals(
+        chiTiet.map((line) => ({ ...line, thueSuatGTGT: vatRateValue(detail.cheDoThue === "MotThueSuat" ? chiTiet[0]?.maThueSuatGTGT : line.maThueSuatGTGT) })),
+        detail.tyGia || 1, detail.cheDoThue, vatRateValue(chiTiet[0]?.maThueSuatGTGT), detail.maLoaiTien || "VND"
+    );
+    const savedTax = detail.tongTienThue;
+
     return {
         ...DEFAULT_INVOICE_FORM,
+        tienThueDieuChinh: savedTax != null && Math.abs(Number(savedTax) - computed.tongTienThue) > 0.00001 ? Number(savedTax) : null,
         maLoaiHoaDon: detail.isImportIncomplete ? (detail.maLoaiHoaDon || "") : (detail.maLoaiHoaDon || "TrongNuoc"),
         cheDoThue: detail.cheDoThue || "MotThueSuat",
         loaiHinhDoanhThu: detail.loaiHinhDoanhThu || "",

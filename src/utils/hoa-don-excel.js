@@ -76,6 +76,13 @@ function convertedTaxTotal(invoice, lines) {
     return roundConvertedAmount(lines.reduce((total, line) => total + Number(line.TienThueQuyDoi || 0), 0));
 }
 
+function displayVatRate(line) {
+    const code = String(line.MaThueSuatGTGT ?? "").trim().toUpperCase();
+    if (["KCT", "KKKNT", "KHAC"].includes(code)) return code;
+    if (code && ["0", "5", "8", "10"].includes(code)) return Number(code);
+    return line.ThueSuatGTGT ?? null;
+}
+
 export function buildUpdatedImportRows(invoices = []) {
     const rows = [];
     invoices.forEach((invoice, invoiceIndex) => {
@@ -97,7 +104,7 @@ export function buildUpdatedImportRows(invoices = []) {
                 [UPDATED_IMPORT_HEADERS[9]]: firstLine ? invoice.hinhThucThanhToan || null : null,
                 [UPDATED_IMPORT_HEADERS[10]]: firstLine ? invoice.maLoaiTien || "VND" : null,
                 [UPDATED_IMPORT_HEADERS[11]]: firstLine ? Number(invoice.tyGia || 1) : null,
-                [UPDATED_IMPORT_HEADERS[12]]: line.ThueSuatGTGT ?? null,
+                [UPDATED_IMPORT_HEADERS[12]]: displayVatRate(line),
                 [UPDATED_IMPORT_HEADERS[13]]: firstLine && invoice.tongTienThue != null ? roundCurrencyAmount(invoice.tongTienThue, currency) : null,
                 [UPDATED_IMPORT_HEADERS[14]]: firstLine ? taxConverted : null,
                 [UPDATED_IMPORT_HEADERS[15]]: line.MaHang || null,

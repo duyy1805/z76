@@ -1,9 +1,12 @@
-import { Box, Stack, Typography } from "@mui/material";
-import { calculateTotals, currencyAmountScale, fmtMoney, INVOICE_NUMBER_FORMAT } from "../../utils/hoa-don";
+import { Box, Stack, TextField, Typography } from "@mui/material";
+import { NumericFormat } from "react-number-format";
+import { calculateTotals, currencyAmountScale, fmtMoney, INVOICE_NUMBER_FORMAT, totalsWithTaxAdjustment } from "../../utils/hoa-don";
 import { amountToVietnameseText } from "../../utils/phieu-sec";
 
-export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND", cheDoThue, thueSuatChung }) {
-    const totals = calculateTotals(lines, tyGia, cheDoThue, thueSuatChung, currency);
+export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND", cheDoThue, thueSuatChung, tienThueDieuChinh = null, onTaxChange }) {
+    const automaticTotals = calculateTotals(lines, tyGia, cheDoThue, thueSuatChung, currency);
+    const totals = totalsWithTaxAdjustment(automaticTotals, tienThueDieuChinh, currency, tyGia);
+    const manuallyAdjusted = tienThueDieuChinh !== null && tienThueDieuChinh !== undefined && tienThueDieuChinh !== "";
     const totalText = amountToVietnameseText(totals.tongTienThanhToan, currency);
     const Row = ({ label, value, strong, displayCurrency = currency }) => (
         <Box
@@ -34,7 +37,25 @@ export default function HoaDonTotals({ lines, tyGia = 1, currency = "VND", cheDo
         <Box sx={{ width: "100%" }}>
             <Stack spacing={1}>
                 <Row label="Tổng tiền hàng" value={totals.tongTienHang} />
-                <Row label="Tiền thuế GTGT" value={totals.tongTienThue} />
+                {onTaxChange ? (
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+                        <Typography color="text.secondary" sx={{ fontWeight: 500 }}>Tiền thuế GTGT</Typography>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                            <NumericFormat
+                                customInput={TextField}
+                                size="small"
+                                value={manuallyAdjusted ? tienThueDieuChinh : automaticTotals.tongTienThue}
+                                thousandSeparator=","
+                                decimalScale={currency === "VND" ? 0 : INVOICE_NUMBER_FORMAT.storageAmount}
+                                allowNegative={false}
+                                onValueChange={({ value }) => onTaxChange(value === "" ? null : value)}
+                                slotProps={{ htmlInput: { "aria-label": "Tiền thuế GTGT điều chỉnh" } }}
+                                sx={{ width: { xs: 155, sm: 215 }, '& input': { textAlign: 'right', fontWeight: 650 } }}
+                            />
+                            <Typography>{currency}</Typography>
+                        </Stack>
+                    </Box>
+                ) : <Row label="Tiền thuế GTGT" value={totals.tongTienThue} />}
                 <Row label="Tổng tiền thanh toán" value={totals.tongTienThanhToan} strong />
                 {totalText && (
                     <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>

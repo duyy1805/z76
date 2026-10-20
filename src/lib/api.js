@@ -316,6 +316,15 @@ export const hoaDonApi = {
         const { data } = await httpHd.get(`/hoa-don${q ? `?${q}` : ""}`);
         return data;
     },
+    async getRevenueDashboard(params = {}) {
+        const normalizedParams = { ...params };
+        ["revenueTypes", "invoiceTypes", "departmentIds"].forEach((key) => {
+            if (Array.isArray(normalizedParams[key])) normalizedParams[key] = normalizedParams[key].join(",");
+        });
+        const q = new URLSearchParams(cleanParams(normalizedParams)).toString();
+        const { data } = await httpHd.get(`/dashboard/doanh-thu${q ? `?${q}` : ""}`);
+        return data;
+    },
     async getHoaDon(id, params = {}) {
         const q = new URLSearchParams(cleanParams(params)).toString();
         const { data } = await httpHd.get(`/hoa-don/${id}${q ? `?${q}` : ""}`);

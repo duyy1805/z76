@@ -133,12 +133,19 @@ export default function HoaDonFormPage() {
     const canSaveEdit = !isEdit || canEditInvoiceAllInfo(editInvoice, auth);
     const isProcessingEdit = isEdit && editInvoice?.maTrangThai === "ChoXuLy_HoaDon";
 
-    const setField = (patch) => setForm((current) => ({ ...current, ...patch }));
+    const setField = (patch) => setForm((current) => ({
+        ...current,
+        ...patch,
+        ...(['cheDoThue', 'thueSuatChung', 'tyGia'].some((key) =>
+            Object.hasOwn(patch, key) && patch[key] !== current[key]
+        ) ? { tienThueDieuChinh: null } : {}),
+    }));
     const setCurrency = (maLoaiTien) => {
         setForm((current) => ({
             ...current,
             maLoaiTien,
             tyGia: maLoaiTien === "VND" ? 1 : current.tyGia || 1,
+            tienThueDieuChinh: maLoaiTien === current.maLoaiTien ? current.tienThueDieuChinh : null,
         }));
     };
     const setQuocPhong = (patch) => setForm((current) => ({ ...current, quocPhong: { ...current.quocPhong, ...patch } }));
@@ -335,7 +342,11 @@ export default function HoaDonFormPage() {
                     <Stack spacing={2}>
                         <HoaDonItemGrid
                             lines={form.chiTiet}
-                            setLines={(updater) => setForm((current) => ({ ...current, chiTiet: typeof updater === "function" ? updater(current.chiTiet) : updater }))}
+                            setLines={(updater) => setForm((current) => ({
+                                ...current,
+                                chiTiet: typeof updater === "function" ? updater(current.chiTiet) : updater,
+                                tienThueDieuChinh: null,
+                            }))}
                             maLoaiHoaDon={form.maLoaiHoaDon}
                             cheDoThue={form.cheDoThue}
                             thueSuatChung={form.thueSuatChung}
@@ -343,6 +354,8 @@ export default function HoaDonFormPage() {
                             currency={form.maLoaiTien}
                         />
                         <HoaDonTotals
+                            tienThueDieuChinh={form.tienThueDieuChinh}
+                            onTaxChange={(value) => setField({ tienThueDieuChinh: value })}
                             lines={form.chiTiet.map((line) => ({
                                 ...line,
                                 thueSuatGTGT: vatRateValue(

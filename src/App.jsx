@@ -8,6 +8,7 @@ import HoaDonListPage from "./pages/HoaDonListPage";
 import HoaDonFormPage from "./pages/HoaDonFormPage";
 import HoaDonDetailPage from "./pages/HoaDonDetailPage";
 import HoaDonImportGroupDetailPage from "./pages/HoaDonImportGroupDetailPage";
+import HoaDonRevenueDashboardPage from "./pages/HoaDonRevenueDashboardPage";
 
 import Login from "./pages/Login";
 
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/phieu-vnd" element={<PhieuSec mode="VND" />} />
         <Route path="/phieu-ngoai-te" element={<PhieuSec mode="NgoaiTe" />} />
         <Route path="/hoa-don-dien-tu" element={<HoaDonListPage />} />
+        <Route path="/hoa-don-dien-tu/dashboard" element={<HoaDonRevenueDashboardPage />} />
         <Route path="/hoa-don-dien-tu/new" element={<HoaDonFormPage />} />
         <Route path="/hoa-don-dien-tu/nhom-import/:id" element={<HoaDonImportGroupDetailPage />} />
         <Route path="/hoa-don-dien-tu/:id" element={<HoaDonDetailPage />} />

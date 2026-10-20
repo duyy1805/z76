@@ -29,6 +29,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import { useAuth } from "../../store/useAuth";
 
 const MINI_WIDTH = 72;
@@ -53,6 +54,7 @@ export default function Shell({ children }) {
             { text: "Phiếu séc VND", shortText: "VND", icon: <LibraryBooksIcon />, path: "/phieu-vnd" },
             { text: "Phiếu séc ngoại tệ", shortText: "Ngoại tệ", icon: <LibraryBooksIcon />, path: "/phieu-ngoai-te" },
             { text: "Hóa đơn điện tử", shortText: "HĐĐT", icon: <ReceiptLongIcon />, path: "/hoa-don-dien-tu" },
+            { text: "Dashboard hóa đơn", shortText: "Doanh thu", icon: <AssessmentIcon />, path: "/hoa-don-dien-tu/dashboard" },
         ];
         if (canSeeAdmin) {
             items.push({ text: "Danh mục quản trị", shortText: "Admin", icon: <AdminPanelSettingsIcon />, path: "/admin" });
@@ -113,7 +115,11 @@ export default function Shell({ children }) {
 
             <List sx={{ flex: 1, px: 1.25, py: 2 }}>
                 {menuItems.map((item) => {
-                    const selected = location.pathname === item.path || (item.path === "/hoa-don-dien-tu" && location.pathname.startsWith("/hoa-don-dien-tu"));
+                    const selected = location.pathname === item.path || (
+                        item.path === "/hoa-don-dien-tu"
+                        && location.pathname.startsWith("/hoa-don-dien-tu")
+                        && location.pathname !== "/hoa-don-dien-tu/dashboard"
+                    );
                     return (
                         <ListItem key={item.path} disablePadding>
                             <Tooltip title={drawerCollapsed ? item.text : ""} placement="right">
