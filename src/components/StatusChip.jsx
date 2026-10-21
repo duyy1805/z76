@@ -2,6 +2,7 @@ import { Chip } from "@mui/material";
 
 const STATUS_MAP = {
     KhoiTao: { label: "Nháp", color: "#475467", background: "#F2F4F7" },
+    TraLai: { label: "Phiếu bị trả lại", color: "#B54708", background: "#FFF4E5" },
     ChoDuyet_TBP: { label: "Chờ TBP", color: "#B54708", background: "#FFF4E5" },
     ChoDuyet_ThuKyKTT: { label: "Chờ người phụ trách", color: "#027A48", background: "#ECFDF3" },
     ChoXuLy_HoaDon: { label: "Chờ phụ trách HĐ", color: "#027A48", background: "#ECFDF3" },

@@ -35,6 +35,7 @@ export const stickyStatusCellSx = {
 };
 
 export const DEFAULT_STATUS_ORDER = [
+    "TraLai",
     "KhoiTao",
     "ChoDuyet_TBP",
     "ChoDuyet_ThuKyKTT",
@@ -45,6 +46,7 @@ export const DEFAULT_STATUS_ORDER = [
 ];
 
 export const STATUS_FILTER_OPTIONS = [
+    { value: "TraLai", label: "Phiếu bị trả lại" },
     { value: "KhoiTao", label: "Nháp" },
     { value: "ChoDuyet_TBP", label: "Chờ duyệt TBP" },
     { value: "ChoDuyet_ThuKyKTT", label: "Chờ người phụ trách" },
@@ -56,10 +58,10 @@ export const STATUS_FILTER_OPTIONS = [
 ];
 
 export const STATUS_ORDER_BY_ROLE = {
-    TBP: ["ChoDuyet_TBP", "ChoDuyet_ThuKyKTT", "ChoDuyet_KTT", "ChoDuyet_GD", "KhoiTao", "HoanThanh", "TuChoi"],
-    KTT: ["ChoDuyet_KTT", "ChoDuyet_ThuKyKTT", "ChoDuyet_GD", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
-    GD: ["ChoDuyet_GD", "ChoDuyet_KTT", "ChoDuyet_ThuKyKTT", "ChoDuyet_TBP", "KhoiTao", "HoanThanh", "TuChoi"],
-    Admin: ["KhoiTao", "ChoDuyet_TBP", "ChoDuyet_ThuKyKTT", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"],
+    TBP: ["ChoDuyet_TBP", "ChoDuyet_ThuKyKTT", "ChoDuyet_KTT", "ChoDuyet_GD", "TraLai", "KhoiTao", "HoanThanh", "TuChoi"],
+    KTT: ["ChoDuyet_KTT", "ChoDuyet_ThuKyKTT", "ChoDuyet_GD", "ChoDuyet_TBP", "TraLai", "KhoiTao", "HoanThanh", "TuChoi"],
+    GD: ["ChoDuyet_GD", "ChoDuyet_KTT", "ChoDuyet_ThuKyKTT", "ChoDuyet_TBP", "TraLai", "KhoiTao", "HoanThanh", "TuChoi"],
+    Admin: ["TraLai", "KhoiTao", "ChoDuyet_TBP", "ChoDuyet_ThuKyKTT", "ChoDuyet_KTT", "ChoDuyet_GD", "HoanThanh", "TuChoi"],
 };
 
 const VN_NUMBER_WORDS = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
@@ -180,6 +182,10 @@ export const isSameId = (left, right) =>
     String(left) === String(right);
 
 export function getDisplayStatus(phieu) {
+    if (
+        phieu?.trangThai === "KhoiTao" &&
+        (phieu?.traLaiTime || phieu?.lyDoTraLai)
+    ) return "TraLai";
     if (phieu?.trangThai !== "HoanThanh") return phieu?.trangThai;
     return phieu?.maLenhChi ? "HoanThanh_DaCoLenhChi" : "HoanThanh_ChuaCoLenhChi";
 }

@@ -73,6 +73,8 @@ const logSoSec = (...args) => {
     if (DEBUG_SOSEC) console.log("[SoSec][PhieuSec]", ...args);
 };
 const INACTIVE_DON_VI_MESSAGE = "Đơn vị hưởng thụ đã ngưng sử dụng hoặc không tồn tại";
+const RETURNED_ROW_BACKGROUND = "#FFF8CC";
+const RETURNED_ROW_HOVER_BACKGROUND = "#FFF1A8";
 const getDefaultDateFrom = () => dayjs().subtract(31, "day").startOf("day");
 const getDefaultDateTo = () => dayjs().endOf("day");
 const DetailField = ({ label, children, sx }) => (
@@ -823,8 +825,8 @@ export default function PhieuSec({ mode = "VND" }) {
         if (activeTab === "pending") return matchedRows;
 
         return matchedRows.sort((a, b) => {
-            const rankA = statusRank.get(a.trangThai) ?? statusOrder.length;
-            const rankB = statusRank.get(b.trangThai) ?? statusOrder.length;
+            const rankA = statusRank.get(getDisplayStatus(a)) ?? statusOrder.length;
+            const rankB = statusRank.get(getDisplayStatus(b)) ?? statusOrder.length;
             if (rankA !== rankB) return rankA - rankB;
 
             const dateA = dayjs(a.ngay).isValid() ? dayjs(a.ngay).valueOf() : 0;
@@ -1998,7 +2000,13 @@ export default function PhieuSec({ mode = "VND" }) {
                                             <TableRow
                                                 key={r.id}
                                                 hover
-                                                sx={{ cursor: "pointer" }}
+                                                sx={{
+                                                    cursor: "pointer",
+                                                    bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_BACKGROUND : "inherit",
+                                                    "&.MuiTableRow-hover:hover": {
+                                                        bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_HOVER_BACKGROUND : undefined,
+                                                    },
+                                                }}
                                                 onClick={() => {
                                                     if (hasSelectedText()) return;
                                                     openDetailDialog(r);
@@ -2029,8 +2037,27 @@ export default function PhieuSec({ mode = "VND" }) {
                                                 <TableCell align="right">{r.maLenhChi || "—"}</TableCell>
                                                 <TableCell>{isoToDisplay(getCompletedAt(r)).split(" ")[0]}</TableCell>
                                                 <TableCell>{isoToDisplay(r.gdTime).split(" ")[0]}</TableCell>
-                                                <TableCell sx={stickyStatusCellSx}><StatusChip status={getDisplayStatus(r)} /></TableCell>
-                                                <TableCell sx={stickyActionCellSx} onClick={(e) => e.stopPropagation()}>
+                                                <TableCell
+                                                    sx={{
+                                                        ...stickyStatusCellSx,
+                                                        bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_BACKGROUND : "background.paper",
+                                                        "tr:hover &": {
+                                                            bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_HOVER_BACKGROUND : "background.paper",
+                                                        },
+                                                    }}
+                                                >
+                                                    <StatusChip status={getDisplayStatus(r)} />
+                                                </TableCell>
+                                                <TableCell
+                                                    sx={{
+                                                        ...stickyActionCellSx,
+                                                        bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_BACKGROUND : "background.paper",
+                                                        "tr:hover &": {
+                                                            bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_HOVER_BACKGROUND : "background.paper",
+                                                        },
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
                                                     <PhieuSecActions
                                                         phieu={r}
                                                         canEdit={canEdit(r)}
@@ -2085,7 +2112,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                         sx={{
                                             p: 1.25,
                                             borderRadius: 2.5,
-                                            bgcolor: "background.paper",
+                                            bgcolor: getDisplayStatus(r) === "TraLai" ? RETURNED_ROW_BACKGROUND : "background.paper",
                                             cursor: "pointer",
                                             boxShadow: "0 6px 18px rgba(15, 23, 42, 0.05)",
                                         }}
