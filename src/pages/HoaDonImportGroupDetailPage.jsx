@@ -693,7 +693,7 @@ export default function HoaDonImportGroupDetailPage() {
                     </TableHead>
                     <TableBody>
                         {filteredInvoices.map((invoice) => (
-                            <TableRow key={invoice.id} hover>
+                            <TableRow key={invoice.id} hover sx={invoice.isReturned ? { bgcolor: "#FFF8CC", "&:hover > td": { bgcolor: "#FFF1A8" } } : undefined}>
                                 <TableCell padding="none" align="center" sx={{ width: 58, minWidth: 58 }}>
                                     <Checkbox size="small" sx={{ p: 0.75 }} checked={selectedIds.includes(invoice.id)} disabled={!canProcessInvoiceExportInfo(invoice, auth) && !canDownloadUpdatedInvoice(invoice, auth)} onChange={() => toggleSelectedInvoice(invoice.id)} inputProps={{ "aria-label": `Chọn hóa đơn ${invoice.maDangKy}` }} />
                                 </TableCell>

@@ -916,24 +916,27 @@ export default function PhieuSec({ mode = "VND" }) {
             "Ngày tạo",
         ];
 
+        const excelText = (value) => String(value ?? "").normalize("NFC");
         const rows = filteredRows.map((row, index) => {
             const donVi = donvis.find((item) => item.id === row.donViId);
             const maNganHang = row.maNganHangHuongThu || donVi?.maNganHang || "";
+            const noiDung = excelText(row.noiDung);
+            const tenNganHang = excelText(getTenNganHang(row));
             return [
                 index + 1,
                 "116000002441",
                 isNgoaiTe ? Number(row.soTien || 0) : Math.round(Number(row.soTien || 0)),
                 row.soTaiKhoanHuongThu || donVi?.stk || "",
-                getTenChuyenKhoan(row) || "",
+                excelText(getTenChuyenKhoan(row)),
                 maNganHang,
-                row.noiDung || "",
+                noiDung,
                 "",
                 "",
                 "",
-                getTenNganHang(row) || "",
-                row.tenDonVi || donVi?.name || "",
-                `${row.noiDung || ""}/${getTenNganHang(row)}`,
-                row.tenDonViNguoiTao || "",
+                tenNganHang,
+                excelText(row.tenDonVi || donVi?.name),
+                `${noiDung}/${tenNganHang}`,
+                excelText(row.tenDonViNguoiTao),
                 "331",
                 isoToDisplay(row.ngay).split(" ")[0],
             ];
@@ -979,7 +982,7 @@ export default function PhieuSec({ mode = "VND" }) {
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, sheet, "Danh sach");
         const downloadedAt = dayjs().format("HHmm_DDMMYYYY");
-        XLSX.writeFile(workbook, `sec-chuyen-tien-${isNgoaiTe ? "ngoai-te" : "vnd"}_${downloadedAt}.xls`, { bookType: "xls" });
+        XLSX.writeFile(workbook, `sec-chuyen-tien-${isNgoaiTe ? "ngoai-te" : "vnd"}_${downloadedAt}.xlsx`, { bookType: "xlsx" });
     };
 
     return (

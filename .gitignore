@@ -20,7 +20,6 @@ PLP review project/
 .env
 qlvb-501001-debed95641da.json
 *.sql
-!migrations/20260905_invoice_payment_deadline_tax_total.sql
 
 # Editor directories and files
 .vscode/*

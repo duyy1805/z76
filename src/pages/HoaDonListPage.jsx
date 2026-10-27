@@ -87,6 +87,10 @@ const stickyActionCellSx = {
     bgcolor: "background.paper",
     borderLeft: (theme) => `1px solid ${theme.palette.divider}`,
 };
+const returnedInvoiceRowSx = {
+    bgcolor: "#FFF8CC",
+    "&:hover > td": { bgcolor: "#FFF1A8" },
+};
 
 export default function HoaDonListPage() {
     const navigate = useNavigate();
@@ -549,7 +553,7 @@ export default function HoaDonListPage() {
                     </TableHead>
                     <TableBody>
                         {filteredRows.map((row) => (
-                            <TableRow key={row.id} hover sx={{ "&:hover td:last-of-type": { bgcolor: "action.hover" } }}>
+                            <TableRow key={row.id} hover sx={row.isReturned ? returnedInvoiceRowSx : { "&:hover td:last-of-type": { bgcolor: "action.hover" } }}>
                                 <TableCell padding="none" align="center" sx={{ width: 58, minWidth: 58 }}>
                                     <Checkbox
                                         size="small"
