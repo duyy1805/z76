@@ -33,7 +33,7 @@ import { buildRevenueTypeRows, groupExportCustomers } from "../utils/hoa-don-das
 
 const emptyDashboard = {
     period: {},
-    summary: { invoiceCount: 0, revenueVnd: 0, missingConvertedCount: 0 },
+    summary: { invoiceCount: 0, revenueVnd: 0, taxVnd: 0, totalVnd: 0, missingConvertedCount: 0 },
     byRevenueType: [],
     byDepartment: [],
     exportByCurrency: [],
@@ -80,7 +80,9 @@ function RevenueTooltip({ active, payload, label }) {
     return (
         <Paper sx={{ p: 1.25, border: (theme) => `1px solid ${theme.palette.divider}` }}>
             <Typography variant="body2" fontWeight={700}>{item.fullLabel || label || item.label}</Typography>
-            <Typography variant="body2">{formatVnd(item.revenueVnd)} VND</Typography>
+            <Typography variant="body2">Doanh thu: {formatVnd(item.revenueVnd)} VND</Typography>
+            <Typography variant="body2">Tiền thuế: {formatVnd(item.taxVnd)} VND</Typography>
+            <Typography variant="body2">Tổng thanh toán: {formatVnd(item.totalVnd)} VND</Typography>
             <Typography variant="caption" color="text.secondary">{formatVnd(item.invoiceCount)} hóa đơn</Typography>
         </Paper>
     );
@@ -170,9 +172,13 @@ export default function HoaDonRevenueDashboardPage() {
                 label: item.departmentName || "Chưa xác định",
                 invoiceCount: 0,
                 revenueVnd: 0,
+                taxVnd: 0,
+                totalVnd: 0,
             };
             current.invoiceCount += Number(item.invoiceCount || 0);
             current.revenueVnd += Number(item.revenueVnd || 0);
+            current.taxVnd += Number(item.taxVnd || 0);
+            current.totalVnd += Number(item.totalVnd || 0);
             grouped.set(key, current);
         });
         return Array.from(grouped.values())
@@ -304,13 +310,23 @@ export default function HoaDonRevenueDashboardPage() {
                 </Alert>
             )}
 
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(4, minmax(0, 1fr))" }, gap: 2 }}>
                 <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
-                    <Typography color="text.secondary">Tổng doanh thu quy đổi</Typography>
+                    <Typography color="text.secondary">Doanh thu chưa thuế</Typography>
                     <Typography variant="h4" fontWeight={800} sx={{ mt: 0.75 }}>{formatVnd(dashboard.summary?.revenueVnd)} VND</Typography>
                     <Typography variant="caption" color="text.secondary">
                         {dashboard.period?.dateFrom || filters.dateFrom} đến {dashboard.period?.dateTo || filters.dateTo}
                     </Typography>
+                </Paper>
+                <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+                    <Typography color="text.secondary">Tiền thuế</Typography>
+                    <Typography variant="h4" fontWeight={800} sx={{ mt: 0.75 }}>{formatVnd(dashboard.summary?.taxVnd)} VND</Typography>
+                    <Typography variant="caption" color="text.secondary">Tổng tiền thuế quy đổi</Typography>
+                </Paper>
+                <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+                    <Typography color="text.secondary">Tổng thanh toán</Typography>
+                    <Typography variant="h4" fontWeight={800} sx={{ mt: 0.75 }}>{formatVnd(dashboard.summary?.totalVnd)} VND</Typography>
+                    <Typography variant="caption" color="text.secondary">Doanh thu cộng tiền thuế</Typography>
                 </Paper>
                 <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
                     <Typography color="text.secondary">Số hóa đơn đã xuất</Typography>
@@ -389,13 +405,15 @@ export default function HoaDonRevenueDashboardPage() {
                     <Typography variant="h6" fontWeight={750}>Chi tiết loại hình và bộ phận đăng ký</Typography>
                 </Box>
                 <TableContainer>
-                    <Table size="small" sx={{ minWidth: 760 }}>
+                    <Table size="small" sx={{ minWidth: 980 }}>
                         <TableHead>
                             <TableRow>
                                 <TableCell width={52} />
                                 <TableCell>Loại hình doanh thu</TableCell>
                                 <TableCell align="right">Số hóa đơn</TableCell>
-                                <TableCell align="right">Doanh thu VND</TableCell>
+                                <TableCell align="right">Doanh thu VND (chưa thuế)</TableCell>
+                                <TableCell align="right">Tiền thuế VND</TableCell>
+                                <TableCell align="right">Tổng thanh toán VND</TableCell>
                                 <TableCell align="right">Tỷ trọng</TableCell>
                             </TableRow>
                         </TableHead>
@@ -413,17 +431,21 @@ export default function HoaDonRevenueDashboardPage() {
                                             <TableCell><b>{revenueTypeLabel(item.revenueType)}</b></TableCell>
                                             <TableCell align="right">{formatVnd(item.invoiceCount)}</TableCell>
                                             <TableCell align="right">{formatVnd(item.revenueVnd)}</TableCell>
+                                            <TableCell align="right">{formatVnd(item.taxVnd)}</TableCell>
+                                            <TableCell align="right">{formatVnd(item.totalVnd)}</TableCell>
                                             <TableCell align="right">{(Number(item.share || 0) * 100).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%</TableCell>
                                         </TableRow>
                                         <TableRow>
-                                            <TableCell colSpan={5} sx={{ py: 0, bgcolor: "action.hover" }}>
+                                            <TableCell colSpan={7} sx={{ py: 0, bgcolor: "action.hover" }}>
                                                 <Collapse in={expanded} timeout="auto" unmountOnExit>
                                                     <Table size="small" sx={{ my: 1, ml: { xs: 0, md: 4 }, width: { xs: "100%", md: "calc(100% - 32px)" } }}>
                                                         <TableHead>
                                                             <TableRow>
                                                                 <TableCell>Bộ phận đăng ký</TableCell>
                                                                 <TableCell align="right">Số hóa đơn</TableCell>
-                                                                <TableCell align="right">Doanh thu VND</TableCell>
+                                                                <TableCell align="right">Doanh thu VND (chưa thuế)</TableCell>
+                                                                <TableCell align="right">Tiền thuế VND</TableCell>
+                                                                <TableCell align="right">Tổng thanh toán VND</TableCell>
                                                             </TableRow>
                                                         </TableHead>
                                                         <TableBody>
@@ -432,6 +454,8 @@ export default function HoaDonRevenueDashboardPage() {
                                                                     <TableCell>{department.departmentName || "Chưa xác định"}</TableCell>
                                                                     <TableCell align="right">{formatVnd(department.invoiceCount)}</TableCell>
                                                                     <TableCell align="right">{formatVnd(department.revenueVnd)}</TableCell>
+                                                                    <TableCell align="right">{formatVnd(department.taxVnd)}</TableCell>
+                                                                    <TableCell align="right">{formatVnd(department.totalVnd)}</TableCell>
                                                                 </TableRow>
                                                             ))}
                                                         </TableBody>
@@ -442,7 +466,7 @@ export default function HoaDonRevenueDashboardPage() {
                                     </Fragment>
                                 );
                             })}
-                            {!typeRows.length && <TableRow><TableCell colSpan={5} align="center">Không có dữ liệu</TableCell></TableRow>}
+                            {!typeRows.length && <TableRow><TableCell colSpan={7} align="center">Không có dữ liệu</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </TableContainer>
@@ -453,18 +477,22 @@ export default function HoaDonRevenueDashboardPage() {
                     <Typography variant="h6" fontWeight={750}>Doanh thu xuất khẩu theo loại tiền</Typography>
                 </Box>
                 <TableContainer>
-                    <Table size="small" sx={{ minWidth: 620 }}>
-                        <TableHead><TableRow><TableCell>Loại tiền</TableCell><TableCell align="right">Số hóa đơn</TableCell><TableCell align="right">Tổng nguyên tệ</TableCell><TableCell align="right">Quy đổi VND</TableCell></TableRow></TableHead>
+                    <Table size="small" sx={{ minWidth: 1180 }}>
+                        <TableHead><TableRow><TableCell>Loại tiền</TableCell><TableCell align="right">Số hóa đơn</TableCell><TableCell align="right">Doanh thu nguyên tệ</TableCell><TableCell align="right">Thuế nguyên tệ</TableCell><TableCell align="right">Tổng nguyên tệ</TableCell><TableCell align="right">Doanh thu VND</TableCell><TableCell align="right">Thuế VND</TableCell><TableCell align="right">Tổng VND</TableCell></TableRow></TableHead>
                         <TableBody>
                             {(dashboard.exportByCurrency || []).map((item) => (
                                 <TableRow key={item.currencyCode}>
                                     <TableCell><b>{item.currencyCode}</b></TableCell>
                                     <TableCell align="right">{formatVnd(item.invoiceCount)}</TableCell>
-                                    <TableCell align="right">{formatOriginalAmount(item.originalAmount)} {item.currencyCode}</TableCell>
+                                    <TableCell align="right">{formatOriginalAmount(item.revenueOriginal)} {item.currencyCode}</TableCell>
+                                    <TableCell align="right">{formatOriginalAmount(item.taxOriginal)} {item.currencyCode}</TableCell>
+                                    <TableCell align="right">{formatOriginalAmount(item.totalOriginal)} {item.currencyCode}</TableCell>
                                     <TableCell align="right">{formatVnd(item.revenueVnd)}</TableCell>
+                                    <TableCell align="right">{formatVnd(item.taxVnd)}</TableCell>
+                                    <TableCell align="right">{formatVnd(item.totalVnd)}</TableCell>
                                 </TableRow>
                             ))}
-                            {!dashboard.exportByCurrency?.length && <TableRow><TableCell colSpan={4} align="center">Không có doanh thu xuất khẩu</TableCell></TableRow>}
+                            {!dashboard.exportByCurrency?.length && <TableRow><TableCell colSpan={8} align="center">Không có doanh thu xuất khẩu</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </TableContainer>
@@ -475,8 +503,8 @@ export default function HoaDonRevenueDashboardPage() {
                     <Typography variant="h6" fontWeight={750}>Doanh thu xuất khẩu theo khách hàng</Typography>
                 </Box>
                 <TableContainer>
-                    <Table size="small" sx={{ minWidth: 900 }}>
-                        <TableHead><TableRow><TableCell>Khách hàng</TableCell><TableCell>Mã số thuế</TableCell><TableCell align="right">Số hóa đơn</TableCell><TableCell>Chi tiết nguyên tệ</TableCell><TableCell align="right">Tổng VND</TableCell></TableRow></TableHead>
+                    <Table size="small" sx={{ minWidth: 1180 }}>
+                        <TableHead><TableRow><TableCell>Khách hàng</TableCell><TableCell>Mã số thuế</TableCell><TableCell align="right">Số hóa đơn</TableCell><TableCell>Chi tiết nguyên tệ</TableCell><TableCell align="right">Doanh thu VND</TableCell><TableCell align="right">Thuế VND</TableCell><TableCell align="right">Tổng VND</TableCell></TableRow></TableHead>
                         <TableBody>
                             {customerRows.map((customer) => (
                                 <TableRow key={customer.customerKey}>
@@ -487,15 +515,17 @@ export default function HoaDonRevenueDashboardPage() {
                                         <Stack spacing={0.25}>
                                             {customer.currencies.map((currency) => (
                                                 <Typography variant="body2" key={currency.currencyCode}>
-                                                    {currency.currencyCode}: {formatOriginalAmount(currency.originalAmount)} · {formatVnd(currency.invoiceCount)} HĐ
+                                                    {currency.currencyCode}: doanh thu {formatOriginalAmount(currency.revenueOriginal)} · thuế {formatOriginalAmount(currency.taxOriginal)} · tổng {formatOriginalAmount(currency.totalOriginal)} · {formatVnd(currency.invoiceCount)} HĐ
                                                 </Typography>
                                             ))}
                                         </Stack>
                                     </TableCell>
                                     <TableCell align="right">{formatVnd(customer.revenueVnd)}</TableCell>
+                                    <TableCell align="right">{formatVnd(customer.taxVnd)}</TableCell>
+                                    <TableCell align="right">{formatVnd(customer.totalVnd)}</TableCell>
                                 </TableRow>
                             ))}
-                            {!customerRows.length && <TableRow><TableCell colSpan={5} align="center">Không có dữ liệu khách hàng xuất khẩu</TableCell></TableRow>}
+                            {!customerRows.length && <TableRow><TableCell colSpan={7} align="center">Không có dữ liệu khách hàng xuất khẩu</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </TableContainer>

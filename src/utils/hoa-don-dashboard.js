@@ -28,18 +28,26 @@ export function groupExportCustomers(rows = []) {
             taxCode: item.taxCode || null,
             invoiceCount: 0,
             revenueVnd: 0,
+            taxVnd: 0,
+            totalVnd: 0,
             missingConvertedCount: 0,
             currencies: [],
         };
         current.invoiceCount += Number(item.invoiceCount || 0);
         current.revenueVnd += Number(item.revenueVnd || 0);
+        current.taxVnd += Number(item.taxVnd || 0);
+        current.totalVnd += Number(item.totalVnd || 0);
         current.missingConvertedCount += Number(item.missingConvertedCount || 0);
         if (!current.taxCode && item.taxCode) current.taxCode = item.taxCode;
         current.currencies.push({
             currencyCode: item.currencyCode || "VND",
             invoiceCount: Number(item.invoiceCount || 0),
-            originalAmount: Number(item.originalAmount || 0),
+            revenueOriginal: Number(item.revenueOriginal || 0),
+            taxOriginal: Number(item.taxOriginal || 0),
+            totalOriginal: Number(item.totalOriginal || 0),
             revenueVnd: Number(item.revenueVnd || 0),
+            taxVnd: Number(item.taxVnd || 0),
+            totalVnd: Number(item.totalVnd || 0),
         });
         grouped.set(key, current);
     });

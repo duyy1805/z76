@@ -2482,6 +2482,15 @@ export default function PhieuSec({ mode = "VND" }) {
                                             {detail.lyDoTraLai}
                                         </DetailField>
                                     )}
+                                    {detail.lyDoTuChoi && (
+                                        <>
+                                            <DetailField label="Người từ chối">{detail.nguoiTuChoi || "—"}</DetailField>
+                                            <DetailField label="Từ chối lúc">{isoToDisplay(detail.tuChoiTime)}</DetailField>
+                                            <DetailField label="Lý do từ chối" sx={{ gridColumn: { sm: "span 3" } }}>
+                                                {detail.lyDoTuChoi}
+                                            </DetailField>
+                                        </>
+                                    )}
                                 </Box>
 
                                 {detailLoading && (

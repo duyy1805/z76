@@ -4,6 +4,7 @@ import {
     Alert,
     Box,
     Button,
+    Checkbox,
     Chip,
     CircularProgress,
     Dialog,
@@ -30,8 +31,8 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ClearIcon from "@mui/icons-material/Clear";
 import DownloadIcon from "@mui/icons-material/Download";
 import { hoaDonApi } from "../../lib/api";
-import { formatInvoiceDate, formatInvoiceDateTime, hasInvoicePermission, invoiceDateTimeKey } from "../../utils/hoa-don";
-import { UPDATED_IMPORT_HEADERS } from "../../utils/hoa-don-excel";
+import { canDownloadUpdatedInvoice, formatInvoiceDate, formatInvoiceDateTime, hasInvoicePermission, invoiceDateTimeKey } from "../../utils/hoa-don";
+import { buildUpdatedImportRows, UPDATED_IMPORT_HEADERS, writeUpdatedExcelFile } from "../../utils/hoa-don-excel";
 import { withInvoiceReturnTo } from "../../utils/hoa-don-navigation";
 import TableHeaderFilter from "./TableHeaderFilter";
 
@@ -92,6 +93,24 @@ function GroupSummary({ group }) {
     return parts.map(([label, count]) => `${label}: ${count}`).join(" · ") || "Chưa có dữ liệu";
 }
 
+function groupMayHaveDownloadableInvoices(group) {
+    return Number(group?.soSanSangXuat || 0) + Number(group?.soHoanTat || 0) > 0;
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+    const worker = async () => {
+        while (nextIndex < items.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            results[index] = await mapper(items[index], index);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+    return results;
+}
+
 const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navigate, returnTo, filters, onFilterChange, onToast, creationBlocked = false }, ref) {
     const [groups, setGroups] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -103,6 +122,8 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
     const [creating, setCreating] = useState(false);
     const [groupToDelete, setGroupToDelete] = useState(null);
     const [deletingGroup, setDeletingGroup] = useState(false);
+    const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+    const [exportingSelectedGroups, setExportingSelectedGroups] = useState(false);
     const [columnFilters, setColumnFilters] = useState({ maNhom: "", fileName: "", department: "", countFrom: "", countTo: "", progress: "" });
     const setColumnFilter = (patch) => setColumnFilters((current) => ({ ...current, ...patch }));
 
@@ -110,7 +131,10 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
         if (!user?.id || !user?.idDonVi) return;
         setLoading(true);
         try {
-            setGroups(await hoaDonApi.listNhomImport(user));
+            const nextGroups = await hoaDonApi.listNhomImport(user);
+            const existingIds = new Set(nextGroups.filter(groupMayHaveDownloadableInvoices).map((group) => Number(group.nhomImportId)));
+            setGroups(nextGroups);
+            setSelectedGroupIds((current) => current.filter((id) => existingIds.has(Number(id))));
         } catch (error) {
             onToast("error", error?.response?.data?.message || "Không lấy được danh sách nhóm import.");
         } finally {
@@ -226,7 +250,66 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
             return matchesKeyword && matchesCreator && matchesStatus && matchesFrom && matchesTo && matchesGroupCode && matchesFileName && matchesDepartment && matchesCountFrom && matchesCountTo && matchesProgress;
         });
     }, [columnFilters, filters, groups]);
+    const filteredSelectableGroupIds = useMemo(
+        () => filteredGroups.filter(groupMayHaveDownloadableInvoices).map((group) => Number(group.nhomImportId)),
+        [filteredGroups],
+    );
+    const selectedFilteredGroupCount = filteredSelectableGroupIds.filter((id) => selectedGroupIds.includes(id)).length;
+    const allFilteredGroupsSelected = filteredSelectableGroupIds.length > 0 && selectedFilteredGroupCount === filteredSelectableGroupIds.length;
+    const someFilteredGroupsSelected = selectedFilteredGroupCount > 0 && !allFilteredGroupsSelected;
     const hasFilters = Boolean(filters?.keyword || filters?.creator || filters?.status || filters?.dateFrom || filters?.dateTo);
+
+    const toggleGroup = (groupId) => setSelectedGroupIds((current) => (
+        current.includes(groupId) ? current.filter((id) => id !== groupId) : [...current, groupId]
+    ));
+
+    const toggleAllFilteredGroups = () => setSelectedGroupIds((current) => {
+        const visibleIds = new Set(filteredSelectableGroupIds);
+        if (allFilteredGroupsSelected) return current.filter((id) => !visibleIds.has(id));
+        return [...new Set([...current, ...filteredSelectableGroupIds])];
+    });
+
+    const exportSelectedGroups = async () => {
+        const selectedGroups = groups.filter((group) => selectedGroupIds.includes(Number(group.nhomImportId)));
+        if (!selectedGroups.length) {
+            onToast("warning", "Chọn ít nhất một nhóm có hóa đơn Sẵn sàng xuất, Đã xuất hoặc Hoàn thành.");
+            return;
+        }
+
+        setExportingSelectedGroups(true);
+        try {
+            const groupDetails = await mapWithConcurrency(selectedGroups, 3, (group) => hoaDonApi.getNhomImport(group.nhomImportId, user));
+            const invoiceMap = new Map();
+            const groupsWithInvoices = new Set();
+            groupDetails.forEach((detail) => {
+                (detail?.invoices || []).forEach((invoice) => {
+                    if (!canDownloadUpdatedInvoice(invoice, auth) || invoiceMap.has(Number(invoice.id))) return;
+                    invoiceMap.set(Number(invoice.id), invoice);
+                    groupsWithInvoices.add(Number(detail?.group?.nhomImportId));
+                });
+            });
+
+            const invoices = Array.from(invoiceMap.values());
+            if (!invoices.length) throw new Error("Các nhóm đã chọn không có hóa đơn Sẵn sàng xuất, Đã xuất hoặc Hoàn thành mà bạn được phép tải.");
+
+            const details = await mapWithConcurrency(invoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
+                userId: user.id,
+                idDonVi: user.idDonVi,
+            }));
+            const rows = buildUpdatedImportRows(details);
+            if (!rows.length) throw new Error("Các hóa đơn trong nhóm đã chọn không có dòng hàng hóa để xuất Excel.");
+
+            const fileBaseName = selectedGroups.length === 1
+                ? selectedGroups[0].maNhom
+                : `nhom-import-${selectedGroups.length}-nhom`;
+            writeUpdatedExcelFile(rows, fileBaseName, details);
+            onToast("success", `Đã tạo Excel gồm ${details.length} hóa đơn từ ${groupsWithInvoices.size}/${selectedGroups.length} nhóm đã chọn.`);
+        } catch (error) {
+            onToast("error", error?.response?.data?.message || error?.message || "Không thể tạo Excel từ các nhóm đã chọn.");
+        } finally {
+            setExportingSelectedGroups(false);
+        }
+    };
 
     const confirmDeleteGroup = async () => {
         if (!groupToDelete?.nhomImportId) return;
@@ -288,10 +371,35 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                 </Box>
             </Paper>
 
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+                <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={exportingSelectedGroups ? <CircularProgress size={18} color="inherit" /> : <DownloadIcon />}
+                    disabled={!selectedGroupIds.length || exportingSelectedGroups}
+                    onClick={exportSelectedGroups}
+                >
+                    {exportingSelectedGroups ? "Đang tạo Excel..." : `Xuất Excel nhóm đã chọn (${selectedGroupIds.length})`}
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                    Chỉ xuất các hóa đơn Sẵn sàng xuất, Đã xuất hoặc Hoàn thành mà bạn có quyền tải.
+                </Typography>
+            </Stack>
+
             <TableContainer component={Paper} elevation={0} sx={{ flex: 1, minHeight: 0, border: (theme) => `1px solid ${theme.palette.divider}`, borderRadius: 3 }}>
                 <Table stickyHeader size="small">
                     <TableHead>
                         <TableRow>
+                            <TableCell padding="checkbox">
+                                <Checkbox
+                                    size="small"
+                                    checked={allFilteredGroupsSelected}
+                                    indeterminate={someFilteredGroupsSelected}
+                                    disabled={!filteredSelectableGroupIds.length || exportingSelectedGroups}
+                                    onChange={toggleAllFilteredGroups}
+                                    inputProps={{ "aria-label": "Chọn tất cả nhóm đang hiển thị có thể xuất Excel" }}
+                                />
+                            </TableCell>
                             <TableCell><TableHeaderFilter label="Mã nhóm" active={Boolean(columnFilters.maNhom)} onClear={() => setColumnFilter({ maNhom: "" })}><TextField autoFocus size="small" label="Mã nhóm" value={columnFilters.maNhom} onChange={(event) => setColumnFilter({ maNhom: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="File gốc" active={Boolean(columnFilters.fileName)} onClear={() => setColumnFilter({ fileName: "" })}><TextField autoFocus size="small" label="Tên file" value={columnFilters.fileName} onChange={(event) => setColumnFilter({ fileName: event.target.value })} /></TableHeaderFilter></TableCell>
                             <TableCell><TableHeaderFilter label="Người import" active={Boolean(filters?.creator)} onClear={() => onFilterChange({ groupCreator: "" })}><TextField autoFocus size="small" label="Người import" value={filters?.creator || ""} onChange={(event) => onFilterChange({ groupCreator: event.target.value })} /></TableHeaderFilter></TableCell>
@@ -308,6 +416,15 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                             const status = groupStatus(group);
                             return (
                                 <TableRow key={group.nhomImportId} hover>
+                                    <TableCell padding="checkbox">
+                                        <Checkbox
+                                            size="small"
+                                            checked={selectedGroupIds.includes(Number(group.nhomImportId))}
+                                            disabled={!groupMayHaveDownloadableInvoices(group) || exportingSelectedGroups}
+                                            onChange={() => toggleGroup(Number(group.nhomImportId))}
+                                            inputProps={{ "aria-label": `Chọn nhóm ${group.maNhom} để xuất Excel` }}
+                                        />
+                                    </TableCell>
                                     <TableCell sx={{ fontWeight: 750 }}>{group.maNhom}</TableCell>
                                     <TableCell>{group.fileName}</TableCell>
                                     <TableCell>{group.tenNguoiTao || group.nguoiTaoId}</TableCell>
@@ -334,7 +451,7 @@ const ImportGroupPanel = forwardRef(function ImportGroupPanel({ user, auth, navi
                         })}
                         {!filteredGroups.length && (
                             <TableRow>
-                                <TableCell colSpan={9} align="center" sx={{ py: 6, color: "text.secondary" }}>
+                                <TableCell colSpan={10} align="center" sx={{ py: 6, color: "text.secondary" }}>
                                     {loading ? "Đang tải..." : hasFilters ? "Không có nhóm import phù hợp bộ lọc." : "Chưa có nhóm import nào."}
                                 </TableCell>
                             </TableRow>

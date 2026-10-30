@@ -515,7 +515,7 @@ export function canViewExportedInvoice(invoice, auth) {
 export function canDownloadUpdatedInvoice(invoice, auth) {
     if (!invoice) return false;
     if (invoice.maTrangThai === "SanSangXuat") return canConfirmInvoiceExported(invoice, auth);
-    if (invoice.maTrangThai !== "DaXuat") return false;
+    if (!["DaXuat", "HoanThanh"].includes(invoice.maTrangThai)) return false;
     return hasInvoicePermission(auth, "HD_Admin") ||
         hasInvoicePermission(auth, "HD_XuatHoaDon") ||
         hasInvoicePermission(auth, "HD_XemHoaDonDaXuat") ||

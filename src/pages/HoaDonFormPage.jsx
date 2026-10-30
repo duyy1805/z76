@@ -267,7 +267,7 @@ export default function HoaDonFormPage() {
                             <MenuItem value="" disabled>Chọn loại hóa đơn</MenuItem>
                             {Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                         </TextField>
-                        <TextField type="date" label="Ngày hóa đơn" value={form.ngayHoaDon || ""} onChange={(e) => setField({ ngayHoaDon: e.target.value })} InputLabelProps={{ shrink: true }} />
+                        <TextField type="date" label="Ngày hóa đơn" value={form.ngayHoaDon || ""} disabled InputLabelProps={{ shrink: true }} />
                         <TextField required type="date" label="Thời hạn thanh toán" value={form.hanThanhToan || ""} onChange={(e) => setField({ hanThanhToan: e.target.value })} InputLabelProps={{ shrink: true }} />
                         <TextField select label="Chế độ thuế" value={form.cheDoThue} onChange={(e) => setField({ cheDoThue: e.target.value })}>
                             {Object.entries(TAX_MODE_LABELS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import * as XLSX from "xlsx";
 import {
     Alert,
     Box,
@@ -59,7 +58,7 @@ import {
     vatRateValue,
 } from "../utils/hoa-don";
 import { currentInvoicePath, safeInvoiceReturnTo, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
-import { applyUpdatedImportDateFormats, buildUpdatedImportRows, UPDATED_IMPORT_HEADERS } from "../utils/hoa-don-excel";
+import { buildUpdatedImportRows, UPDATED_IMPORT_HEADERS, writeUpdatedExcelFile } from "../utils/hoa-don-excel";
 import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -74,10 +73,6 @@ async function mapWithConcurrency(items, concurrency, mapper) {
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
     return results;
-}
-
-function safeExcelFileName(value) {
-    return String(value || "nhom-import").replace(/[\\/:*?"<>|]+/g, "-").trim() || "nhom-import";
 }
 
 function todayDateInputValue() {
@@ -110,17 +105,6 @@ function formatExcelPreviewCell(header, value) {
         return fmtMoney(number, 3);
     }
     return value;
-}
-
-function writeUpdatedExcelFile(rows, groupCode) {
-    const worksheet = XLSX.utils.json_to_sheet(rows, { header: UPDATED_IMPORT_HEADERS });
-    applyUpdatedImportDateFormats(worksheet, rows);
-    worksheet["!cols"] = UPDATED_IMPORT_HEADERS.map((header) => ({
-        wch: Math.min(Math.max(header.length + 2, header.includes("Tên") || header === "Địa chỉ" ? 28 : 14), 42),
-    }));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Hóa đơn GTGT");
-    XLSX.writeFile(workbook, `${safeExcelFileName(groupCode)}-da-cap-nhat.xlsx`);
 }
 
 function initialPreviewInfo(detail) {
@@ -409,7 +393,7 @@ export default function HoaDonImportGroupDetailPage() {
     };
 
     const loadUpdatedExcelRows = async () => {
-        if (!selectedDownloadableInvoices.length) throw new Error("Chọn ít nhất một hóa đơn Sẵn sàng xuất hoặc Đã xuất.");
+        if (!selectedDownloadableInvoices.length) throw new Error("Chọn ít nhất một hóa đơn Sẵn sàng xuất, Đã xuất hoặc Hoàn thành.");
         const details = await mapWithConcurrency(selectedDownloadableInvoices, 5, (invoice) => hoaDonApi.getHoaDon(invoice.id, {
                 userId: user.id,
                 idDonVi: user.idDonVi,
@@ -424,7 +408,7 @@ export default function HoaDonImportGroupDetailPage() {
         setExportingUpdated(true);
         try {
             const { details, rows } = await loadUpdatedExcelRows();
-            writeUpdatedExcelFile(rows, data?.group?.maNhom);
+            writeUpdatedExcelFile(rows, data?.group?.maNhom, details);
             setToast({ open: true, type: "success", msg: `Đã tạo file Excel từ dữ liệu mới nhất của ${details.length} hóa đơn.` });
         } catch (error) {
             setToast({ open: true, type: "error", msg: error?.response?.data?.message || error?.message || "Không thể tạo file Excel cập nhật." });
@@ -459,7 +443,7 @@ export default function HoaDonImportGroupDetailPage() {
 
     const downloadPreviewedExcel = () => {
         const downloadableDetails = previewDisplayDetails.filter((detail) => canDownloadUpdatedInvoice(detail, auth));
-        writeUpdatedExcelFile(buildUpdatedImportRows(downloadableDetails), data?.group?.maNhom);
+        writeUpdatedExcelFile(buildUpdatedImportRows(downloadableDetails), data?.group?.maNhom, downloadableDetails);
         setToast({ open: true, type: "success", msg: "Đã tạo file Excel theo nội dung xem trước." });
     };
 
