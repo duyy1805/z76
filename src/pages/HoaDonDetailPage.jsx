@@ -44,6 +44,8 @@ import {
     fmtMoney,
     formatInvoiceDate,
     formatInvoiceDateTime,
+    getInvoiceDisplayStatus,
+    invoiceMoneyValue,
     invoiceOrderContractInfo,
     INVOICE_NUMBER_FORMAT,
     INVOICE_TYPE_LABELS,
@@ -249,7 +251,10 @@ export default function HoaDonDetailPage() {
     const approveDisabledReason = savingExportInfo ? "Đang lưu thông tin xuất hóa đơn." : "";
     const showTaxPerLine = exportInfo?.cheDoThue === "NhieuThueSuat";
     const currencyOptions = useMemo(() => buildCurrencyOptions(currencies, exportInfo?.maLoaiTien), [currencies, exportInfo?.maLoaiTien]);
-    const totalPaymentText = amountToVietnameseText(detail?.tongTienThanhToan, detail?.maLoaiTien || "VND");
+    const displayedGoodsTotal = invoiceMoneyValue(detail, "tongTienHang", "tongTienHangQuyDoi");
+    const displayedTaxTotal = invoiceMoneyValue(detail, "tongTienThue", "tongTienThueQuyDoi");
+    const displayedPaymentTotal = invoiceMoneyValue(detail, "tongTienThanhToan", "tongThanhToanQuyDoi");
+    const totalPaymentText = amountToVietnameseText(displayedPaymentTotal, detail?.maLoaiTien || "VND");
 
     const setExportField = (patch) => setExportInfo((current) => ({ ...current, ...patch }));
     const setExportLineTax = (soDong, value) => {
@@ -390,7 +395,7 @@ export default function HoaDonDetailPage() {
                         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(returnTo)} sx={{ mb: 1 }}>{invoiceReturnLabel(returnTo)}</Button>
                         <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" useFlexGap>
                             <Typography variant="h5">{detail.maDangKy}</Typography>
-                            <StatusChip status={detail.maTrangThai} />
+                            <StatusChip status={getInvoiceDisplayStatus(detail)} />
                             {detail.maNhomImport && (
                                 <Button
                                     size="small"
@@ -587,9 +592,9 @@ export default function HoaDonDetailPage() {
                         </Table>
                     </TableContainer>
                     <Stack alignItems="flex-end" spacing={1} sx={{ mt: 2 }}>
-                        <Typography>Tổng tiền hàng: <b>{fmtMoney(detail.tongTienHang, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
-                        <Typography>Tiền thuế GTGT: <b>{fmtMoney(detail.tongTienThue, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
-                        <Typography variant="h6">Tổng thanh toán: {fmtMoney(detail.tongTienThanhToan, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</Typography>
+                        <Typography>Tổng tiền hàng: <b>{fmtMoney(displayedGoodsTotal, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
+                        <Typography>Tiền thuế GTGT: <b>{fmtMoney(displayedTaxTotal, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</b></Typography>
+                        <Typography variant="h6">Tổng thanh toán: {fmtMoney(displayedPaymentTotal, currencyAmountScale(detail.maLoaiTien), detail.maLoaiTien)} {detail.maLoaiTien}</Typography>
                         {totalPaymentText && (
                             <Typography variant="body2" color="text.secondary" sx={{ textAlign: "right", maxWidth: 520 }}>
                                 Bằng chữ: {totalPaymentText}

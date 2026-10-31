@@ -36,7 +36,7 @@ import FileUploadIcon from "@mui/icons-material/FileUpload";
 import StatusChip from "../components/StatusChip";
 import { hoaDonApi } from "../lib/api";
 import { useAuth } from "../store/useAuth";
-import { canConfirmInvoiceExported, canDeleteInvoice, canDownloadUpdatedInvoice, canEditInvoiceAllInfo, canProcessInvoiceExportInfo, currencyAmountScale, fmtMoney, formatInvoiceDate, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
+import { canConfirmInvoiceExported, canDeleteInvoice, canDownloadUpdatedInvoice, canEditInvoiceAllInfo, canProcessInvoiceExportInfo, currencyAmountScale, fmtMoney, formatInvoiceDate, getInvoiceDisplayStatus, INVOICE_STATUS_OPTIONS, INVOICE_TYPE_LABELS, issuedInvoiceSymbol, REVENUE_TYPE_LABELS } from "../utils/hoa-don";
 import { currentInvoicePath, readInvoiceListSearch, updateInvoiceListSearch, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
@@ -66,10 +66,11 @@ const COMPACT_INVOICE_TYPE_LABELS = {
 const INVOICE_STATUS_SORT_PRIORITY = {
     TuChoi: 0,
     KhoiTao: 1,
-    ChoDuyet_TBP: 2,
-    ChoXuLy_HoaDon: 3,
-    SanSangXuat: 4,
-    DaXuat: 5,
+    TraLai_HoaDon: 2,
+    ChoDuyet_TBP: 3,
+    ChoXuLy_HoaDon: 4,
+    SanSangXuat: 5,
+    DaXuat: 6,
 };
 
 function compareInvoiceDateAscending(left, right) {
@@ -118,7 +119,7 @@ export default function HoaDonListPage() {
         userId: user?.id,
         idDonVi: user?.idDonVi,
         tukhoa: filters.tukhoa,
-        maTrangThai: filters.maTrangThai,
+        maTrangThai: filters.maTrangThai === "TraLai_HoaDon" ? "KhoiTao" : filters.maTrangThai,
         maLoaiHoaDon: filters.maLoaiHoaDon,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
@@ -199,14 +200,15 @@ export default function HoaDonListPage() {
             const okRevenue = !tableFilters.revenueType || row.loaiHinhDoanhThu === tableFilters.revenueType;
             const okPaymentFrom = !paymentDateFrom || paymentDate >= paymentDateFrom;
             const okPaymentTo = !paymentDateTo || paymentDate <= paymentDateTo;
-            return okMa && okNguoiMua && okNguoiTao && okAmountFrom && okAmountTo && okRevenue && okPaymentFrom && okPaymentTo;
+            const okStatus = !filters.maTrangThai || getInvoiceDisplayStatus(row) === filters.maTrangThai;
+            return okMa && okNguoiMua && okNguoiTao && okAmountFrom && okAmountTo && okRevenue && okPaymentFrom && okPaymentTo && okStatus;
         }).sort((left, right) => {
             const leftIsAssignedWork = responsibleTypeCodes.has(left.maLoaiHoaDon) && canProcessInvoiceExportInfo(left, auth);
             const rightIsAssignedWork = responsibleTypeCodes.has(right.maLoaiHoaDon) && canProcessInvoiceExportInfo(right, auth);
             if (leftIsAssignedWork !== rightIsAssignedWork) return leftIsAssignedWork ? -1 : 1;
 
-            const leftStatusPriority = INVOICE_STATUS_SORT_PRIORITY[left.maTrangThai] ?? Number.MAX_SAFE_INTEGER;
-            const rightStatusPriority = INVOICE_STATUS_SORT_PRIORITY[right.maTrangThai] ?? Number.MAX_SAFE_INTEGER;
+            const leftStatusPriority = INVOICE_STATUS_SORT_PRIORITY[getInvoiceDisplayStatus(left)] ?? Number.MAX_SAFE_INTEGER;
+            const rightStatusPriority = INVOICE_STATUS_SORT_PRIORITY[getInvoiceDisplayStatus(right)] ?? Number.MAX_SAFE_INTEGER;
             if (leftStatusPriority !== rightStatusPriority) return leftStatusPriority - rightStatusPriority;
 
             return compareInvoiceDateAscending(left, right);
@@ -582,7 +584,7 @@ export default function HoaDonListPage() {
                                 <TableCell sx={{ whiteSpace: "nowrap" }}>{formatInvoiceDate(row.ngayHoaDon)}</TableCell>
                                 <TableCell sx={{ whiteSpace: "nowrap" }}>{formatInvoiceDate(row.hanThanhToan)}</TableCell>
                                 <TableCell align="right" sx={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(row.tongTienThanhToan, currencyAmountScale(row.maLoaiTien), row.maLoaiTien)} {row.maLoaiTien}</TableCell>
-                                <TableCell><StatusChip status={row.maTrangThai} /></TableCell>
+                                <TableCell><StatusChip status={getInvoiceDisplayStatus(row)} /></TableCell>
                                 <TableCell sx={{ overflow: "hidden" }}>
                                     <Typography noWrap>{row.tenNguoiDangKy || row.nguoiDangKyId}</Typography>
                                     <Typography variant="caption" color="text.secondary" noWrap component="div">

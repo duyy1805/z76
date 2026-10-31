@@ -48,6 +48,7 @@ import {
     fmtMoney,
     formatInvoiceDate,
     formatInvoiceDateTime,
+    getInvoiceDisplayStatus,
     hasInvoicePermission,
     INVOICE_TYPE_LABELS,
     INVOICE_STATUS_OPTIONS,
@@ -290,7 +291,7 @@ export default function HoaDonImportGroupDetailPage() {
             && (!tableFilters.dateTo || invoiceDate <= tableFilters.dateTo)
             && (tableFilters.amountFrom === "" || amount >= Number(tableFilters.amountFrom))
             && (tableFilters.amountTo === "" || amount <= Number(tableFilters.amountTo))
-            && (!tableFilters.status || invoice.maTrangThai === tableFilters.status)
+            && (!tableFilters.status || getInvoiceDisplayStatus(invoice) === tableFilters.status)
             && (!tableFilters.completion || (tableFilters.completion === "incomplete") === Boolean(invoice.isImportIncomplete));
     }), [invoices, tableFilters]);
     const canSubmitGroup = useMemo(() => {
@@ -691,7 +692,7 @@ export default function HoaDonImportGroupDetailPage() {
                                 <TableCell>{invoice.nguoiLienHe || "—"}</TableCell>
                                 <TableCell>{formatInvoiceDate(invoice.ngayHoaDon)}</TableCell>
                                 <TableCell align="right">{fmtMoney(invoice.tongTienThanhToan, currencyAmountScale(invoice.maLoaiTien), invoice.maLoaiTien)} {invoice.maLoaiTien}</TableCell>
-                                <TableCell><StatusChip status={invoice.maTrangThai} /></TableCell>
+                                <TableCell><StatusChip status={getInvoiceDisplayStatus(invoice)} /></TableCell>
                                 <TableCell><Chip size="small" color={invoice.isImportIncomplete ? "warning" : "success"} label={invoice.isImportIncomplete ? "Cần bổ sung" : "Đủ thông tin"} /></TableCell>
                                 <TableCell align="right">
                                     <Button size="small" startIcon={<VisibilityIcon />} onClick={() => navigateFromGroup(`/hoa-don-dien-tu/${invoice.id}`)}>Xem</Button>
@@ -763,7 +764,7 @@ export default function HoaDonImportGroupDetailPage() {
                 <DialogTitle>Trả lại {selectedReturnableInvoices.length} hóa đơn đã chọn?</DialogTitle>
                 <DialogContent>
                     <Typography color="text.secondary" sx={{ mb: 2 }}>
-                        Các hóa đơn sẽ được chuyển về trạng thái Nháp để người đăng ký chỉnh sửa. Một lý do chung sẽ được ghi nhận cho toàn bộ hóa đơn đã chọn.
+                        Các hóa đơn sẽ hiển thị trạng thái Trả lại để người đăng ký chỉnh sửa và gửi lại. Một lý do chung sẽ được ghi nhận cho toàn bộ hóa đơn đã chọn.
                     </Typography>
                     <TextField
                         autoFocus

@@ -49,6 +49,7 @@ export function invoiceDateTimeKey(value) {
 
 export const INVOICE_STATUS_LABELS = {
     KhoiTao: "Nháp",
+    TraLai_HoaDon: "Trả lại",
     ChoDuyet_TBP: "Chờ TBP duyệt",
     ChoXuLy_HoaDon: "Chờ phụ trách hóa đơn",
     SanSangXuat: "Sẵn sàng xuất",
@@ -57,6 +58,14 @@ export const INVOICE_STATUS_LABELS = {
 };
 
 export const INVOICE_STATUS_OPTIONS = Object.entries(INVOICE_STATUS_LABELS).map(([value, label]) => ({ value, label }));
+
+export function getInvoiceDisplayStatus(invoice) {
+    if (invoice?.maTrangThai !== "KhoiTao") return invoice?.maTrangThai;
+    const hasReturnHistory = (invoice?.lichSuDuyet || []).some((item) =>
+        (item?.HanhDong || item?.hanhDong) === "TraLai"
+    );
+    return invoice?.isReturned || hasReturnHistory ? "TraLai_HoaDon" : "KhoiTao";
+}
 
 export const INVOICE_TYPE_LABELS = {
     TrongNuoc: "Hóa đơn trong nước",
@@ -195,6 +204,14 @@ export function fmtMoney(value, fraction = 0) {
         minimumFractionDigits: fraction,
         maximumFractionDigits: fraction,
     });
+}
+
+export function invoiceMoneyValue(invoice, originalKey, convertedKey) {
+    const useConverted = String(invoice?.maLoaiTien || "VND").toUpperCase() === "VND"
+        && invoice?.[convertedKey] !== null
+        && invoice?.[convertedKey] !== undefined;
+    const value = useConverted ? invoice[convertedKey] : invoice?.[originalKey];
+    return value === null || value === undefined ? null : Number(value);
 }
 
 export function currencyAmountScale(currency = "VND") {
@@ -414,7 +431,7 @@ export function invoiceToForm(detail) {
         chiTiet.map((line) => ({ ...line, thueSuatGTGT: vatRateValue(detail.cheDoThue === "MotThueSuat" ? chiTiet[0]?.maThueSuatGTGT : line.maThueSuatGTGT) })),
         detail.tyGia || 1, detail.cheDoThue, vatRateValue(chiTiet[0]?.maThueSuatGTGT), detail.maLoaiTien || "VND"
     );
-    const savedTax = detail.tongTienThue;
+    const savedTax = invoiceMoneyValue(detail, "tongTienThue", "tongTienThueQuyDoi");
 
     return {
         ...DEFAULT_INVOICE_FORM,
