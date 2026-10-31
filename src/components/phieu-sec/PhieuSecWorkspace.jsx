@@ -77,6 +77,54 @@ const RETURNED_ROW_BACKGROUND = "#FFF8CC";
 const RETURNED_ROW_HOVER_BACKGROUND = "#FFF1A8";
 const getDefaultDateFrom = () => dayjs().subtract(31, "day").startOf("day");
 const getDefaultDateTo = () => dayjs().endOf("day");
+const DEFAULT_TEXT_FILTER_OPERATOR = "contains";
+const TEXT_FILTER_OPERATORS = [
+    { value: "contains", label: "Chứa" },
+    { value: "startsWith", label: "Bắt đầu bằng" },
+    { value: "endsWith", label: "Kết thúc bằng" },
+    { value: "notContains", label: "Không chứa" },
+    { value: "equals", label: "= Bằng" },
+    { value: "greaterThan", label: "> Lớn hơn" },
+    { value: "lessThan", label: "< Nhỏ hơn" },
+    { value: "greaterThanOrEqual", label: ">= Lớn hơn hoặc bằng" },
+    { value: "lessThanOrEqual", label: "<= Nhỏ hơn hoặc bằng" },
+    { value: "notEquals", label: "<> Khác" },
+];
+
+const normalizeFilterText = (value) => stripVN(String(value ?? "").trim().toLowerCase());
+
+const matchesTextFilter = (value, query, operator = DEFAULT_TEXT_FILTER_OPERATOR) => {
+    const normalizedValue = normalizeFilterText(value);
+    const normalizedQuery = normalizeFilterText(query);
+    if (!normalizedQuery) return true;
+
+    if (operator === "startsWith") return normalizedValue.startsWith(normalizedQuery);
+    if (operator === "endsWith") return normalizedValue.endsWith(normalizedQuery);
+    if (operator === "notContains") return !normalizedValue.includes(normalizedQuery);
+    if (operator === "equals") return normalizedValue === normalizedQuery;
+    if (operator === "greaterThan") return normalizedValue.localeCompare(normalizedQuery, "vi") > 0;
+    if (operator === "lessThan") return normalizedValue.localeCompare(normalizedQuery, "vi") < 0;
+    if (operator === "greaterThanOrEqual") return normalizedValue.localeCompare(normalizedQuery, "vi") >= 0;
+    if (operator === "lessThanOrEqual") return normalizedValue.localeCompare(normalizedQuery, "vi") <= 0;
+    if (operator === "notEquals") return normalizedValue !== normalizedQuery;
+    return normalizedValue.includes(normalizedQuery);
+};
+
+const TextFilterConditionSelect = ({ value, onChange }) => (
+    <TextField
+        select
+        fullWidth
+        size="small"
+        label="Điều kiện"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+    >
+        {TEXT_FILTER_OPERATORS.map((option) => (
+            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+        ))}
+    </TextField>
+);
+
 const DetailField = ({ label, children, sx }) => (
     <Box sx={{ minWidth: 0, minHeight: 56, ...sx }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
@@ -168,7 +216,7 @@ const AmountFilterButton = React.memo(function AmountFilterButton({
                             onChange={(event) => setDraftOperator(event.target.value)}
                             sx={{ width: 105, flexShrink: 0 }}
                         >
-                            {["=", ">", "<", ">=", "<="].map((item) => (
+                            {["=", ">", "<", ">=", "<=", "<>"].map((item) => (
                                 <MenuItem key={item} value={item}>{item}</MenuItem>
                             ))}
                         </TextField>
@@ -260,12 +308,19 @@ export default function PhieuSec({ mode = "VND" }) {
 
     // filter (client)
     const [qMa, setQMa] = useState("");
+    const [qMaOperator, setQMaOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qNoiDung, setQNoiDung] = useState("");
+    const [qNoiDungOperator, setQNoiDungOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qDonVi, setQDonVi] = useState(""); // text input cho đơn vị
+    const [qDonViOperator, setQDonViOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qMaNganHang, setQMaNganHang] = useState("");
+    const [qMaNganHangOperator, setQMaNganHangOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qTenNganHang, setQTenNganHang] = useState("");
+    const [qTenNganHangOperator, setQTenNganHangOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qNguoiTao, setQNguoiTao] = useState("");
+    const [qNguoiTaoOperator, setQNguoiTaoOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qDonViNguoiTao, setQDonViNguoiTao] = useState("");
+    const [qDonViNguoiTaoOperator, setQDonViNguoiTaoOperator] = useState(DEFAULT_TEXT_FILTER_OPERATOR);
     const [qFrom, setQFrom] = useState(getDefaultDateFrom);
     const [qTo, setQTo] = useState(getDefaultDateTo);
     const [qCompletedFrom, setQCompletedFrom] = useState(null);
@@ -673,13 +728,6 @@ export default function PhieuSec({ mode = "VND" }) {
         const hasSoTien = qSoTien !== "" && Number.isFinite(Number(qSoTien));
         const hasMobile = qMobile.trim() !== "";
 
-        const qMaNorm = stripVN(qMa.trim().toLowerCase());
-        const qNdNorm = stripVN(qNoiDung.trim().toLowerCase());
-        const qDvNorm = stripVN(qDonVi.trim().toLowerCase());
-        const qMaNganHangNorm = stripVN(qMaNganHang.trim().toLowerCase());
-        const qTenNganHangNorm = stripVN(qTenNganHang.trim().toLowerCase());
-        const qNguoiTaoNorm = stripVN(qNguoiTao.trim().toLowerCase());
-        const qDonViNguoiTaoNorm = stripVN(qDonViNguoiTao.trim().toLowerCase());
         const qMobileNorm = stripVN(qMobile.trim().toLowerCase());
 
         const statusOrder = STATUS_ORDER_BY_ROLE[role] || DEFAULT_STATUS_ORDER;
@@ -732,13 +780,13 @@ export default function PhieuSec({ mode = "VND" }) {
             let okMa = true;
             if (hasMa) {
                 const ma = r.maSoSec || `SS-${r.id}`;
-                okMa = stripVN(String(ma).toLowerCase()).includes(qMaNorm);
+                okMa = matchesTextFilter(ma, qMa, qMaOperator);
             }
 
             // Nội dung
             let okNd = true;
             if (hasNd) {
-                okNd = stripVN(String(r.noiDung || "").toLowerCase()).includes(qNdNorm);
+                okNd = matchesTextFilter(r.noiDung, qNoiDung, qNoiDungOperator);
             }
 
             // Đơn vị
@@ -754,25 +802,25 @@ export default function PhieuSec({ mode = "VND" }) {
                     r.chiNhanhNganHangHuongThu, donVi?.chiNhanhNganHang,
                     r.donViId,
                 ].filter(Boolean).join(" ");
-                okDv = stripVN(searchableDonVi.toLowerCase()).includes(qDvNorm);
+                okDv = matchesTextFilter(searchableDonVi, qDonVi, qDonViOperator);
             }
 
             const donVi = donvis.find((d) => d.id === r.donViId);
             const maNganHang = r.maNganHangHuongThu || donVi?.maNganHang || "";
             const tenNganHang = getTenNganHang(r) || "";
             const okMaNganHang = !hasMaNganHang
-                || stripVN(String(maNganHang).toLowerCase()).includes(qMaNganHangNorm);
+                || matchesTextFilter(maNganHang, qMaNganHang, qMaNganHangOperator);
             const okTenNganHang = !hasTenNganHang
-                || stripVN(String(tenNganHang).toLowerCase()).includes(qTenNganHangNorm);
+                || matchesTextFilter(tenNganHang, qTenNganHang, qTenNganHangOperator);
 
             let okNguoiTao = true;
             if (hasNguoiTao) {
-                okNguoiTao = stripVN(String(r.tenNguoiTao || "").toLowerCase()).includes(qNguoiTaoNorm);
+                okNguoiTao = matchesTextFilter(r.tenNguoiTao, qNguoiTao, qNguoiTaoOperator);
             }
 
             let okDonViNguoiTao = true;
             if (hasDonViNguoiTao) {
-                okDonViNguoiTao = stripVN(String(r.tenDonViNguoiTao || "").toLowerCase()).includes(qDonViNguoiTaoNorm);
+                okDonViNguoiTao = matchesTextFilter(r.tenDonViNguoiTao, qDonViNguoiTao, qDonViNguoiTaoOperator);
             }
 
             const okLoaiChiPhi = !qLoaiChiPhi || r.maLoaiChiPhi === qLoaiChiPhi;
@@ -791,6 +839,8 @@ export default function PhieuSec({ mode = "VND" }) {
                     okSoTien = rowAmount >= filterAmount;
                 } else if (qSoTienOperator === "<=") {
                     okSoTien = rowAmount <= filterAmount;
+                } else if (qSoTienOperator === "<>") {
+                    okSoTien = rowAmount !== filterAmount;
                 } else {
                     okSoTien = rowAmount === filterAmount;
                 }
@@ -835,7 +885,7 @@ export default function PhieuSec({ mode = "VND" }) {
 
             return Number(b.id || 0) - Number(a.id || 0);
         });
-    }, [activeTab, pendingLenhChiRows, rows, qMa, qNoiDung, qDonVi, qMaNganHang, qTenNganHang, qNguoiTao, qDonViNguoiTao, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qGdFrom, qGdTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
+    }, [activeTab, pendingLenhChiRows, rows, qMa, qMaOperator, qNoiDung, qNoiDungOperator, qDonVi, qDonViOperator, qMaNganHang, qMaNganHangOperator, qTenNganHang, qTenNganHangOperator, qNguoiTao, qNguoiTaoOperator, qDonViNguoiTao, qDonViNguoiTaoOperator, qLoaiChiPhi, qSoTienOperator, qSoTien, qMobile, qFrom, qTo, qCompletedFrom, qCompletedTo, qGdFrom, qGdTo, qTrangThai, donvis, role, getTenChuyenKhoan, getTenNganHang]);
 
     const visibleAmountSummary = useMemo(() => {
         const summaryRows = filteredRows || [];
@@ -864,13 +914,34 @@ export default function PhieuSec({ mode = "VND" }) {
 
     // clear từng filter
     const clearFilter = (key) => {
-        if (key === "ma") setQMa("");
-        if (key === "nd") setQNoiDung("");
-        if (key === "dv") setQDonVi("");
-        if (key === "maNganHang") setQMaNganHang("");
-        if (key === "tenNganHang") setQTenNganHang("");
-        if (key === "nguoiTao") setQNguoiTao("");
-        if (key === "donViNguoiTao") setQDonViNguoiTao("");
+        if (key === "ma") {
+            setQMa("");
+            setQMaOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
+        if (key === "nd") {
+            setQNoiDung("");
+            setQNoiDungOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
+        if (key === "dv") {
+            setQDonVi("");
+            setQDonViOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
+        if (key === "maNganHang") {
+            setQMaNganHang("");
+            setQMaNganHangOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
+        if (key === "tenNganHang") {
+            setQTenNganHang("");
+            setQTenNganHangOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
+        if (key === "nguoiTao") {
+            setQNguoiTao("");
+            setQNguoiTaoOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
+        if (key === "donViNguoiTao") {
+            setQDonViNguoiTao("");
+            setQDonViNguoiTaoOperator(DEFAULT_TEXT_FILTER_OPERATOR);
+        }
         if (key === "soTien") {
             setQSoTienOperator("=");
             setQSoTien("");
@@ -1443,6 +1514,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 280 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qMaOperator} onChange={setQMaOperator} />
                                                         <BufferedTextField
                                                             label="Mã sổ séc"
                                                             placeholder="VD: SS-1024 hoặc ABC123"
@@ -1491,6 +1563,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 360 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qNoiDungOperator} onChange={setQNoiDungOperator} />
                                                         <BufferedTextField
                                                             label="Nội dung"
                                                             placeholder="Nhập từ khoá…"
@@ -1499,9 +1572,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             autoFocus
                                                             size="small"
                                                         />
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Tìm không dấu, chứa chuỗi.
-                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">So sánh không phân biệt dấu và chữ hoa/thường.</Typography>
                                                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                             {!!qNoiDung && (
                                                                 <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nd")} size="small">
@@ -1539,6 +1610,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qDonViOperator} onChange={setQDonViOperator} />
                                                         <BufferedTextField
                                                             label="Tên đơn vị"
                                                             placeholder="Nhập từ khoá đơn vị…"
@@ -1586,6 +1658,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qMaNganHangOperator} onChange={setQMaNganHangOperator} />
                                                         <BufferedTextField
                                                             label="Mã ngân hàng"
                                                             placeholder="Nhập mã ngân hàng…"
@@ -1594,9 +1667,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             autoFocus
                                                             size="small"
                                                         />
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Tìm không dấu, chứa chuỗi.
-                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">So sánh không phân biệt dấu và chữ hoa/thường.</Typography>
                                                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                             {!!qMaNganHang && (
                                                                 <Button startIcon={<ClearIcon />} onClick={() => clearFilter("maNganHang")} size="small">
@@ -1631,6 +1702,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qTenNganHangOperator} onChange={setQTenNganHangOperator} />
                                                         <BufferedTextField
                                                             label="Tên ngân hàng"
                                                             placeholder="Nhập tên ngân hàng…"
@@ -1639,9 +1711,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             autoFocus
                                                             size="small"
                                                         />
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Tìm không dấu, chứa chuỗi.
-                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">So sánh không phân biệt dấu và chữ hoa/thường.</Typography>
                                                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                             {!!qTenNganHang && (
                                                                 <Button startIcon={<ClearIcon />} onClick={() => clearFilter("tenNganHang")} size="small">
@@ -1678,6 +1748,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qNguoiTaoOperator} onChange={setQNguoiTaoOperator} />
                                                         <BufferedTextField
                                                             label="Tên người tạo"
                                                             placeholder="Nhập tên người tạo…"
@@ -1686,9 +1757,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             autoFocus
                                                             size="small"
                                                         />
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Tìm theo tên không dấu, chứa chuỗi.
-                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">So sánh không phân biệt dấu và chữ hoa/thường.</Typography>
                                                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                             {!!qNguoiTao && (
                                                                 <Button startIcon={<ClearIcon />} onClick={() => clearFilter("nguoiTao")} size="small">
@@ -1725,6 +1794,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                     PaperProps={{ sx: { p: 1.5, width: 300 } }}
                                                 >
                                                     <Stack spacing={1}>
+                                                        <TextFilterConditionSelect value={qDonViNguoiTaoOperator} onChange={setQDonViNguoiTaoOperator} />
                                                         <BufferedTextField
                                                             label="Đơn vị người tạo"
                                                             placeholder="Nhập tên đơn vị người tạo…"
@@ -1733,9 +1803,7 @@ export default function PhieuSec({ mode = "VND" }) {
                                                             autoFocus
                                                             size="small"
                                                         />
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Tìm theo tên không dấu, chứa chuỗi.
-                                                        </Typography>
+                                                        <Typography variant="caption" color="text.secondary">So sánh không phân biệt dấu và chữ hoa/thường.</Typography>
                                                         <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                             {!!qDonViNguoiTao && (
                                                                 <Button
