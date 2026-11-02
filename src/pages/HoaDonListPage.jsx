@@ -28,6 +28,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DownloadIcon from "@mui/icons-material/Download";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
@@ -40,6 +41,7 @@ import { canConfirmInvoiceExported, canDeleteInvoice, canDownloadUpdatedInvoice,
 import { currentInvoicePath, readInvoiceListSearch, updateInvoiceListSearch, withInvoiceReturnTo } from "../utils/hoa-don-navigation";
 import ImportGroupPanel from "../components/hoa-don/ImportGroupPanel";
 import TableHeaderFilter from "../components/hoa-don/TableHeaderFilter";
+import { writeUsedInvoiceReport } from "../utils/hoa-don-excel";
 
 function normalizeSearch(value) {
     return String(value || "")
@@ -55,6 +57,19 @@ function todayDateInputValue() {
     const date = new Date();
     const timezoneOffsetMs = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+}
+
+async function loadInvoiceDetails(invoiceIds, user, batchSize = 8) {
+    const details = [];
+    for (let index = 0; index < invoiceIds.length; index += batchSize) {
+        const batchIds = invoiceIds.slice(index, index + batchSize);
+        const batch = await Promise.all(batchIds.map((id) => hoaDonApi.getHoaDon(id, {
+            userId: user?.id,
+            idDonVi: user?.idDonVi,
+        })));
+        details.push(...batch);
+    }
+    return details;
 }
 
 const COMPACT_INVOICE_TYPE_LABELS = {
@@ -103,6 +118,7 @@ export default function HoaDonListPage() {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
+    const [exportingReport, setExportingReport] = useState(false);
     const [confirmingExported, setConfirmingExported] = useState(false);
     const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const [confirmExportInfo, setConfirmExportInfo] = useState({});
@@ -282,6 +298,25 @@ export default function HoaDonListPage() {
         }
     };
 
+    const exportSelectedReport = async () => {
+        if (!selectedDownloadableIds.length) {
+            setToast({ open: true, type: "warning", msg: "Chọn ít nhất một hóa đơn để xuất báo cáo." });
+            return;
+        }
+
+        setExportingReport(true);
+        try {
+            const invoices = await loadInvoiceDetails(selectedDownloadableIds, user);
+            const exportedAt = todayDateInputValue().replaceAll("-", "");
+            writeUsedInvoiceReport(invoices, `bao-cao-hoa-don-da-su-dung-${exportedAt}`);
+            setToast({ open: true, type: "success", msg: `Đã xuất báo cáo ${invoices.length} hóa đơn.` });
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || error?.message || "Xuất báo cáo Excel thất bại." });
+        } finally {
+            setExportingReport(false);
+        }
+    };
+
     const openConfirmExportDialog = () => {
         const today = todayDateInputValue();
         setConfirmExportInfo(Object.fromEntries(selectedExportableRows.map((row) => [
@@ -361,6 +396,14 @@ export default function HoaDonListPage() {
                     </Typography>
                 </Box>
                 {activeTab === 0 && <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Button
+                        startIcon={<AssessmentOutlinedIcon />}
+                        variant="outlined"
+                        onClick={exportSelectedReport}
+                        disabled={exportingReport || !selectedDownloadableIds.length}
+                    >
+                        Xuất báo cáo ({selectedDownloadableIds.length})
+                    </Button>
                     <Button
                         startIcon={<DownloadIcon />}
                         variant="outlined"

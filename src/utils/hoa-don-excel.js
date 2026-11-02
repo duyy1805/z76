@@ -36,6 +36,54 @@ export const USED_INVOICE_SUMMARY_HEADERS = [
     "Sum of Tổng tiền TT quy đổi",
 ];
 
+export const USED_INVOICE_DETAIL_HEADERS = [
+    "STT",
+    "Ký hiệu",
+    "Số hóa đơn",
+    "Ngày hóa đơn",
+    "Mã khách hàng",
+    "Tên khách hàng",
+    "Địa chỉ",
+    "MST/CCCD chủ hộ",
+    "Người mua hàng",
+    "Hình thức TT",
+    "Loại tiền",
+    "Tỷ giá",
+    "Mã hàng",
+    "Tên hàng",
+    "Số khung",
+    "Số máy",
+    "Số lô",
+    "Hạn sử dụng",
+    "ĐVT",
+    "Số lượng",
+    "Đơn giá",
+    "Thành tiền",
+    "Thành tiền quy đổi",
+    "Tỷ lệ CK (%)",
+    "Tiền CK",
+    "Tiền chiết khấu quy đổi",
+    "Thuế suất (%)",
+    "Tiền thuế GTGT",
+    "Tiền thuế GTGT quy đổi",
+    "Tổng tiền TT",
+    "Tổng tiền TT quy đổi",
+    "Hàng KM",
+    "Trạng thái HĐ",
+    "Người lập HĐ",
+];
+
+const INVOICE_STATUS_LABELS = {
+    KhoiTao: "Nháp",
+    TraLai_HoaDon: "Trả lại",
+    ChoDuyet_TBP: "Chờ TBP duyệt",
+    ChoXuLy_HoaDon: "Chờ phụ trách hóa đơn",
+    SanSangXuat: "Sẵn sàng xuất",
+    DaXuat: "Đã xuất",
+    HoanThanh: "Hoàn thành",
+    TuChoi: "Từ chối",
+};
+
 const UPDATED_IMPORT_DATE_HEADERS = [UPDATED_IMPORT_HEADERS[1], UPDATED_IMPORT_HEADERS[2]];
 const UPDATED_IMPORT_DATE_COLUMNS = ["B", "C"];
 
@@ -93,9 +141,19 @@ function convertedGoodsTotal(invoice) {
     return null;
 }
 
+function invoiceSymbol(invoice) {
+    return String(invoice?.kyHieuHoaDon || invoice?.kyHieuDuKien || "");
+}
+
+function compareUsedInvoices(left, right) {
+    return invoiceSymbol(left).localeCompare(invoiceSymbol(right), "vi")
+        || String(left?.ngayHoaDon || "").slice(0, 10).localeCompare(String(right?.ngayHoaDon || "").slice(0, 10))
+        || String(left?.soHoaDon || "").localeCompare(String(right?.soHoaDon || ""), "vi", { numeric: true });
+}
+
 export function buildUsedInvoiceSummaryRows(invoices = []) {
     const normalized = invoices.map((invoice) => ({
-        symbol: String(invoice?.kyHieuHoaDon || invoice?.kyHieuDuKien || ""),
+        symbol: invoiceSymbol(invoice),
         dateKey: String(invoice?.ngayHoaDon || "").slice(0, 10),
         dateLabel: summaryDate(invoice?.ngayHoaDon),
         invoiceNumber: invoice?.soHoaDon == null ? "" : String(invoice.soHoaDon),
@@ -140,6 +198,90 @@ export function buildUsedInvoiceSummaryRows(invoices = []) {
     return rows;
 }
 
+function lineTaxAmount(invoice, line) {
+    const savedTax = optionalNumber(line?.TienThueGTGT);
+    if (savedTax != null) return savedTax;
+    const amount = optionalNumber(line?.ThanhTien);
+    const rate = optionalNumber(line?.ThueSuatGTGT);
+    if (amount == null || rate == null) return null;
+    return roundCurrencyAmount(amount * rate / 100, invoice?.maLoaiTien || "VND");
+}
+
+function lineConvertedTax(invoice, line, taxAmount) {
+    const savedTax = optionalNumber(line?.TienThueQuyDoi);
+    if (savedTax != null) return savedTax;
+    if (taxAmount == null) return null;
+    return roundConvertedAmount(taxAmount * Number(invoice?.tyGia || 1));
+}
+
+function promotionValue(line) {
+    const value = String(line?.TinhChatHHDV || "").trim();
+    if (!value) return null;
+    return /khuy[eế]n\s*m[aạ]i|h[aà]ng\s*km/i.test(value) ? "x" : value;
+}
+
+function invoiceStatusLabel(invoice) {
+    return invoice?.tenTrangThai || INVOICE_STATUS_LABELS[invoice?.maTrangThai] || invoice?.maTrangThai || "";
+}
+
+export function buildUsedInvoiceDetailRows(invoices = []) {
+    const rows = [];
+    [...invoices].sort(compareUsedInvoices).forEach((invoice) => {
+        const currency = String(invoice?.maLoaiTien || "VND").toUpperCase();
+        const exchangeRate = optionalNumber(invoice?.tyGia) ?? 1;
+        const lines = invoice?.chiTiet || [];
+        lines.forEach((line) => {
+            const amount = optionalNumber(line?.ThanhTien);
+            const convertedAmount = optionalNumber(line?.ThanhTienQuyDoi)
+                ?? (amount == null ? null : roundConvertedAmount(amount * exchangeRate));
+            const discount = optionalNumber(line?.TienChietKhau);
+            const convertedDiscount = discount == null ? null : roundConvertedAmount(discount * exchangeRate);
+            const taxAmount = lineTaxAmount(invoice, line);
+            const convertedTax = lineConvertedTax(invoice, line, taxAmount);
+            const taxCode = String(line?.MaThueSuatGTGT ?? "").trim().toUpperCase();
+            const numericTaxRate = optionalNumber(line?.ThueSuatGTGT);
+
+            rows.push([
+                rows.length + 1,
+                invoiceSymbol(invoice),
+                invoice?.soHoaDon == null ? "" : String(invoice.soHoaDon),
+                String(invoice?.ngayHoaDon || "").slice(0, 10),
+                invoice?.maKhachHang || "",
+                invoice?.tenNguoiMua || "",
+                invoice?.diaChi || "",
+                invoice?.maSoThue || invoice?.soGiayTo || "",
+                invoice?.nguoiLienHe || "",
+                invoice?.hinhThucThanhToan || "",
+                currency,
+                exchangeRate,
+                line?.MaHang || "",
+                line?.TenHangHoaDichVu || "",
+                "",
+                "",
+                "",
+                "",
+                line?.DonViTinh || "",
+                optionalNumber(line?.SoLuong),
+                optionalNumber(line?.DonGia),
+                amount,
+                convertedAmount,
+                optionalNumber(line?.TyLeChietKhau),
+                discount,
+                convertedDiscount,
+                taxCode && !/^\d+(?:\.\d+)?$/.test(taxCode) ? taxCode : (numericTaxRate == null ? null : numericTaxRate / 100),
+                taxAmount,
+                convertedTax,
+                amount == null && taxAmount == null ? null : Number(amount || 0) + Number(taxAmount || 0),
+                convertedAmount == null && convertedTax == null ? null : Number(convertedAmount || 0) + Number(convertedTax || 0),
+                promotionValue(line),
+                invoiceStatusLabel(invoice),
+                invoice?.tenNguoiDangKy || invoice?.nguoiDangKyId || "",
+            ]);
+        });
+    });
+    return rows;
+}
+
 function appendUsedInvoiceSummarySheet(workbook, invoices) {
     const summaryRows = buildUsedInvoiceSummaryRows(invoices);
     const worksheet = XLSX.utils.aoa_to_sheet([[], [], USED_INVOICE_SUMMARY_HEADERS, ...summaryRows]);
@@ -161,6 +303,117 @@ function appendUsedInvoiceSummarySheet(workbook, invoices) {
         }
     }
     XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+}
+
+function appendUsedInvoiceSymbolSummarySheet(workbook, invoices) {
+    const totalsBySymbol = new Map();
+    invoices.forEach((invoice) => {
+        const symbol = invoiceSymbol(invoice);
+        const totals = totalsBySymbol.get(symbol) || [0, 0];
+        totals[0] += convertedGoodsTotal(invoice) || 0;
+        totals[1] += optionalNumber(invoice?.tongTienThueQuyDoi)
+            ?? (String(invoice?.maLoaiTien || "VND").toUpperCase() === "VND" ? optionalNumber(invoice?.tongTienThue) || 0 : 0);
+        totalsBySymbol.set(symbol, totals);
+    });
+    const rows = [...totalsBySymbol.entries()]
+        .sort(([left], [right]) => left.localeCompare(right, "vi"))
+        .map(([symbol, totals]) => [symbol, ...totals]);
+    const grandTotal = rows.reduce((result, row) => [result[0] + row[1], result[1] + row[2]], [0, 0]);
+    const worksheet = XLSX.utils.aoa_to_sheet([
+        [],
+        [],
+        ["Row Labels", "Sum of Thành tiền quy đổi", "Sum of Tiền thuế GTGT"],
+        ...rows,
+        ["Grand Total", ...grandTotal],
+    ]);
+    worksheet["!cols"] = [{ wch: 14 }, { wch: 26 }, { wch: 23 }];
+    for (let row = 4; row <= rows.length + 4; row += 1) {
+        for (const column of ["B", "C"]) {
+            if (worksheet[`${column}${row}`]) worksheet[`${column}${row}`].z = "#,##0";
+        }
+    }
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet3");
+}
+
+function sumDetailColumn(rows, index) {
+    return rows.reduce((total, row) => total + (optionalNumber(row[index]) || 0), 0);
+}
+
+function reportPeriodLabel(invoices) {
+    const dates = invoices.map((invoice) => String(invoice?.ngayHoaDon || "").slice(0, 10)).filter(Boolean).sort();
+    if (!dates.length) return "Theo các hóa đơn được chọn";
+    return `Từ ngày ${summaryDate(dates[0])} đến ngày ${summaryDate(dates[dates.length - 1])}`;
+}
+
+function appendUsedInvoiceDetailSheet(workbook, invoices) {
+    const detailRows = buildUsedInvoiceDetailRows(invoices);
+    const totalRow = Array(USED_INVOICE_DETAIL_HEADERS.length).fill(null);
+    totalRow[0] = "Tổng cộng";
+    [19, 21, 22, 24, 25, 27, 28, 29, 30].forEach((index) => {
+        totalRow[index] = sumDetailColumn(detailRows, index);
+    });
+    const rows = [
+        [],
+        ["BẢNG KÊ CHI TIẾT HOÁ ĐƠN ĐÃ SỬ DỤNG"],
+        [reportPeriodLabel(invoices)],
+        [],
+        USED_INVOICE_DETAIL_HEADERS,
+        ...detailRows,
+        totalRow,
+        [],
+        [],
+        [null, "Người lập biểu", null, null, null, null, null, null, null, null, null, "Giám đốc"],
+        [null, "(Ký, họ tên)", null, null, null, null, null, null, null, null, null, "(Ký, họ tên, đóng dấu)"],
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const lastDataRow = detailRows.length + 5;
+    const totalExcelRow = lastDataRow + 1;
+    worksheet["!merges"] = [
+        XLSX.utils.decode_range("A2:AH2"),
+        XLSX.utils.decode_range("A3:AH3"),
+        XLSX.utils.decode_range(`B${totalExcelRow + 3}:C${totalExcelRow + 3}`),
+        XLSX.utils.decode_range(`L${totalExcelRow + 3}:M${totalExcelRow + 3}`),
+        XLSX.utils.decode_range(`B${totalExcelRow + 4}:C${totalExcelRow + 4}`),
+        XLSX.utils.decode_range(`L${totalExcelRow + 4}:M${totalExcelRow + 4}`),
+    ];
+    worksheet["!autofilter"] = { ref: `A5:AH${Math.max(lastDataRow, 5)}` };
+    worksheet["!cols"] = [
+        6, 11, 15, 14, 10, 28, 42, 20, 20, 18, 11, 13, 16, 38, 14, 14, 14, 14,
+        11, 14, 16, 18, 20, 14, 16, 23, 15, 18, 23, 18, 23, 11, 18, 22,
+    ].map((wch) => ({ wch }));
+    worksheet["!rows"] = [{ hpt: 20 }, { hpt: 24 }, { hpt: 22 }, { hpt: 8 }, { hpt: 48 }];
+
+    for (let index = 0; index < detailRows.length; index += 1) {
+        const excelRow = index + 6;
+        const serial = toExcelDateSerial(detailRows[index][3]);
+        if (serial != null) worksheet[`D${excelRow}`] = { t: "n", v: serial, z: "dd/mm/yyyy" };
+        for (const column of ["T", "U", "V", "X", "Y", "Z", "AB", "AD"]) {
+            if (worksheet[`${column}${excelRow}`]) worksheet[`${column}${excelRow}`].z = "#,##0.####";
+        }
+        for (const column of ["W", "AC", "AE"]) {
+            if (worksheet[`${column}${excelRow}`]) worksheet[`${column}${excelRow}`].z = "#,##0";
+        }
+        if (worksheet[`L${excelRow}`]) worksheet[`L${excelRow}`].z = "#,##0.####";
+        if (worksheet[`AA${excelRow}`]?.t === "n") worksheet[`AA${excelRow}`].z = "0.##%";
+    }
+    for (const column of ["T", "V", "W", "Y", "Z", "AB", "AC", "AD", "AE"]) {
+        if (worksheet[`${column}${totalExcelRow}`]) worksheet[`${column}${totalExcelRow}`].z = "#,##0.####";
+    }
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Bảng kê chi tiết HĐ đã sử dụng");
+}
+
+export function buildUsedInvoiceReportWorkbook(invoices = []) {
+    const workbook = XLSX.utils.book_new();
+    appendUsedInvoiceSummarySheet(workbook, invoices);
+    appendUsedInvoiceSymbolSummarySheet(workbook, invoices);
+    appendUsedInvoiceDetailSheet(workbook, invoices);
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([]), "Sheet2");
+    return workbook;
+}
+
+export function writeUsedInvoiceReport(invoices = [], fileBaseName = "bao-cao-hoa-don-da-su-dung") {
+    const workbook = buildUsedInvoiceReportWorkbook(invoices);
+    XLSX.writeFile(workbook, `${safeExcelFileName(fileBaseName)}.xlsx`);
 }
 
 export function writeUpdatedExcelFile(rows, fileBaseName = "nhom-import", invoices = []) {
