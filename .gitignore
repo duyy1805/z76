@@ -13,7 +13,7 @@ hoadondientu
 dist-ssr
 PLP review project/
 *.local
-
+test/
 # Local test artifacts (Excel samples, temporary imports, etc.)
 # local-artifacts/
 
