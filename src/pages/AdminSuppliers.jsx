@@ -10,7 +10,16 @@ import { useTheme } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { api, hoaDonApi } from "../lib/api";
+import TelegramIcon from "@mui/icons-material/Telegram";
+import LinkOffIcon from "@mui/icons-material/LinkOff";
+import SaveIcon from "@mui/icons-material/Save";
+import {
+    api,
+    hoaDonApi,
+    listTelegramOtpAccounts,
+    updateTelegramOtpAccount,
+    resetTelegramOtpAccount,
+} from "../lib/api";
 import { useAuth } from "../store/useAuth";
 import { EXPENSE_LABELS } from "../utils/phieu-sec";
 import DonViDialog from "../components/phieu-sec/DonViDialog";
@@ -944,6 +953,196 @@ function InvoiceCreationSettings() {
     );
 }
 
+function TelegramOtpSettings() {
+    const [search, setSearch] = useState("");
+    const deferredSearch = useDeferredValue(search);
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [savingId, setSavingId] = useState(null);
+    const [resetRow, setResetRow] = useState(null);
+    const [toast, setToast] = useState({ open: false, type: "success", msg: "" });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await listTelegramOtpAccounts({ search: deferredSearch, page: 1, pageSize: 100 });
+            setRows(data.rows || []);
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không thể tải cấu hình Telegram." });
+        } finally {
+            setLoading(false);
+        }
+    }, [deferredSearch]);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const toggleEnabled = async (row, enabled) => {
+        setSavingId(row.userId);
+        try {
+            await updateTelegramOtpAccount(row.userId, enabled, row.telegramPhoneNumber || "");
+            setRows((current) => current.map((item) => item.userId === row.userId ? { ...item, enabled } : item));
+            setToast({ open: true, type: "success", msg: enabled ? "Đã bật xác thực Telegram." : "Đã tắt xác thực Telegram." });
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không thể cập nhật cấu hình." });
+        } finally {
+            setSavingId(null);
+        }
+    };
+
+    const savePhoneNumber = async (row) => {
+        setSavingId(row.userId);
+        try {
+            await updateTelegramOtpAccount(row.userId, Boolean(row.enabled), row.telegramPhoneNumber || "");
+            setToast({ open: true, type: "success", msg: "Đã lưu số điện thoại Telegram." });
+            await load();
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không thể lưu số điện thoại." });
+        } finally {
+            setSavingId(null);
+        }
+    };
+
+    const confirmReset = async () => {
+        if (!resetRow) return;
+        setSavingId(resetRow.userId);
+        try {
+            await resetTelegramOtpAccount(resetRow.userId);
+            setRows((current) => current.map((item) => item.userId === resetRow.userId
+                ? { ...item, linked: false, telegramUsername: null, telegramDisplayName: null, linkedAt: null }
+                : item));
+            setToast({ open: true, type: "success", msg: "Đã reset liên kết Telegram." });
+            setResetRow(null);
+        } catch (error) {
+            setToast({ open: true, type: "error", msg: error?.response?.data?.message || "Không thể reset liên kết." });
+        } finally {
+            setSavingId(null);
+        }
+    };
+
+    return (
+        <Box>
+            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+                <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 800 }}>Admin · Xác thực Telegram</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Bật OTP theo từng tài khoản ERP và quản lý liên kết Telegram.
+                    </Typography>
+                </Box>
+                <TextField
+                    size="small"
+                    label="Tìm tài khoản hoặc họ tên"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    sx={{ width: { xs: "100%", sm: 320 } }}
+                />
+            </Stack>
+
+            <Paper variant="outlined" sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 1050 }}>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell>Tài khoản ERP</TableCell>
+                            <TableCell>Họ tên</TableCell>
+                            <TableCell>Số điện thoại Telegram</TableCell>
+                            <TableCell align="center">Yêu cầu OTP</TableCell>
+                            <TableCell>Liên kết Telegram</TableCell>
+                            <TableCell>Thời điểm liên kết</TableCell>
+                            <TableCell align="right">Thao tác</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading && (
+                            <TableRow><TableCell colSpan={7} align="center"><CircularProgress size={26} sx={{ my: 3 }} /></TableCell></TableRow>
+                        )}
+                        {!loading && rows.length === 0 && (
+                            <TableRow><TableCell colSpan={7} align="center">Không tìm thấy tài khoản.</TableCell></TableRow>
+                        )}
+                        {!loading && rows.map((row) => (
+                            <TableRow key={row.userId} hover>
+                                <TableCell sx={{ fontWeight: 700 }}>{row.username}</TableCell>
+                                <TableCell>{row.fullName || "—"}</TableCell>
+                                <TableCell>
+                                    <TextField
+                                        size="small"
+                                        value={row.telegramPhoneNumber || ""}
+                                        placeholder="Ví dụ: 0912345678"
+                                        disabled={savingId === row.userId}
+                                        onChange={(event) => setRows((current) => current.map((item) => item.userId === row.userId
+                                            ? { ...item, telegramPhoneNumber: event.target.value, hasPhone: Boolean(event.target.value.trim()) }
+                                            : item))}
+                                        inputProps={{ inputMode: "tel" }}
+                                    />
+                                </TableCell>
+                                <TableCell align="center">
+                                    <Switch
+                                        checked={Boolean(row.enabled)}
+                                        disabled={savingId === row.userId || !row.telegramPhoneNumber?.trim()}
+                                        onChange={(event) => toggleEnabled(row, event.target.checked)}
+                                        inputProps={{ "aria-label": `Xác thực Telegram cho ${row.username}` }}
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <Chip
+                                        size="small"
+                                        icon={<TelegramIcon />}
+                                        color={row.linked ? "success" : "default"}
+                                        label={row.linked
+                                            ? (row.telegramUsername ? `@${row.telegramUsername}` : row.telegramDisplayName || "Đã liên kết")
+                                            : "Chưa liên kết"}
+                                    />
+                                </TableCell>
+                                <TableCell>{row.linkedAt ? new Date(row.linkedAt).toLocaleString("vi-VN") : "—"}</TableCell>
+                                <TableCell align="right">
+                                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                        <Button
+                                            size="small"
+                                            startIcon={<SaveIcon />}
+                                            disabled={savingId === row.userId || !row.telegramPhoneNumber?.trim()}
+                                            onClick={() => savePhoneNumber(row)}
+                                        >
+                                            Lưu SĐT
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            color="warning"
+                                            startIcon={<LinkOffIcon />}
+                                            disabled={!row.linked || savingId === row.userId}
+                                            onClick={() => setResetRow(row)}
+                                        >
+                                            Reset
+                                        </Button>
+                                    </Stack>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </Paper>
+
+            <Dialog open={Boolean(resetRow)} onClose={() => setResetRow(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>Reset liên kết Telegram?</DialogTitle>
+                <DialogContent>
+                    <Typography>
+                        Tài khoản <b>{resetRow?.username}</b> sẽ phải tự liên kết Telegram lại ở lần đăng nhập tiếp theo.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setResetRow(null)} disabled={Boolean(savingId)}>Hủy</Button>
+                    <Button color="warning" variant="contained" onClick={confirmReset} disabled={Boolean(savingId)}>
+                        {savingId ? "Đang reset..." : "Reset liên kết"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar open={toast.open} autoHideDuration={3500} onClose={() => setToast((current) => ({ ...current, open: false }))}>
+                <Alert severity={toast.type} variant="filled">{toast.msg}</Alert>
+            </Snackbar>
+        </Box>
+    );
+}
+
 export default function AdminSuppliers() {
     const { role, permissions = [] } = useAuth();
     const [tab, setTab] = useState(0);
@@ -956,12 +1155,14 @@ export default function AdminSuppliers() {
                 <Tab label="Ngân hàng" />
                 {isAdmin && <Tab label="Người phụ trách chi phí" />}
                 {isAdmin && <Tab label="Cấu hình hóa đơn" />}
+                {isAdmin && <Tab label="Xác thực Telegram" />}
             </Tabs>
             {tab === 0 && <SupplierLookup />}
             {tab === 1 && <CurrencyLookup />}
             {tab === 2 && <BankLookup />}
             {isAdmin && tab === 3 && <ExpenseReviewerLookup />}
             {isAdmin && tab === 4 && <InvoiceCreationSettings />}
+            {isAdmin && tab === 5 && <TelegramOtpSettings />}
         </Box>
     );
 }

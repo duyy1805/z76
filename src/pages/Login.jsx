@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     Alert,
     Box,
@@ -22,6 +22,7 @@ import {
     loginERP,
     verifyLoginOtp,
     resendLoginOtp,
+    getTelegramSetupStatus,
     attachAuthToken,
     getRoleByUserId,
     getHoaDonRoleByUserId,
@@ -37,77 +38,116 @@ export default function Login() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [otpChallenge, setOtpChallenge] = useState(null);
+    const [telegramSetup, setTelegramSetup] = useState(null);
     const [otp, setOtp] = useState("");
     const [trustDevice, setTrustDevice] = useState(true);
     const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
-        if (!otpChallenge) return undefined;
+        if (!otpChallenge && !telegramSetup) return undefined;
         const timer = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(timer);
-    }, [otpChallenge]);
+    }, [otpChallenge, telegramSetup]);
 
-    const onSubmit = async (event) => {
-        event.preventDefault();
+    const completeAuthentication = useCallback(async (data) => {
+        const token = data?.accessToken;
+        const user = data?.userInfo || { username };
+        if (!token) throw new Error("Không nhận được accessToken từ hệ thống.");
+
+        const userId = user?.id ?? user?.userId;
+        if (!userId) console.warn("Không tìm thấy userId trong userInfo:", user);
+        const [access, invoiceAccess] = userId
+            ? await Promise.all([
+                getRoleByUserId(userId),
+                getHoaDonRoleByUserId(userId).catch(() => ({ role: "NhanVien", permissions: [], invoiceTypeCodes: [] })),
+            ])
+            : [
+                { role: "NhanVien", permissions: [], expenseReviewerCodes: [] },
+                { role: "NhanVien", permissions: [], invoiceTypeCodes: [] },
+            ];
+
+        login({
+            token,
+            user,
+            role: access.role,
+            permissions: access.permissions,
+            expenseReviewerCodes: access.expenseReviewerCodes,
+            invoiceRole: invoiceAccess.role,
+            invoicePermissions: invoiceAccess.permissions,
+            invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
+        }, remember);
+        attachAuthToken(token);
+    }, [login, remember, username]);
+
+    const handleLoginResponse = useCallback(async (data) => {
+        if (data?.status === "telegram_setup_required") {
+            setOtpChallenge(null);
+            setTelegramSetup({
+                ...data,
+                expiresAt: Date.now() + Number(data.expiresIn || 300) * 1000,
+            });
+            setNow(Date.now());
+            return;
+        }
+        if (data?.status === "otp_required") {
+            const resendAfter = Number(data.resendAfter || 60);
+            setTelegramSetup(null);
+            setOtpChallenge({
+                ...data,
+                resendAt: Date.now() + resendAfter * 1000,
+                expiresAt: Date.now() + Number(data.expiresIn || 300) * 1000,
+            });
+            setOtp("");
+            setNow(Date.now());
+            return;
+        }
+        await completeAuthentication(data);
+    }, [completeAuthentication]);
+
+    const performLogin = useCallback(async () => {
         setError("");
         setLoading(true);
-
         try {
             const data = await loginERP({ username, password });
-            if (data?.status === "otp_required") {
-                const resendAfter = Number(data.resendAfter || 60);
-                setOtpChallenge({
-                    ...data,
-                    resendAt: Date.now() + resendAfter * 1000,
-                    expiresAt: Date.now() + Number(data.expiresIn || 300) * 1000,
-                });
-                setOtp("");
-                setNow(Date.now());
-                return;
-            }
-            const token = data?.accessToken;
-            const user = data?.userInfo || { username };
-            if (!token) throw new Error("Không nhận được accessToken từ hệ thống.");
-
-            const userId = user?.id ?? user?.userId;
-            if (!userId) console.warn("Không tìm thấy userId trong userInfo:", user);
-
-            const [access, invoiceAccess] = userId
-                ? await Promise.all([
-                    getRoleByUserId(userId),
-                    getHoaDonRoleByUserId(userId).catch((error) => {
-                        console.warn("KhÃ´ng láº¥y Ä‘Æ°á»£c quyá»n hÃ³a Ä‘Æ¡n:", error);
-                        return { role: "NhanVien", permissions: [], invoiceTypeCodes: [] };
-                    }),
-                ])
-                : [
-                    { role: "NhanVien", permissions: [], expenseReviewerCodes: [] },
-                    { role: "NhanVien", permissions: [], invoiceTypeCodes: [] },
-                ];
-
-            login({
-                token,
-                user,
-                role: access.role,
-                permissions: access.permissions,
-                expenseReviewerCodes: access.expenseReviewerCodes,
-                invoiceRole: invoiceAccess.role,
-                invoicePermissions: invoiceAccess.permissions,
-                invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
-            }, remember);
-            attachAuthToken(token);
+            await handleLoginResponse(data);
         } catch (exception) {
             const requestId = exception?.response?.data?.requestId || exception?.response?.headers?.["x-auth-request-id"];
             const message = exception?.response?.data?.message || exception?.message || "Đăng nhập thất bại";
-            console.error("[AUTH] login_failed", {
-                requestId,
-                status: exception?.response?.status,
-                message,
-            });
+            console.error("[AUTH] login_failed", { requestId, status: exception?.response?.status, message });
             setError(requestId ? `${message} (Mã tra cứu: ${requestId})` : message);
         } finally {
             setLoading(false);
         }
+    }, [handleLoginResponse, password, username]);
+
+    useEffect(() => {
+        if (!telegramSetup?.linkId) return undefined;
+        let stopped = false;
+        const poll = async () => {
+            try {
+                const status = await getTelegramSetupStatus(telegramSetup.linkId);
+                if (!stopped && status.linked) {
+                    stopped = true;
+                    setTelegramSetup(null);
+                    await performLogin();
+                }
+            } catch (exception) {
+                if (!stopped && exception?.response?.status !== 404) {
+                    setError(exception?.response?.data?.message || "Không thể kiểm tra trạng thái liên kết Telegram.");
+                }
+            }
+        };
+        const timer = window.setInterval(poll, Math.max(1500, Number(telegramSetup.pollAfter || 2) * 1000));
+        poll();
+        return () => {
+            stopped = true;
+            window.clearInterval(timer);
+        };
+    }, [performLogin, telegramSetup]);
+
+    const onSubmit = async (event) => {
+        event.preventDefault();
+        await performLogin();
     };
 
     const onOtpSubmit = async (event) => {
@@ -119,34 +159,9 @@ export default function Login() {
             const data = await verifyLoginOtp({
                 challengeId: otpChallenge.challengeId,
                 otp,
-                trustDevice,
+                trustDevice: otpChallenge.deliveryChannel === "telegram" ? false : trustDevice,
             });
-            const token = data?.accessToken;
-            const user = data?.userInfo || { username };
-            if (!token) throw new Error("Không nhận được accessToken từ hệ thống.");
-
-            const userId = user?.id ?? user?.userId;
-            const [access, invoiceAccess] = userId
-                ? await Promise.all([
-                    getRoleByUserId(userId),
-                    getHoaDonRoleByUserId(userId).catch(() => ({ role: "NhanVien", permissions: [], invoiceTypeCodes: [] })),
-                ])
-                : [
-                    { role: "NhanVien", permissions: [], expenseReviewerCodes: [] },
-                    { role: "NhanVien", permissions: [], invoiceTypeCodes: [] },
-                ];
-
-            login({
-                token,
-                user,
-                role: access.role,
-                permissions: access.permissions,
-                expenseReviewerCodes: access.expenseReviewerCodes,
-                invoiceRole: invoiceAccess.role,
-                invoicePermissions: invoiceAccess.permissions,
-                invoiceTypeCodes: invoiceAccess.invoiceTypeCodes,
-            }, remember);
-            attachAuthToken(token);
+            await completeAuthentication(data);
         } catch (exception) {
             setError(exception?.response?.data?.message || exception?.message || "Mã OTP không hợp lệ");
         } finally {
@@ -177,6 +192,7 @@ export default function Login() {
 
     const resetOtp = () => {
         setOtpChallenge(null);
+        setTelegramSetup(null);
         setOtp("");
         setPassword("");
         setError("");
@@ -185,6 +201,7 @@ export default function Login() {
     const canSubmit = username.trim().length > 0 && password.length > 0;
     const resendSeconds = otpChallenge ? Math.max(0, Math.ceil((otpChallenge.resendAt - now) / 1000)) : 0;
     const expiresSeconds = otpChallenge ? Math.max(0, Math.ceil((otpChallenge.expiresAt - now) / 1000)) : 0;
+    const setupExpiresSeconds = telegramSetup ? Math.max(0, Math.ceil((telegramSetup.expiresAt - now) / 1000)) : 0;
 
     return (
         <Box
@@ -317,11 +334,13 @@ export default function Login() {
 
                         <Box>
                             <Typography variant="h5" sx={{ fontWeight: 850, fontSize: { xs: "1.5rem", sm: "1.75rem" } }}>
-                                {otpChallenge ? "Xác minh đăng nhập" : "Chào mừng trở lại"}
+                                {telegramSetup ? "Liên kết Telegram" : otpChallenge ? "Xác minh đăng nhập" : "Chào mừng trở lại"}
                             </Typography>
                             <Typography color="text.secondary" sx={{ mt: 0.75, fontSize: "0.9rem" }}>
-                                {otpChallenge
-                                    ? `Mã OTP đã được gửi tới ${otpChallenge.maskedEmail}.`
+                                {telegramSetup
+                                    ? "Mở bot Telegram để liên kết với tài khoản ERP này."
+                                    : otpChallenge
+                                    ? `Mã OTP đã được gửi tới ${otpChallenge.maskedTelegram || otpChallenge.maskedEmail}.`
                                     : "Đăng nhập bằng tài khoản ERP để tiếp tục."}
                             </Typography>
                         </Box>
@@ -332,7 +351,7 @@ export default function Login() {
                             </Alert>
                         )}
 
-                        {!otpChallenge && <TextField
+                        {!otpChallenge && !telegramSetup && <TextField
                             label="Tên đăng nhập"
                             value={username}
                             onChange={(event) => setUsername(event.target.value)}
@@ -348,7 +367,7 @@ export default function Login() {
                             }}
                         />}
 
-                        {!otpChallenge && <TextField
+                        {!otpChallenge && !telegramSetup && <TextField
                             label="Mật khẩu"
                             type={showPassword ? "text" : "password"}
                             value={password}
@@ -376,7 +395,7 @@ export default function Login() {
                             }}
                         />}
 
-                        {!otpChallenge && <FormControlLabel
+                        {!otpChallenge && !telegramSetup && <FormControlLabel
                             sx={{ alignSelf: "flex-start", mt: -0.5 }}
                             control={
                                 <Checkbox
@@ -403,7 +422,7 @@ export default function Login() {
                                         ? `Mã hết hạn sau ${Math.floor(expiresSeconds / 60)}:${String(expiresSeconds % 60).padStart(2, "0")}`
                                         : "Mã OTP đã hết hạn. Hãy gửi lại mã mới."}
                                 </Typography>
-                                <FormControlLabel
+                                {otpChallenge.deliveryChannel !== "telegram" && <FormControlLabel
                                     sx={{ alignSelf: "flex-start", mt: -0.5 }}
                                     control={
                                         <Checkbox
@@ -412,7 +431,7 @@ export default function Login() {
                                         />
                                     }
                                     label={<Typography variant="body2">Tin cậy thiết bị này trong 7 ngày</Typography>}
-                                />
+                                />}
                                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                                     <Button type="button" variant="text" onClick={resetOtp} disabled={loading}>
                                         Quay lại
@@ -429,7 +448,42 @@ export default function Login() {
                             </>
                         )}
 
-                        <Button
+                        {telegramSetup && (
+                            <Stack spacing={2}>
+                                <Alert severity={setupExpiresSeconds > 0 ? "info" : "warning"}>
+                                    {setupExpiresSeconds > 0
+                                        ? "Sau khi bot báo liên kết thành công, trang này sẽ tự động gửi OTP."
+                                        : "Liên kết đã hết hạn. Hãy tạo một liên kết mới."}
+                                </Alert>
+                                {setupExpiresSeconds > 0 && (
+                                    <Button
+                                        component="a"
+                                        href={telegramSetup.deepLink}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        variant="contained"
+                                        size="large"
+                                    >
+                                        Mở bot @{telegramSetup.botUsername}
+                                    </Button>
+                                )}
+                                <Typography variant="caption" color="text.secondary" textAlign="center">
+                                    {setupExpiresSeconds > 0
+                                        ? `Liên kết hết hạn sau ${Math.floor(setupExpiresSeconds / 60)}:${String(setupExpiresSeconds % 60).padStart(2, "0")}`
+                                        : "Liên kết chỉ dùng được một lần."}
+                                </Typography>
+                                <Stack direction="row" justifyContent="space-between">
+                                    <Button type="button" variant="text" onClick={resetOtp} disabled={loading}>Quay lại</Button>
+                                    {setupExpiresSeconds === 0 && (
+                                        <Button type="button" variant="text" onClick={performLogin} disabled={loading}>
+                                            Tạo liên kết mới
+                                        </Button>
+                                    )}
+                                </Stack>
+                            </Stack>
+                        )}
+
+                        {!telegramSetup && <Button
                             type="submit"
                             variant="contained"
                             size="large"
@@ -441,7 +495,7 @@ export default function Login() {
                             {loading
                                 ? (otpChallenge ? "Đang xác minh..." : "Đang đăng nhập...")
                                 : (otpChallenge ? "Xác minh OTP" : "Đăng nhập")}
-                        </Button>
+                        </Button>}
 
                         <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ pt: 0.5 }}>
                             Chỉ sử dụng dành cho cán bộ, nhân viên được cấp quyền.

@@ -64,6 +64,26 @@ export async function resendLoginOtp(challengeId) {
     return data;
 }
 
+export async function getTelegramSetupStatus(linkId) {
+    const { data } = await httpAuth.post('/telegram/setup/status', { linkId });
+    return data;
+}
+
+export async function listTelegramOtpAccounts(params = {}) {
+    const { data } = await httpAuth.get('/admin/telegram-accounts', { params });
+    return data;
+}
+
+export async function updateTelegramOtpAccount(userId, enabled, phoneNumber) {
+    const { data } = await httpAuth.put(`/admin/telegram-accounts/${userId}`, { enabled, phoneNumber });
+    return data;
+}
+
+export async function resetTelegramOtpAccount(userId) {
+    const { data } = await httpAuth.post(`/admin/telegram-accounts/${userId}/reset`);
+    return data;
+}
+
 export async function logoutTrustedDevice() {
     const { data } = await httpAuth.post("/otp/logout");
     return data;
@@ -499,7 +519,7 @@ export const hoaDonApi = {
 
 // Nếu muốn tự động gắn token vào http:
 export function attachAuthToken(token) {
-    for (const client of [http, httpHd]) {
+    for (const client of [http, httpHd, httpAuth]) {
         if (token) {
             client.defaults.headers.common.Authorization = `Bearer ${token}`;
         } else {
