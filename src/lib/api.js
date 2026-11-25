@@ -225,7 +225,7 @@ export const api = {
     async approve(phieuId, role, agree, user, ghiChu = null) {
         const body = {
             nguoiDuyetId: user?.id,      // lấy từ thông tin auth
-            tenNguoiDuyet: user?.username || role,
+            tenNguoiDuyet: user?.fullName || user?.name || user?.username || role,
             chapThuan: !!agree,
             ghiChu,
             requesterUserId: user?.id,
@@ -238,7 +238,7 @@ export const api = {
     async returnPhieu(phieuId, role, user, ghiChu) {
         const body = {
             nguoiDuyetId: user?.id,
-            tenNguoiDuyet: user?.username || role,
+            tenNguoiDuyet: user?.fullName || user?.name || user?.username || role,
             chapThuan: false,
             traLai: true,
             ghiChu,

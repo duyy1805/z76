@@ -2546,9 +2546,13 @@ export default function PhieuSec({ mode = "VND" }) {
                                     <DetailField label="KTT duyệt lúc">{isoToDisplay(detail.kttTime)}</DetailField>
                                     <DetailField label="Giám đốc duyệt lúc">{isoToDisplay(detail.gdTime)}</DetailField>
                                     {detail.lyDoTraLai && (
-                                        <DetailField label="Lý do trả lại" sx={{ gridColumn: { sm: "span 3" } }}>
-                                            {detail.lyDoTraLai}
-                                        </DetailField>
+                                        <>
+                                            <DetailField label="Người trả lại">{detail.nguoiTraLai || "—"}</DetailField>
+                                            <DetailField label="Trả lại lúc">{isoToDisplay(detail.traLaiTime)}</DetailField>
+                                            <DetailField label="Lý do trả lại" sx={{ gridColumn: { sm: "span 3" } }}>
+                                                {detail.lyDoTraLai}
+                                            </DetailField>
+                                        </>
                                     )}
                                     {detail.lyDoTuChoi && (
                                         <>

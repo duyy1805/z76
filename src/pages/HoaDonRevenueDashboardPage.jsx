@@ -1,6 +1,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
+import "dayjs/locale/vi";
+import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { viVN } from "@mui/x-date-pickers/locales";
 import {
     Alert,
     Autocomplete,
@@ -227,28 +231,32 @@ export default function HoaDonRevenueDashboardPage() {
 
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                 <Stack spacing={1.5}>
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ sm: "center" }}>
-                        <TextField
-                            size="small"
-                            type="date"
-                            label="Từ ngày"
-                            value={filters.dateFrom}
-                            onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))}
-                            inputProps={{ max: filters.dateTo }}
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <TextField
-                            size="small"
-                            type="date"
-                            label="Đến ngày"
-                            value={filters.dateTo}
-                            onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))}
-                            inputProps={{ min: filters.dateFrom }}
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <Button variant="outlined" onClick={resetCurrentMonth}>Tháng hiện tại</Button>
-                        {loading && <CircularProgress size={24} />}
-                    </Stack>
+                    <LocalizationProvider
+                        dateAdapter={AdapterDayjs}
+                        adapterLocale="vi"
+                        localeText={viVN.components.MuiLocalizationProvider.defaultProps.localeText}
+                    >
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ sm: "center" }}>
+                            <DatePicker
+                                label="Từ ngày"
+                                value={filters.dateFrom ? dayjs(filters.dateFrom) : null}
+                                onChange={(value) => setFilters((current) => ({ ...current, dateFrom: value?.format("YYYY-MM-DD") || "" }))}
+                                maxDate={filters.dateTo ? dayjs(filters.dateTo) : undefined}
+                                format="DD/MM/YYYY"
+                                slotProps={{ textField: { size: "small" } }}
+                            />
+                            <DatePicker
+                                label="Đến ngày"
+                                value={filters.dateTo ? dayjs(filters.dateTo) : null}
+                                onChange={(value) => setFilters((current) => ({ ...current, dateTo: value?.format("YYYY-MM-DD") || "" }))}
+                                minDate={filters.dateFrom ? dayjs(filters.dateFrom) : undefined}
+                                format="DD/MM/YYYY"
+                                slotProps={{ textField: { size: "small" } }}
+                            />
+                            <Button variant="outlined" onClick={resetCurrentMonth}>Tháng hiện tại</Button>
+                            {loading && <CircularProgress size={24} />}
+                        </Stack>
+                    </LocalizationProvider>
 
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" }, gap: 1.25 }}>
                         <Autocomplete
